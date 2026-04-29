@@ -1,123 +1,186 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>卡牌衝線賽</title>
+  <title>Project: New York New York — Playtest v0.3</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main>
+
+    <!-- ── Header HUD ── -->
     <header>
       <div>
-        <h1>卡牌衝線賽</h1>
-        <p>每回合打出一張牌，衝刺、甩尾、防守或干擾對手。先跑完 1000 公尺的人獲勝。</p>
+        <h1>New York New York</h1>
+        <p>賽車指令卡牌遊戲　Playtest v0.3　│　部件系統 + 附贈動作</p>
       </div>
       <div class="hud" aria-live="polite">
-        <div class="pill"><span>回合</span><b id="turn">1</b></div>
-        <div class="pill"><span>能量</span><b id="energy">3 / 3</b></div>
-        <div class="pill"><span>狀態</span><b id="status">準備起跑</b></div>
+        <div class="pill"><span>階段</span><b id="phaseLabel">—</b></div>
+        <div class="pill"><span>回合</span><b id="roundLabel">—</b></div>
+        <div class="pill"><span>動力</span><b id="energy">—</b></div>
+        <div class="pill"><span>狀態</span><b id="statusLabel">—</b></div>
+        <div class="pill"><span>牌庫</span><b id="deckCount">—</b></div>
+        <div class="pill"><span>棄牌</span><b id="discardCount">—</b></div>
+        <div class="pill"><span>手牌</span><b id="handCount">—</b></div>
       </div>
     </header>
 
+    <!-- ── 主畫面 ── -->
     <section class="game-shell">
-      <div class="track-wrap">
-        <canvas id="game" width="1280" height="720" aria-label="賽車跑道"></canvas>
+
+      <!-- 左欄：車況 + 部件 -->
+      <div class="stats-col">
+
+        <section class="box rival-box">
+          <h2>🔴 紅車車況</h2>
+          <div class="stat-grid">
+            <div class="stat"><span>名次</span><b id="rPos">—</b></div>
+            <div class="stat"><span>速度</span><b id="rSpeed">?</b></div>
+            <div class="stat"><span>車體操控</span><b id="rVH">?</b></div>
+            <div class="stat"><span>抓地力</span><b id="rGrip">?</b></div>
+            <div class="stat accent"><span>SP</span><b id="rSP">—</b></div>
+            <div class="stat full"><span>防守狀態</span><b id="rShield">—</b></div>
+          </div>
+          <p class="hint-line">對手數值隱藏，使用「賽道掃描」可偵測速度。</p>
+        </section>
+
+        <section class="box player-box">
+          <h2>🟢 你的車況</h2>
+          <div class="stat-grid">
+            <div class="stat"><span>名次</span><b id="pPos">—</b></div>
+            <div class="stat"><span>速度</span><b id="pSpeed">—</b></div>
+            <div class="stat"><span>基礎速度</span><b id="pBS">—</b></div>
+            <div class="stat"><span>車體操控</span><b id="pVH">—</b></div>
+            <div class="stat"><span>抓地力</span><b id="pGrip">—</b></div>
+            <div class="stat"><span>檔位</span><b id="pGear">—</b></div>
+            <div class="stat"><span>動力</span><b id="pPower">—</b></div>
+            <div class="stat accent"><span>SP</span><b id="pSP">—</b></div>
+            <div class="stat"><span>INT</span><b id="pINT">—</b></div>
+            <div class="stat full"><span>防守狀態</span><b id="pShield">—</b></div>
+          </div>
+        </section>
+
+        <!-- ═══════ 部件面板 ═══════ -->
+        <section class="box">
+          <h2>🔩 車輛部件</h2>
+          <p class="hint-line">行動階段翻開有「附贈：操作車子」的指令卡後，點擊部件觸發牌頂元件。</p>
+          <p class="hint-line" style="color:var(--warn);margin-top:4px">⚡ 通則：任何效果增加速度時會以基礎速度為倍率結算。<br>舉例：速度 +1 → 車子速度會 +1 × 當前基礎速度</p>
+          <div id="componentPanel" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"></div>
+          <div id="tyreStatus" style="margin-top:8px;padding:8px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);font-size:0.82rem;display:flex;flex-direction:column;gap:3px;"></div>
+        </section>
+
       </div>
 
-      <aside class="side">
-        <section class="box">
-          <h2>車況</h2>
-          <div class="meters">
-            <div class="meter">
-              <label><span>你的位置</span><b id="playerDistance">0m</b></label>
-              <div class="bar"><div class="fill" id="playerBar"></div></div>
+      <!-- 右欄：賽場 + 階段控制 -->
+      <div class="field-col">
+
+        <!-- ═══════ 鳥瞰賽道 + 賽場整合 ═══════ -->
+        <section class="box track-box" style="padding:0;overflow:hidden;">
+          <div class="track-wrap">
+            <canvas id="trackCanvas" style="width:100%;height:auto;display:block;border-radius:6px;aspect-ratio:560/460;"></canvas>
+            <!-- NPC 牌 overlay（上方牌區）-->
+            <div class="field-overlay npc-overlay" id="npcOverlay">
+              <div class="overlay-lane" id="npcLeftZone"></div>
+              <div class="overlay-lane" id="npcRightZone"></div>
             </div>
-            <div class="meter">
-              <label><span>對手位置</span><b id="rivalDistance">0m</b></label>
-              <div class="bar"><div class="fill" id="rivalBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>輪胎抓地</span><b id="gripText">100%</b></label>
-              <div class="bar"><div class="fill" id="gripBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>加速</span><b id="accelText">50</b></label>
-              <div class="bar"><div class="fill" id="accelBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>控制力</span><b id="controlText">55</b></label>
-              <div class="bar"><div class="fill" id="controlBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>極速</span><b id="topSpeedText">50</b></label>
-              <div class="bar"><div class="fill" id="topSpeedBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>氮氣</span><b id="nitroText">20</b></label>
-              <div class="bar"><div class="fill" id="nitroBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>車手狀態</span><b id="driverText">50 / 55</b></label>
-              <div class="bar"><div class="fill" id="driverBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>贊助資源</span><b id="sponsorText">50</b></label>
-              <div class="bar"><div class="fill" id="sponsorBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>董事會信任</span><b id="boardText">50</b></label>
-              <div class="bar"><div class="fill" id="boardBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>車隊關係</span><b id="paddockText">50</b></label>
-              <div class="bar"><div class="fill" id="paddockBar"></div></div>
-            </div>
-            <div class="meter">
-              <label><span>賽會聲望</span><b id="stewardText">50</b></label>
-              <div class="bar"><div class="fill" id="stewardBar"></div></div>
+            <!-- 玩家牌 overlay（下方牌區）-->
+            <div class="field-overlay player-overlay" id="playerOverlay">
+              <div class="overlay-lane droppable" id="playerLeftZone"></div>
+              <div class="overlay-lane droppable" id="playerRightZone"></div>
             </div>
           </div>
         </section>
 
+        <!-- ═══════ 計畫階段面板 ═══════ -->
+        <section class="box phase-panel hidden" id="panelPlan">
+          <h2>📋 計畫階段</h2>
+          <p>動力已重置，已補牌。確認手牌與部件狀態後進入通訊階段。</p>
+          <div class="controls" style="margin-top:12px">
+            <button class="primary" id="nextPhaseBtn" type="button">進入通訊階段 →</button>
+          </div>
+        </section>
+
+        <!-- ═══════ 通訊階段面板 ═══════ -->
+        <section class="box phase-panel hidden" id="panelRadio">
+          <h2>📡 通訊階段</h2>
+          <p>將手牌拖到左側或右側（面朝下）。資訊指令也需選側，行動階段開始時立即生效。</p>
+          <p class="hint-line">上限：複雜 × 1、簡易 × 2（資訊不限）。確認後無法撤回。</p>
+          <div style="margin-top:8px;padding:6px 10px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);font-size:0.84rem;font-weight:700;color:var(--accent)">
+            已出牌：<span id="radioStatus">尚未出牌</span>
+          </div>
+          <div class="controls" style="margin-top:12px">
+            <button class="primary" id="confirmRadioBtn" type="button">確認，進入行動階段 →</button>
+          </div>
+        </section>
+
+        <!-- ═══════ 行動階段面板 ═══════ -->
+        <section class="box phase-panel hidden" id="panelAction">
+          <h2>⚡ 行動階段</h2>
+          <p id="actionTurnLabel">等待行動…</p>
+          <p class="hint-line">點擊場上自己面朝下的牌翻開執行。附贈「操作車子」時，點擊左側部件面板的部件。附贈「再下令」時，點擊/拖曳手牌。複雜行動執行後自動 Pass。</p>
+          <div class="controls" style="margin-top:12px">
+            <button class="primary" id="playerPassBtn" type="button">Pass（不行動）</button>
+            <button class="ghost" id="skipBonusBtn" type="button" style="display:none">跳過附贈動作</button>
+          </div>
+        </section>
+
+        <!-- ═══════ 賽場階段面板 ═══════ -->
+        <section class="box phase-panel hidden" id="panelField">
+          <h2>🚦 賽場階段</h2>
+          <p>選擇是否嘗試超車。若超車，選擇以哪一側施壓。</p>
+          <div class="controls overtake-controls" style="margin-top:12px">
+            <button class="primary" id="overtakeLeftBtn"  type="button">← 左側超車</button>
+            <button class="primary" id="overtakeRightBtn" type="button">右側超車 →</button>
+            <button class="ghost"   id="noOvertakeBtn"    type="button">不超車，繼續下一回合</button>
+          </div>
+        </section>
+
+        <!-- ═══════ 結算階段面板 ═══════ -->
+        <section class="box phase-panel hidden" id="panelResolution">
+          <h2>🏁 結算階段</h2>
+          <p>正在結算賽段結果…</p>
+        </section>
+
+        <!-- 賽況 log -->
         <section class="box">
           <h2>賽況</h2>
           <div class="log" id="log" aria-live="polite"></div>
         </section>
 
-        <section class="box">
-          <h2>操作</h2>
-          <div class="controls">
-            <button class="primary" id="drawButton" type="button">補滿手牌</button>
-            <button class="ghost" id="resetButton" type="button">重新比賽</button>
-          </div>
-          <div class="drive-pad" aria-label="即時駕駛控制">
-            <button class="drive-button" data-drive="left" type="button">左轉 A</button>
-            <button class="drive-button" data-drive="throttle" type="button">油門 W</button>
-            <button class="drive-button" data-drive="right" type="button">右轉 D</button>
-            <button class="drive-button" data-drive="brake" type="button">煞車 S</button>
-            <button class="drive-button" data-drive="nitro" type="button">氮氣 Space</button>
-            <button class="drive-button" data-drive="focus" type="button">控車 Shift</button>
-          </div>
-          <p class="hint-line">出牌後會進入短衝刺。直線按油門，彎道依提示轉向；彎中太貪油會打滑，控車或煞車能穩住。</p>
-        </section>
-      </aside>
-    </section>
+        <div class="controls">
+          <button class="ghost" id="resetButton" type="button">重新比賽</button>
+        </div>
 
-    <section class="card-dock" aria-label="卡牌區">
-      <div class="play-zone" id="playZone">拖曳卡牌到這裡打出</div>
-      <div class="cards" id="cards" aria-label="手牌"></div>
-      <div class="dock-actions">
-        <button class="next-round" id="nextRoundButton" type="button" hidden>下個回合</button>
       </div>
     </section>
 
+    <!-- ── 自訂 Tooltip ── -->
+    <div id="cardTooltip"></div>
+
+    <!-- ── 選側 Modal ── -->
+    <div id="sideModal" class="side-modal hidden">
+      <div class="side-modal-box">
+        <p>選擇打入哪一側（面朝下）</p>
+        <div class="side-modal-btns">
+          <button id="sideLeft"  type="button" class="primary">← 左側</button>
+          <button id="sideRight" type="button" class="primary">右側 →</button>
+        </div>
+        <button id="sideCancel" type="button" class="ghost">取消</button>
+      </div>
+    </div>
+
+    <!-- ── 手牌區 ── -->
+    <section class="card-dock" aria-label="手牌區">
+      <div class="cards" id="cards" aria-label="手牌"></div>
+    </section>
+
     <footer>
-      提示：出牌決定車況，短衝刺決定執行品質。遇到彎道時配合轉向與控速，可以把同一張牌跑出更高距離。
+      v0.3：將手牌拖到賽道左側或右側區域（面朝下）。行動階段點擊場上自己的牌翻開執行。
     </footer>
   </main>
-
+  <script src="cards.js"></script>
   <script src="game.js"></script>
+  <script src="track.js"></script>
 </body>
 </html>
-
