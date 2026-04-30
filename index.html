@@ -9,23 +9,6 @@
 <body>
   <main>
 
-    <!-- ── Header HUD ── -->
-    <header>
-      <div>
-        <h1>New York New York</h1>
-        <p>賽車指令卡牌遊戲　Playtest v0.3　│　部件系統 + 附贈動作</p>
-      </div>
-      <div class="hud" aria-live="polite">
-        <div class="pill"><span>階段</span><b id="phaseLabel">—</b></div>
-        <div class="pill"><span>回合</span><b id="roundLabel">—</b></div>
-        <div class="pill"><span>動力</span><b id="energy">—</b></div>
-        <div class="pill"><span>狀態</span><b id="statusLabel">—</b></div>
-        <div class="pill"><span>牌庫</span><b id="deckCount">—</b></div>
-        <div class="pill"><span>棄牌</span><b id="discardCount">—</b></div>
-        <div class="pill"><span>手牌</span><b id="handCount">—</b></div>
-      </div>
-    </header>
-
     <!-- ── 主畫面 ── -->
     <section class="game-shell">
 
@@ -92,13 +75,27 @@
           </div>
         </section>
 
+        <!-- ── Header HUD ── -->
+        <header>
+          <div>
+            <h1>New York New York</h1>
+            <p>賽車指令卡牌遊戲　Playtest v0.3　│　部件系統 + 附贈動作</p>
+          </div>
+          <div class="hud" aria-live="polite">
+            <div class="pill"><span>階段</span><b id="phaseLabel">—</b></div>
+            <div class="pill"><span>回合</span><b id="roundLabel">—</b></div>
+            <div class="pill"><span>動力</span><b id="energy">—</b></div>
+            <div class="pill"><span>狀態</span><b id="statusLabel">—</b></div>
+            <div class="pill"><span>牌庫</span><b id="deckCount">—</b></div>
+            <div class="pill"><span>棄牌</span><b id="discardCount">—</b></div>
+            <div class="pill"><span>手牌</span><b id="handCount">—</b></div>
+          </div>
+        </header>
+
         <!-- ═══════ 計畫階段面板 ═══════ -->
         <section class="box phase-panel hidden" id="panelPlan">
           <h2>📋 計畫階段</h2>
           <p>動力已重置，已補牌。確認手牌與部件狀態後進入通訊階段。</p>
-          <div class="controls" style="margin-top:12px">
-            <button class="primary" id="nextPhaseBtn" type="button">進入通訊階段 →</button>
-          </div>
         </section>
 
         <!-- ═══════ 通訊階段面板 ═══════ -->
@@ -109,9 +106,6 @@
           <div style="margin-top:8px;padding:6px 10px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);font-size:0.84rem;font-weight:700;color:var(--accent)">
             已出牌：<span id="radioStatus">尚未出牌</span>
           </div>
-          <div class="controls" style="margin-top:12px">
-            <button class="primary" id="confirmRadioBtn" type="button">確認，進入行動階段 →</button>
-          </div>
         </section>
 
         <!-- ═══════ 行動階段面板 ═══════ -->
@@ -119,21 +113,12 @@
           <h2>⚡ 行動階段</h2>
           <p id="actionTurnLabel">等待行動…</p>
           <p class="hint-line">點擊場上自己面朝下的牌翻開執行。附贈「操作車子」時，點擊左側部件面板的部件。附贈「再下令」時，點擊/拖曳手牌。複雜行動執行後自動 Pass。</p>
-          <div class="controls" style="margin-top:12px">
-            <button class="primary" id="playerPassBtn" type="button">Pass（不行動）</button>
-            <button class="ghost" id="skipBonusBtn" type="button" style="display:none">跳過附贈動作</button>
-          </div>
         </section>
 
         <!-- ═══════ 賽場階段面板 ═══════ -->
         <section class="box phase-panel hidden" id="panelField">
           <h2>🚦 賽場階段</h2>
           <p>選擇是否嘗試超車。若超車，選擇以哪一側施壓。</p>
-          <div class="controls overtake-controls" style="margin-top:12px">
-            <button class="primary" id="overtakeLeftBtn"  type="button">← 左側超車</button>
-            <button class="primary" id="overtakeRightBtn" type="button">右側超車 →</button>
-            <button class="ghost"   id="noOvertakeBtn"    type="button">不超車，繼續下一回合</button>
-          </div>
         </section>
 
         <!-- ═══════ 結算階段面板 ═══════ -->
@@ -143,7 +128,7 @@
         </section>
 
         <!-- 賽況 log -->
-        <section class="box">
+        <section class="box log-box">
           <h2>賽況</h2>
           <div class="log" id="log" aria-live="polite"></div>
         </section>
@@ -172,6 +157,28 @@
 
     <!-- ── 手牌區 ── -->
     <section class="card-dock" aria-label="手牌區">
+      <div class="drag-play-arrow" id="dragPlayArrow" aria-hidden="true">
+        <span>出牌區</span>
+        <b>↑</b>
+      </div>
+      <div class="card-dock-actions" id="phaseActionDock">
+        <div class="dock-action-label" id="phaseActionLabel">計畫階段</div>
+        <div class="dock-action-group hidden" data-phase-action="plan">
+          <button class="primary" id="nextPhaseBtn" type="button">通訊</button>
+        </div>
+        <div class="dock-action-group hidden" data-phase-action="radio">
+          <button class="primary" id="confirmRadioBtn" type="button">確認</button>
+        </div>
+        <div class="dock-action-group hidden" data-phase-action="action">
+          <button class="primary" id="playerPassBtn" type="button">Pass</button>
+          <button class="ghost" id="skipBonusBtn" type="button" style="display:none">跳過</button>
+        </div>
+        <div class="dock-action-group hidden" data-phase-action="field">
+          <button class="primary" id="overtakeLeftBtn"  type="button">左側</button>
+          <button class="primary" id="overtakeRightBtn" type="button">右側</button>
+          <button class="ghost"   id="noOvertakeBtn"    type="button">不超</button>
+        </div>
+      </div>
       <div class="cards" id="cards" aria-label="手牌"></div>
     </section>
 

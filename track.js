@@ -6,6 +6,7 @@
 const Track = (() => {
 
   const W = 560, H = 460;
+  const CANVAS_SCALE = 3;
   const ROAD_TOP = 80, ROAD_BTM = 380;
   const ROAD_H   = ROAD_BTM - ROAD_TOP;
 
@@ -34,8 +35,10 @@ const Track = (() => {
   function init() {
     canvas = document.getElementById("trackCanvas");
     if (!canvas) return;
-    canvas.width = W; canvas.height = H;
+    canvas.width = W * CANVAS_SCALE;
+    canvas.height = H * CANVAS_SCALE;
     ctx = canvas.getContext("2d");
+    ctx.setTransform(CANVAS_SCALE, 0, 0, CANVAS_SCALE, 0, 0);
     requestAnimationFrame(loop);
   }
 

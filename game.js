@@ -1235,6 +1235,7 @@ function onDocPointerMove(e) {
     document.body.appendChild(ghost);
     dragState.ghost = ghost;
     dragState.sourceEl.classList.add("is-dragging");
+    document.body.classList.add("is-card-dragging");
   }
   if (!dragState.moved) return;
   dragState.ghost.style.left = (e.clientX - dragState.offsetX) + "px";
@@ -1264,6 +1265,7 @@ function onDocPointerCancel() { cleanDrag(); }
 function cleanDrag() {
   if (dragState.ghost && dragState.ghost.parentNode) dragState.ghost.parentNode.removeChild(dragState.ghost);
   if (dragState.sourceEl) dragState.sourceEl.classList.remove("is-dragging");
+  document.body.classList.remove("is-card-dragging");
   if (els.playerLeftZone)  els.playerLeftZone.classList.remove("is-ready");
   if (els.playerRightZone) els.playerRightZone.classList.remove("is-ready");
   if (typeof Track !== "undefined") Track.setHover(false, false);
@@ -1347,11 +1349,15 @@ const els = {
   panelAction:     document.querySelector("#panelAction"),
   panelField:      document.querySelector("#panelField"),
   panelResolution: document.querySelector("#panelResolution"),
+  phaseActionDock: document.querySelector("#phaseActionDock"),
+  phaseActionLabel: document.querySelector("#phaseActionLabel"),
+  phaseActionGroups: document.querySelectorAll("[data-phase-action]"),
 
   radioPlanBtns:   document.querySelectorAll("[data-plan]"),
   confirmRadioBtn: document.querySelector("#confirmRadioBtn"),
 
   playerPassBtn:   document.querySelector("#playerPassBtn"),
+  skipBonusBtn:    document.querySelector("#skipBonusBtn"),
   actionTurnLabel: document.querySelector("#actionTurnLabel"),
 
   overtakeLeftBtn:  document.querySelector("#overtakeLeftBtn"),
@@ -1483,6 +1489,22 @@ function renderPhaseUI() {
     const el = panelMap[ph];
     if (el) el.classList.toggle("hidden", game.phase !== ph || game.over);
   });
+  let hasDockActions = false;
+  els.phaseActionGroups.forEach(group => {
+    const isActive = !game.over && group.dataset.phaseAction === game.phase;
+    group.classList.toggle("hidden", !isActive);
+    if (isActive) hasDockActions = true;
+  });
+  if (els.phaseActionDock) els.phaseActionDock.classList.toggle("hidden", !hasDockActions);
+  if (els.phaseActionLabel) {
+    const labels = {
+      [PHASE.PLAN]: "計畫階段：進入通訊",
+      [PHASE.RADIO]: "通訊階段：確認出牌",
+      [PHASE.ACTION]: game.pendingBonus ? "附贈動作：可跳過" : "行動階段：結束行動",
+      [PHASE.FIELD]: "賽場階段：選擇超車",
+    };
+    els.phaseActionLabel.textContent = labels[game.phase] || "";
+  }
 
   if (game.phase === PHASE.RADIO) {
     // 更新出牌狀態提示
@@ -1504,6 +1526,11 @@ function renderPhaseUI() {
     if (els.playerPassBtn) {
       els.playerPassBtn.disabled = game.playerPassed || game.actionTurn !== "player";
     }
+    if (els.skipBonusBtn) {
+      els.skipBonusBtn.style.display = game.pendingBonus ? "" : "none";
+    }
+  } else if (els.skipBonusBtn) {
+    els.skipBonusBtn.style.display = "none";
   }
 
   if (game.phase === PHASE.FIELD) {
@@ -1918,6 +1945,7 @@ function renderCards() {
     const infoTag  = card.type === "info" ? `<span style="font-size:0.70rem;font-weight:800;color:var(--warn)">行動開始時立即生效</span>` : "";
     const kwTags   = (card.keywords?.length)
       ? card.keywords.map(kw => `<span class="card-kw" data-kw="${kw}">${kw}</span>`).join("") : "";
+    const summary = Array.from(card.text || "").slice(0, 18).join("") + (Array.from(card.text || "").length > 18 ? "…" : "");
 
     btn.innerHTML = `
       <span class="cost" style="background:${tc};color:#111">${card.powerCost} 動力</span>
@@ -1925,8 +1953,9 @@ function renderCards() {
         <span class="type" style="background:${tc}22;color:${tc}">${getTypeName(card.type)}</span>
         <strong>${card.name}</strong>
         ${kwTags}
-        <small>${card.text}</small>
-        ${bonusTag}${infoTag}
+        <small class="card-summary">${summary}</small>
+        <small class="card-detail">${card.text}</small>
+        <span class="card-extra">${bonusTag}${infoTag}</span>
       </span>
       <span class="card-pressure">施加 ${card.pressure} 壓力</span>
       <span class="play-hint">${
