@@ -121,8 +121,8 @@ const CanvasQteTest = (() => {
     message: "",
     backdropCanvas: null,
     lapIndex: 1,
-    rank: 3,
-    rankTotal: 3,
+    rank: 5,
+    rankTotal: 5,
     winOverlay: null,
     winReplayTimer: 0,
     qteScatterPos: null,
@@ -301,8 +301,8 @@ const CanvasQteTest = (() => {
     app.defenseProgress = 0;
     app.message = "";
     app.lapIndex = 1;
-    app.rank = 3;
-    app.rankTotal = 3;
+    app.rank = 5;
+    app.rankTotal = 5;
     app.qteScatterPos = null;
     app.qteTapPending = {};
     app.qteFinalized = {};
