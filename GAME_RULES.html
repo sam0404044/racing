@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>最後車手 / Final Driver 遊戲規則</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06101d;
+      --panel: rgba(8, 18, 32, 0.92);
+      --text: #e8f0ff;
+      --muted: #b7c8dd;
+      --line: rgba(105, 164, 224, 0.35);
+      --accent: #ffd94f;
+      --green: #57e585;
+      --red: #ff6b7a;
+      --code-bg: rgba(255, 217, 79, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(80, 140, 220, 0.18), transparent 36rem),
+        linear-gradient(180deg, #06101d 0%, #101b2c 54%, #05090d 100%);
+      color: var(--text);
+      font-family: system-ui, "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+      line-height: 1.75;
+    }
+
+    main {
+      width: min(920px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    article {
+      padding: clamp(24px, 4vw, 44px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.25;
+    }
+
+    h1 {
+      margin: 0 0 24px;
+      color: var(--accent);
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      letter-spacing: 0.03em;
+    }
+
+    h2 {
+      margin: 40px 0 14px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      color: #dfeeff;
+      font-size: 1.55rem;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      color: var(--green);
+      font-size: 1.15rem;
+    }
+
+    p {
+      margin: 0 0 14px;
+      color: var(--text);
+    }
+
+    ul,
+    ol {
+      margin: 0 0 16px;
+      padding-left: 1.35rem;
+    }
+
+    li {
+      margin: 0.22rem 0;
+      color: var(--muted);
+    }
+
+    li::marker {
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    code {
+      padding: 0.12em 0.35em;
+      border: 1px solid rgba(255, 217, 79, 0.18);
+      border-radius: 0.45em;
+      background: var(--code-bg);
+      color: #ffe89a;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    .lead {
+      color: #f4f8ff;
+      font-size: 1.08rem;
+      font-weight: 700;
+    }
+
+    .note {
+      margin-top: 28px;
+      padding: 16px 18px;
+      border-left: 4px solid var(--accent);
+      border-radius: 12px;
+      background: rgba(255, 217, 79, 0.08);
+      color: #f8e8ad;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>最後車手 / Final Driver 遊戲規則</h1>
+
+      <h2>遊戲目標</h2>
+      <p class="lead">玩家從第 3 名開始比賽，目標是透過卡牌累積加速值、完成超車 QTE，逐步超越對手並取得第 1 名。</p>
+      <p>每次成功超車會讓名次前進 1 名。當超車後到達第 1 名時，遊戲進入最終勝利。</p>
+
+      <h2>基本流程</h2>
+      <ol>
+        <li>開場彈窗顯示遊戲介紹。</li>
+        <li>玩家進入第一回合卡牌教學。</li>
+        <li>打出加速牌累積加速值。</li>
+        <li>將一張牌放入穩定性區域。</li>
+        <li>加速值達到超車門檻後，進入超車準備。</li>
+        <li>完成超車 QTE 後，名次前進。</li>
+        <li>進入防守 QTE，守住領先位置。</li>
+        <li>每完成一組超車與防守後，進入進站獎勵。</li>
+        <li>重複流程直到名次到達第 1 名。</li>
+      </ol>
+
+      <h2>名次規則</h2>
+      <ul>
+        <li>初始名次：<code>3 / 3</code></li>
+        <li>成功超車：名次前進 1 名。</li>
+        <li>超車後到達第 1 名：遊戲勝利。</li>
+      </ul>
+
+      <h2>加速值規則</h2>
+      <ul>
+        <li>基礎超車門檻為 <code>8</code>。</li>
+        <li>加速條顯示上限為 <code>10</code>，但實際加速值可以超過門檻。</li>
+        <li>部分獎勵效果可以降低有效超車門檻，但最低不低於 <code>5</code>。</li>
+        <li>加速值由「保留加速值」與本輪打出的加速牌共同計算。</li>
+      </ul>
+
+      <h3>加速值來源</h3>
+      <ul>
+        <li><code>加速</code>：<code>+2</code></li>
+        <li><code>超加速</code>：<code>+3</code></li>
+        <li><code>失誤</code>：<code>+0</code></li>
+        <li><code>踩下油門</code>：本回合所有加速牌額外 <code>+1</code></li>
+      </ul>
+
+      <h2>加速值保留與歸零</h2>
+      <ul>
+        <li>超車成功後：加速值歸零，打出區清空。</li>
+        <li>防守成功後：保留目前加速值數字，但打出區卡牌會清空。</li>
+        <li>防守失敗後：加速值歸零，打出區清空。</li>
+      </ul>
+
+      <h2>卡牌規則</h2>
+      <h3>起始牌庫</h3>
+      <ul>
+        <li><code>加速</code> x 8</li>
+        <li><code>失誤</code> x 2</li>
+      </ul>
+
+      <h3>出牌</h3>
+      <ul>
+        <li>玩家每輪會抽 5 張手牌。</li>
+        <li>卡牌可以拖曳到打出區或穩定性區域。</li>
+        <li>打到打出區的加速牌會增加加速值。</li>
+        <li>放到穩定性區域的牌會增加穩定性，用於防守 QTE。</li>
+        <li><code>失誤</code> 牌不能提供加速值。</li>
+      </ul>
+
+      <h3>第一回合教學</h3>
+      <ul>
+        <li>發 5 張牌。</li>
+        <li>玩家需要打出 4 張加速牌，並放 1 張到穩定性區域。</li>
+        <li>加速門檻暫定為 8。</li>
+      </ul>
+
+      <h3>第一輪防守前手牌</h3>
+      <ul>
+        <li>發 5 張牌。</li>
+        <li>內容包含 3 張加速牌與 2 張失誤牌。</li>
+        <li>即使打出所有加速牌，也只有 6 點加速值，未必能直接通過超車門檻。</li>
+      </ul>
+
+      <h2>超車 QTE 規則</h2>
+      <ul>
+        <li>進入超車準備時，若加速值達到有效門檻，就可以開始超車。</li>
+        <li>超車 QTE 會出現 5 個節奏圈。</li>
+        <li>玩家需要在圈收縮接近拍點時點擊。</li>
+        <li>判定結果包含：
+          <ul>
+            <li><code>Perfect</code></li>
+            <li><code>Good</code></li>
+            <li><code>Miss</code></li>
+          </ul>
+        </li>
+        <li>點擊判定範圍是外圈內部，不需要精準點在中心。</li>
+        <li>第二圈後，QTE 圈可能會散佈到不同位置。</li>
+        <li>QTE 圈會避開畫面邊緣、狀態面板與左下角表情 UI。</li>
+      </ul>
+
+      <h2>防守 QTE 規則</h2>
+      <ul>
+        <li>防守時玩家需要移動滑鼠，讓黃色游標追住綠色安全區。</li>
+        <li>游標在綠色安全區內時，防守進度會增加。</li>
+        <li>游標在中心完美區內時，防守進度增加更快。</li>
+        <li>游標在紅色危險區時，防守進度會下降。</li>
+        <li>撐到時間結束或把進度條推滿即可完成防守判定。</li>
+      </ul>
+
+      <h3>穩定性影響</h3>
+      <ul>
+        <li>穩定性越高，防守越容易。</li>
+        <li>穩定性會加寬安全區。</li>
+        <li><code>穩定底盤</code> 獎勵也會讓綠區變寬、紅區變窄。</li>
+      </ul>
+
+      <h2>獎勵規則</h2>
+      <p>每完成一組超車與防守後，進入進站調校獎勵畫面。</p>
+      <ul>
+        <li>每次提供 3 張獎勵卡。</li>
+        <li>前 2 張為普通獎勵。</li>
+        <li>第 3 張固定為稀有獎勵。</li>
+        <li>玩家可以選擇 1 張加入牌庫。</li>
+        <li>玩家也可以按「略過」不拿獎勵。</li>
+      </ul>
+
+      <h2>普通獎勵</h2>
+      <ul>
+        <li><code>超加速</code>：速度，效果為 <code>+3</code> 速度。</li>
+        <li><code>節奏預判</code>：超車 QTE，最後 1 顆圓圈變慢，Perfect 區增加。</li>
+        <li><code>穩定底盤</code>：防守 QTE，綠區變寬、紅區變窄。</li>
+      </ul>
+
+      <h2>稀有獎勵</h2>
+      <ul>
+        <li><code>踩下油門</code>：強化，本回合所有加速牌 <code>+1</code> 速度。</li>
+        <li><code>爆發踩點</code>：超車 QTE，每次 Perfect 額外推進超車目標。</li>
+        <li><code>精準轉向</code>：防守 QTE，防守指標晃動幅度降低。</li>
+        <li><code>專注模式</code>：通用 QTE，本回合所有 QTE 節奏變慢 15%。</li>
+        <li><code>壓力反應</code>：通用 QTE，若上一拍 Miss，下一拍判定區大幅放寬。</li>
+      </ul>
+
+      <h2>教學頁規則</h2>
+      <p>目前教學總數為 5 頁：</p>
+      <ol>
+        <li>打出加速牌</li>
+        <li>穩定性區域</li>
+        <li>失誤牌</li>
+        <li>超車 QTE</li>
+        <li>阻擋 QTE</li>
+      </ol>
+
+      <p class="note"><code>超車準備</code> 使用教學彈窗的視覺樣式，但不列入教學總數，也不顯示頁碼。</p>
+    </article>
+  </main>
+</body>
+</html>

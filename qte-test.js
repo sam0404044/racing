@@ -10,7 +10,7 @@ const CanvasQteTest = (() => {
    * QTE TEST 狀態流（簡化字串 mode，對應說明）：
    * start-ready（準備起跑）→ 按「開始測試」→ tutorial-play, tutorial-stable, overtake-ready
    *   手牌：橫列略抬高，可與賽道重疊（不打 QTE 時）。
-   * OVERTAKE_QTE_INTRO / OVERTAKE_QTE → splash-overtake, rhythm-tutorial, rhythm-formal
+   * OVERTAKE_QTE_INTRO / OVERTAKE_QTE → splash-overtake, rhythm-formal
    *   手牌：僅 rhythm-* 時右下角小扇形（不註冊點擊區）；節奏判定為 |點擊時間−拍點| 秒誤差。
    * OVERTAKE_RESULT → result + resultFromOvertake
    * SECOND_CARD_PLAY_PHASE → round2-cards
@@ -113,8 +113,6 @@ const CanvasQteTest = (() => {
     qteClicked: new Set(),
     qteResults: {},
     qteDismissAt: {},
-    qteTutorialPaused: false,
-    qteTutorialDone: false,
     defenseStart: 0,
     defenseProgress: 0,
     safeCenter: 50,
@@ -123,8 +121,8 @@ const CanvasQteTest = (() => {
     message: "",
     backdropCanvas: null,
     lapIndex: 1,
-    rank: 5,
-    rankTotal: 5,
+    rank: 3,
+    rankTotal: 3,
     winOverlay: null,
     winReplayTimer: 0,
     qteScatterPos: null,
@@ -135,6 +133,8 @@ const CanvasQteTest = (() => {
     winAfterOvertake: false,
     resultFromOvertake: false,
     defenseRound: 0,
+    defenseSucceeded: false,
+    carriedAcceleration: 0,
     rewardOptions: [],
     rewardHoverSlot: -1,
     rewardPickAnim: null,
@@ -157,24 +157,42 @@ const CanvasQteTest = (() => {
     burstTargetReduction: 0,
     pressureWideBand: false,
     lastRhythmHadMiss: false,
+    carMotion: null,
   };
 
   const CARD_SURFACE_MODES = ["tutorial-play", "tutorial-stable", "tutorial-mistake", "overtake-ready", "round2-cards"];
+  const CARD_PLAY_MODES = ["tutorial-play", "tutorial-stable", "round2-cards"];
+  const TEACHING_OVERLAY_MODES = ["tutorial-mistake", "overtake-ready", "tutorial-overtake-qte", "tutorial-defense-qte"];
   const CARD_TUTORIAL_TOTAL = 3;
   const QTE_TUTORIAL_TOTAL = 2;
-  const TEACHING_TOTAL = CARD_TUTORIAL_TOTAL + 3;
+  const TEACHING_TOTAL = CARD_TUTORIAL_TOTAL + QTE_TUTORIAL_TOTAL;
 
   function teachingPageNumber() {
     if (app.mode === "tutorial-stable") return 2;
     if (app.mode === "tutorial-mistake") return 3;
-    if (app.mode === "overtake-ready") return 4;
-    if (app.mode === "tutorial-overtake-qte") return 5;
-    if (app.mode === "tutorial-defense-qte") return 6;
+    if (app.mode === "tutorial-overtake-qte") return 4;
+    if (app.mode === "tutorial-defense-qte") return 5;
     return 1;
   }
 
   function teachingPageText() {
     return `${teachingPageNumber()}/${TEACHING_TOTAL}`;
+  }
+
+  function isRhythmMode() {
+    return app.mode === "rhythm-formal";
+  }
+
+  function isTeachingOverlayMode() {
+    return tutorialBlocking() || TEACHING_OVERLAY_MODES.includes(app.mode);
+  }
+
+  function isCardPlayMode() {
+    return CARD_PLAY_MODES.includes(app.mode);
+  }
+
+  function statusHudRect() {
+    return { x: app.w - 312, y: 24, w: 288, h: 214 };
   }
 
   function cardTableVisible() {
@@ -198,6 +216,7 @@ const CanvasQteTest = (() => {
   const RHYTHM_SCATTER_MIN_CENTER_DIST = 132;
   /** 節奏圈外框（點擊判定＝外框內，與縮小內圈無關） */
   const RHYTHM_OUTER_R = 48;
+  const RHYTHM_UI_AVOID_PAD = 24;
 
   function start(root) {
     app.root = root;
@@ -279,13 +298,11 @@ const CanvasQteTest = (() => {
     app.qteClicked = new Set();
     app.qteResults = {};
     app.qteDismissAt = {};
-    app.qteTutorialPaused = false;
-    app.qteTutorialDone = false;
     app.defenseProgress = 0;
     app.message = "";
     app.lapIndex = 1;
-    app.rank = 5;
-    app.rankTotal = 5;
+    app.rank = 3;
+    app.rankTotal = 3;
     app.qteScatterPos = null;
     app.qteTapPending = {};
     app.qteFinalized = {};
@@ -294,6 +311,8 @@ const CanvasQteTest = (() => {
     app.winAfterOvertake = false;
     app.resultFromOvertake = false;
     app.defenseRound = 0;
+    app.defenseSucceeded = false;
+    app.carriedAcceleration = 0;
     app.rewardOptions = [];
     app.rewardHoverSlot = -1;
     app.rewardPickAnim = null;
@@ -307,8 +326,42 @@ const CanvasQteTest = (() => {
     app.burstTargetReduction = 0;
     app.pressureWideBand = false;
     app.lastRhythmHadMiss = false;
+    app.carMotion = createCarMotion();
     refreshDeckPerks();
     hideGameWinOverlay();
+  }
+
+  function createCarMotion() {
+    const make = (speedMin, speedMax) => ({
+      speed: speedMin + Math.random() * (speedMax - speedMin),
+      phase: Math.random() * Math.PI * 2,
+    });
+    return {
+      red: make(0.00045, 0.00105),
+      white: make(0.00035, 0.0009),
+    };
+  }
+
+  function roadLaneBoundsAt(y) {
+    const horizon = app.h * 0.38;
+    const t = Math.max(0, Math.min(1, (y - horizon) / (app.h - horizon)));
+    return {
+      left: app.w * (0.45 + (0.08 - 0.45) * t),
+      right: app.w * (0.55 + (0.92 - 0.55) * t),
+    };
+  }
+
+  function carLaneX(kind, time, y, carW) {
+    const motion = app.carMotion && app.carMotion[kind];
+    const lane = roadLaneBoundsAt(y);
+    const sidePad = carW * 0.5 + 6;
+    const minX = lane.left + sidePad;
+    const maxX = lane.right - sidePad;
+    if (maxX <= minX) return (lane.left + lane.right) / 2;
+    const center = (minX + maxX) / 2;
+    const halfRange = (maxX - minX) / 2;
+    if (!motion) return center;
+    return center + Math.sin(time * motion.speed + motion.phase) * halfRange;
   }
 
   function hideGameWinOverlay() {
@@ -411,7 +464,7 @@ const CanvasQteTest = (() => {
         handleButton(hit);
         return;
       }
-      if (app.mode === "rhythm-formal") {
+      if (isRhythmMode()) {
         hitCircle(p);
         return;
       }
@@ -467,7 +520,7 @@ const CanvasQteTest = (() => {
 
   /** 正式超車 QTE：僅放寬時間判定（點擊範圍一律為外框半徑 RHYTHM_OUTER_R） */
   function rhythmFormalEasy() {
-    return app.mode === "rhythm-formal";
+    return isRhythmMode();
   }
 
   function rhythmBeatWindowSec() {
@@ -482,11 +535,7 @@ const CanvasQteTest = (() => {
   }
 
   function teachingOverlayActive() {
-    return tutorialBlocking()
-      || app.mode === "tutorial-mistake"
-      || app.mode === "overtake-ready"
-      || app.mode === "tutorial-overtake-qte"
-      || app.mode === "tutorial-defense-qte";
+    return isTeachingOverlayMode();
   }
 
   function drawModalBackdrop(time) {
@@ -505,7 +554,7 @@ const CanvasQteTest = (() => {
 
   function canDragCards() {
     if (tutorialBlocking()) return false;
-    return ["tutorial-play", "tutorial-stable", "round2-cards"].includes(app.mode);
+    return isCardPlayMode();
   }
 
   function dropDisabled(target) {
@@ -577,11 +626,17 @@ const CanvasQteTest = (() => {
     if (id === "lap-result-continue") {
       openRewardChoice();
     }
+    if (id === "reward-skip" && app.mode === "card-reward-choice" && !app.rewardPickAnim) {
+      app.rewardOptions = [];
+      app.rewardHoverSlot = -1;
+      app.seenRewardTutorial = true;
+      startSecondRound();
+    }
   }
 
   function accelValue() {
     const bonus = app.played.some(card => card.type === "throttle") ? 1 : 0;
-    let sum = 0;
+    let sum = app.carriedAcceleration;
     for (const card of app.played) {
       if (card.type === "accel") sum += 2 + bonus;
       if (card.type === "hyper_accel") sum += 3 + bonus;
@@ -598,32 +653,31 @@ const CanvasQteTest = (() => {
     app.message = "超車階段";
     app.qteStart = performance.now();
     setTimeout(() => {
-      refreshDeckPerks();
-      app.qteStart = performance.now();
-      app.qteCircleStarts = rhythmStarts(app.qteStart);
-      app.qteClicked = new Set();
-      app.qteResults = {};
-      app.qteDismissAt = {};
-      app.qteTapPending = {};
-      app.qteFinalized = {};
-      app.qteResolveAt = 0;
       app.mode = "rhythm-formal";
-      app.burstPerfectsThisRhythm = 0;
-      app.qteScatterPos = app.lapIndex <= 1 ? null : generateScatterPositions();
+      resetRhythmState(app.lapIndex >= 2);
     }, 1500);
   }
 
   function generateScatterPositions() {
-    const marginX = [app.w * 0.12, app.w * 0.88];
-    const marginY = [app.h * 0.2, app.h * 0.62];
-    for (let attempt = 0; attempt < 40; attempt++) {
+    const r = RHYTHM_OUTER_R;
+    const marginX = [r + RHYTHM_UI_AVOID_PAD, app.w - r - RHYTHM_UI_AVOID_PAD];
+    const marginY = [r + RHYTHM_UI_AVOID_PAD, Math.min(app.h * 0.66, app.h - r - RHYTHM_UI_AVOID_PAD)];
+    for (let attempt = 0; attempt < 90; attempt++) {
       const pts = [];
       for (let i = 0; i < 5; i++) {
-        pts.push({
-          x: marginX[0] + Math.random() * (marginX[1] - marginX[0]),
-          y: marginY[0] + Math.random() * (marginY[1] - marginY[0]),
-        });
+        let point = null;
+        for (let tries = 0; tries < 24; tries++) {
+          const x = marginX[0] + Math.random() * (marginX[1] - marginX[0]);
+          const y = marginY[0] + Math.random() * (marginY[1] - marginY[0]);
+          if (qtePointSafe(x, y, r)) {
+            point = { x, y };
+            break;
+          }
+        }
+        if (!point) break;
+        pts.push(point);
       }
+      if (pts.length < 5) continue;
       let ok = true;
       for (let i = 0; i < 5 && ok; i++) {
         for (let j = i + 1; j < 5; j++) {
@@ -632,16 +686,16 @@ const CanvasQteTest = (() => {
       }
       if (ok) return pts;
     }
-    const y = app.h * 0.36;
+    const minY = statusHudRect().y + statusHudRect().h + RHYTHM_OUTER_R + RHYTHM_UI_AVOID_PAD;
+    const maxY = app.h - RHYTHM_OUTER_R - RHYTHM_UI_AVOID_PAD;
+    const y = Math.min(maxY, Math.max(app.h * 0.42, minY));
     const gap = Math.min(130, app.w * 0.085);
     const startX = app.w / 2 - gap * 2;
     return Array.from({ length: 5 }, (_, i) => ({ x: startX + i * gap, y }));
   }
 
-  function startFormalRhythm() {
-    app.mode = "rhythm-formal";
+  function resetRhythmState(useScatter) {
     refreshDeckPerks();
-    app.burstPerfectsThisRhythm = 0;
     app.qteStart = performance.now();
     app.qteCircleStarts = rhythmStarts(app.qteStart);
     app.qteClicked = new Set();
@@ -650,7 +704,8 @@ const CanvasQteTest = (() => {
     app.qteTapPending = {};
     app.qteFinalized = {};
     app.qteResolveAt = 0;
-    app.qteScatterPos = app.lapIndex >= 2 ? generateScatterPositions() : null;
+    app.burstPerfectsThisRhythm = 0;
+    app.qteScatterPos = useScatter ? generateScatterPositions() : null;
   }
 
   function rhythmStarts(start) {
@@ -708,6 +763,7 @@ const CanvasQteTest = (() => {
       app.defenseRound += 1;
       app.defenseStart = performance.now();
       app.defenseProgress = 0;
+      app.defenseSucceeded = false;
       app.safeCenter = 50;
       app.safeTarget = 50;
       app.nextSafeShift = performance.now() + 300;
@@ -715,7 +771,7 @@ const CanvasQteTest = (() => {
   }
 
   function tryFinishRhythmFormal() {
-    if (app.mode !== "rhythm-formal") return;
+    if (!isRhythmMode()) return;
     if (app.qteClicked.size < 5) return;
     if (!app.qteResolveAt) {
       const dismissTimes = Object.values(app.qteDismissAt);
@@ -725,24 +781,27 @@ const CanvasQteTest = (() => {
   }
 
   function finalizeRhythmFormal() {
-    if (app.mode !== "rhythm-formal") return;
-    const wasFirstPlace = app.rank === 1;
+    if (!isRhythmMode()) return;
     refreshDeckPerks();
     if (app.perkBurst) {
       app.burstTargetReduction = Math.min(3, app.burstPerfectsThisRhythm);
     } else {
       app.burstTargetReduction = 0;
     }
-    app.rank = Math.max(1, app.rank - 1);
+    const nextRank = Math.max(1, app.rank - 1);
+    const reachedFirstPlace = nextRank === 1;
+    app.rank = nextRank;
+    app.carriedAcceleration = 0;
+    app.played = [];
     app.qteResolveAt = 0;
     app.qtesSinceReward += 1;
-    app.winAfterOvertake = wasFirstPlace;
+    app.winAfterOvertake = reachedFirstPlace;
     app.mode = "result";
     app.resultFromOvertake = true;
   }
 
   function update(time) {
-    if (app.mode === "rhythm-formal") {
+    if (isRhythmMode()) {
       for (let i = 0; i < 5; i++) {
         const start = app.qteCircleStarts[i] ?? app.qteStart;
         const elapsed = time - start;
@@ -763,7 +822,7 @@ const CanvasQteTest = (() => {
         }
       }
     }
-    if (app.mode === "rhythm-formal" && time - app.qteStart > 5800 && app.qteClicked.size < 5) {
+    if (isRhythmMode() && time - app.qteStart > 5800 && app.qteClicked.size < 5) {
       for (let i = 0; i < 5; i++) {
         if (app.qteFinalized[i]) continue;
         const start = app.qteCircleStarts[i] ?? app.qteStart;
@@ -781,7 +840,7 @@ const CanvasQteTest = (() => {
       }
       tryFinishRhythmFormal();
     }
-    if (app.mode === "rhythm-formal" && app.qteResolveAt && time >= app.qteResolveAt) {
+    if (isRhythmMode() && app.qteResolveAt && time >= app.qteResolveAt) {
       finalizeRhythmFormal();
     }
     if (app.mode === "defense") updateDefense(time);
@@ -850,6 +909,9 @@ const CanvasQteTest = (() => {
     else app.defenseProgress = Math.max(0, app.defenseProgress - diff.missPenalty);
     app.defenseProgress = Math.max(app.defenseProgress, ((time - app.defenseStart) / 10000) * 100);
     if (time - app.defenseStart >= 10000 || app.defenseProgress >= 100) {
+      app.defenseSucceeded = app.defenseProgress >= 100;
+      app.carriedAcceleration = app.defenseSucceeded ? accelValue() : 0;
+      app.played = [];
       app.qtesSinceReward += 1;
       app.mode = "defense-result";
     }
@@ -857,6 +919,7 @@ const CanvasQteTest = (() => {
 
   /** 多圈重疊時取圓心最近者，避免誤判到別顆。 */
   function hitRhythmCircleAt(p) {
+    if (!isRhythmMode()) return null;
     const list = app.zones.circles || [];
     let best = null;
     let bestD = Infinity;
@@ -873,7 +936,7 @@ const CanvasQteTest = (() => {
   function hitCircle(p) {
     const hit = hitRhythmCircleAt(p);
     if (!hit) return;
-    if (app.mode === "rhythm-formal" && !app.qteFinalized[hit.i]) {
+    if (isRhythmMode() && !app.qteFinalized[hit.i]) {
       const now = performance.now();
       const start = app.qteCircleStarts[hit.i] || app.qteStart;
       const dur = hit.duration;
@@ -950,7 +1013,7 @@ const CanvasQteTest = (() => {
   }
 
   function formalActiveRingStress(time) {
-    if (app.mode !== "rhythm-formal") return 0;
+    if (!isRhythmMode()) return 0;
     for (let i = 0; i < 5; i++) {
       if (app.qteFinalized[i]) continue;
       const start = app.qteCircleStarts[i] ?? app.qteStart;
@@ -968,10 +1031,6 @@ const CanvasQteTest = (() => {
       if (formalActiveRingStress(time) > 0.72) return { mood: "sweat", label: "極限難度" };
       if (countFormalMisses() === 1) return { mood: "nervous", label: "QTE 偏難" };
       return { mood: "nervous", label: "QTE 高壓" };
-    }
-    if (m === "rhythm-tutorial") {
-      if (app.qteTutorialPaused && !app.qteTutorialDone) return { mood: "nervous", label: "教學關鍵拍" };
-      return { mood: "relaxed", label: "QTE 簡單" };
     }
     if (typeof m === "string" && m.startsWith("splash")) {
       return { mood: "nervous", label: "即將開戰" };
@@ -1107,6 +1166,38 @@ const CanvasQteTest = (() => {
     };
   }
 
+  function rectFromBounds(b) {
+    return { x: b.left, y: b.top, w: b.right - b.left, h: b.bottom - b.top };
+  }
+
+  function inflateRect(r, pad) {
+    return { x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2 };
+  }
+
+  function circleOverlapsRect(cx, cy, r, rect) {
+    const nearestX = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
+    const nearestY = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+    return dist(cx, cy, nearestX, nearestY) < r;
+  }
+
+  function qteAvoidRects(time) {
+    const hud = statusHudRect();
+    const R = Math.min(56, app.w * 0.072);
+    const cx = 18 + R;
+    const cy = app.h - 20 - R - 10;
+    const label = getExpressionState(typeof time === "number" ? time : performance.now()).label;
+    return [
+      inflateRect(hud, RHYTHM_UI_AVOID_PAD),
+      inflateRect(rectFromBounds(expressionDockBounds(cx, cy, R, label)), RHYTHM_UI_AVOID_PAD),
+    ];
+  }
+
+  function qtePointSafe(x, y, r, time) {
+    const edge = RHYTHM_UI_AVOID_PAD;
+    if (x < r + edge || x > app.w - r - edge || y < r + edge || y > app.h - r - edge) return false;
+    return qteAvoidRects(time).every(rect => !circleOverlapsRect(x, y, r, rect));
+  }
+
   function boundsOverlapModal(b, mx, my, mw, mh) {
     return !(b.right <= mx || b.left >= mx + mw || b.bottom <= my || b.top >= my + mh);
   }
@@ -1213,6 +1304,7 @@ const CanvasQteTest = (() => {
 
   function draw(time) {
     app.zones.buttons = [];
+    if (!isRhythmMode()) app.zones.circles = [];
     if (!stabilityDropVisible()) {
       app.zones.stableHit = null;
       app.zones.stable = null;
@@ -1263,8 +1355,8 @@ const CanvasQteTest = (() => {
       drawHand(time);
     }
     if (app.mode.startsWith("splash")) drawSplash();
-    if (app.mode === "rhythm-tutorial" || app.mode === "rhythm-formal") drawRhythm(time);
-    if ((app.mode === "rhythm-tutorial" || app.mode === "rhythm-formal") && app.hand.length) {
+    if (isRhythmMode()) drawRhythm(time);
+    if (isRhythmMode() && app.hand.length) {
       drawHandRhythmCorner();
     }
     if (app.mode === "success") drawCenterMessage(app.message, "#57e585");
@@ -1422,8 +1514,12 @@ const CanvasQteTest = (() => {
       ctx.stroke();
     }
 
-    drawCar(w * 0.52, h * 0.54, 58, 28, "#e94d48");
-    drawCar(w * 0.5, h * 0.80, 126, 58, "#dceaff");
+    const redY = h * 0.54;
+    const redW = 58;
+    const whiteY = h * 0.80;
+    const whiteW = 126;
+    drawCar(carLaneX("red", time, redY, redW), redY, redW, 28, "#e94d48");
+    drawCar(carLaneX("white", time, whiteY, whiteW), whiteY, whiteW, 58, "#dceaff");
 
     ctx.strokeStyle = "rgba(129,180,255,0.22)";
     ctx.lineWidth = 1;
@@ -1437,11 +1533,12 @@ const CanvasQteTest = (() => {
     }
   }
 
-  function drawCar(x, y, w, h, color) {
+  function drawCar(x, y, w, h, color, opts = {}) {
     const ctx = app.ctx;
+    const shadowAlpha = opts.shadowAlpha ?? 0.48;
     ctx.save();
     ctx.translate(x, y);
-    ctx.fillStyle = "rgba(0,0,0,0.48)";
+    ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
     ctx.fillRect(-w * 0.5, h * 0.36, w, h * 0.22);
     ctx.fillStyle = color;
     ctx.fillRect(-w * 0.42, -h * 0.25, w * 0.84, h * 0.52);
@@ -1481,7 +1578,7 @@ const CanvasQteTest = (() => {
   }
 
   function drawHud() {
-    const status = { x: app.w - 312, y: 24, w: 288, h: 214 };
+    const status = statusHudRect();
     panel(status.x, status.y, status.w, status.h, "rgba(8,18,32,0.88)", "rgba(105,164,224,0.50)");
     text("狀態", status.x + 22, status.y + 34, 24, "#cfe7ff", "700");
     text(`本局名次 ${app.rank} / ${app.rankTotal}`, status.x + 22, status.y + 58, 14, "rgba(214,228,255,0.82)", "700");
@@ -1729,9 +1826,22 @@ const CanvasQteTest = (() => {
    * 遊戲卡牌元件：手牌、拖曳、進站三選一共用。
    * @param {object} [opts] `pickOffer`：進站選牌（顯示稀有度角標、分類小字，版面與手牌 reward 一致）
    */
+  function cardViewModel(card) {
+    const value = card.value || (card.type === "hyper_accel" ? "+3" : card.type === "mistake" ? "+0" : card.type === "accel" ? "+2" : "");
+    const description = card.effect || card.note || "";
+    return {
+      name: card.name || "",
+      category: card.category || "",
+      rarity: card.rarity || "",
+      value,
+      description,
+    };
+  }
+
   function drawCard(card, x, y, w, h, dragging, opts) {
     const ctx = app.ctx;
     const pickOffer = !!(opts && opts.pickOffer);
+    const view = cardViewModel(card);
     ctx.save();
     ctx.globalAlpha = dragging ? 0.88 : 1;
     ctx.shadowColor = "rgba(0,0,0,0.34)";
@@ -1757,10 +1867,10 @@ const CanvasQteTest = (() => {
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    if (pickOffer) {
-      const tag = card.rarity === "稀有" ? "稀有" : "普通";
-      const tagColor = card.rarity === "稀有" ? "#e8c878" : "#c8d0e0";
-      const tagBg = card.rarity === "稀有" ? "rgba(28, 36, 52, 0.96)" : "rgba(55, 65, 82, 0.55)";
+    if (view.rarity) {
+      const tag = view.rarity;
+      const tagColor = view.rarity === "稀有" ? "#e8c878" : "#c8d0e0";
+      const tagBg = view.rarity === "稀有" ? "rgba(28, 36, 52, 0.96)" : "rgba(55, 65, 82, 0.55)";
       fillRoundRect(x + w - 54, y + 8, 48, 20, 6, tagBg);
       text(tag, x + w - 30, y + 23, 11, tagColor, "900", "center", true);
     }
@@ -1774,19 +1884,35 @@ const CanvasQteTest = (() => {
     ctx.fillStyle = rarityBar;
     ctx.fillRect(x, barTop, w, barH);
     ctx.restore();
-    text(card.name, x + 14, y + 26, 16, "#3d3528", "900", "left", true);
-    if (pickOffer && card.category) {
-      text(card.category, x + 14, y + 46, 12, "#5a6b82", "800", "left", true);
+    text(view.name, x + 14, y + 26, 16, "#3d3528", "900", "left", true);
+    if (view.category) {
+      text(view.category, x + 14, y + 46, 12, "#5a6b82", "800", "left", true);
     }
     const cx = x + w / 2;
     const isRb = card.type === "reward_buff";
+    const hasDescription = !!view.description;
     const iconSize = isRb && pickOffer ? 38 : isRb ? 46 : 50;
-    let iconCy = isRb ? y + h * 0.33 : y + h * 0.42;
-    if (pickOffer && isRb && card.category) iconCy = y + h * 0.41;
+    let iconCy = isRb ? y + h * 0.39 : y + h * 0.42;
+    if (hasDescription) iconCy -= pickOffer ? 2 : 4;
     drawCardCenterIcon(card, cx, iconCy, iconSize);
+    let descriptionTop = barTop - 12;
+    if (hasDescription) {
+      const descSize = pickOffer ? 10.5 : 11;
+      const lineH = descSize + 5;
+      const padX = 14;
+      const maxLines = pickOffer ? 3 : 2;
+      const lines = wrapTextToLines(view.description, w - padX * 2, descSize, maxLines);
+      const totalH = lines.length * lineH;
+      descriptionTop = barTop - 12 - totalH;
+      let ty = descriptionTop + descSize * 0.82;
+      for (let li = 0; li < lines.length; li++) {
+        text(lines[li], cx, ty, descSize, "#3a4558", "700", "center", true);
+        ty += lineH;
+      }
+    }
     if (card.type === "accel" || card.type === "hyper_accel" || card.type === "mistake") {
       const fs = 24;
-      const val = card.type === "hyper_accel" ? "+3" : card.type === "mistake" ? "+0" : "+2";
+      const val = view.value;
       ctx.save();
       ctx.font = `1000 ${fs}px system-ui, "Microsoft JhengHei", sans-serif`;
       ctx.textAlign = "center";
@@ -1796,7 +1922,7 @@ const CanvasQteTest = (() => {
       const descent = m.actualBoundingBoxDescent ?? fs * 0.2;
       const padX = 12;
       const padY = 5;
-      const baselineY = barTop - barGap - descent - padY;
+      const baselineY = hasDescription ? descriptionTop - 8 : barTop - barGap - descent - padY;
       const stickerW = m.width + padX * 2;
       const stickerH = ascent + descent + padY * 2;
       const stickerX = cx - stickerW / 2;
@@ -1804,31 +1930,6 @@ const CanvasQteTest = (() => {
       fillRoundRect(stickerX, stickerY, stickerW, stickerH, 8, "rgba(0,0,0,0.04)");
       ctx.restore();
       text(val, cx, baselineY, fs, "#2a2418", "1000", "center", true);
-    }
-    if (card.note) {
-      ctx.save();
-      ctx.font = `800 13px system-ui, "Microsoft JhengHei", sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      const nm = ctx.measureText(card.note);
-      const nd = nm.actualBoundingBoxDescent ?? 3;
-      const noteBaseline = barTop - barGap - nd;
-      ctx.restore();
-      text(card.note, x + w / 2, noteBaseline, 13, "#5c5240", "800", "center", true);
-    }
-    if (card.type === "reward_buff" && card.effect) {
-      const effSize = pickOffer ? 10.5 : 11;
-      const lineH = effSize + 5;
-      const padX = 14;
-      const textTop = iconCy + iconSize / 2 + (pickOffer ? 6 : 8);
-      const maxAvail = barTop - 12 - textTop;
-      const maxLines = Math.max(1, Math.min(4, Math.floor(maxAvail / lineH)));
-      const lines = wrapTextToLines(card.effect, w - padX * 2, effSize, maxLines);
-      let ty = textTop + effSize * 0.82;
-      for (let li = 0; li < lines.length; li++) {
-        text(lines[li], cx, ty, effSize, "#3a4558", "700", "center", true);
-        ty += lineH;
-      }
     }
     ctx.restore();
   }
@@ -2006,11 +2107,27 @@ const CanvasQteTest = (() => {
     const box = getCenteredModalBox(520, 260);
     drawModalPanel(box);
     text("超車準備", box.x + 36, box.y + 56, 28, "#dfeeff", "900");
-    text(teachingPageText(), box.x + 36, box.y + 92, 24, "#ffd94f", "900");
-    text(`加速度達到指定值（${effectiveOvertakeTarget()}），`, box.x + 36, box.y + 124, 18, "#f4f8ff", "800");
-    text("可以開始超車", box.x + 36, box.y + 150, 18, "#ffd94f", "900");
-    text(`目前加速值：${accelValue()}`, box.x + 36, box.y + 184, 16, "rgba(214,228,255,0.82)", "700");
+    text(`加速度達到指定值（${effectiveOvertakeTarget()}），`, box.x + 36, box.y + 112, 18, "#f4f8ff", "800");
+    text("可以開始超車", box.x + 36, box.y + 138, 18, "#ffd94f", "900");
+    text(`目前加速值：${accelValue()}`, box.x + 36, box.y + 174, 16, "rgba(214,228,255,0.82)", "700");
+    drawOvertakeReadyIcon(box.x + box.w - 152, box.y + 86, 104, 88);
     button("overtake", "開始超車", box.x + box.w / 2 - 110, box.y + box.h - 64, 220, 52, !canStartOvertake());
+  }
+
+  function drawOvertakeReadyIcon(x, y, w, h) {
+    const ctx = app.ctx;
+    ctx.save();
+    roundPanel(x, y, w, h, 14, "rgba(8,18,32,0.64)", "rgba(255,217,79,0.36)", 1.5);
+    ctx.strokeStyle = "rgba(255,217,79,0.58)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.5, y + 10);
+    ctx.lineTo(x + w * 0.5, y + h - 10);
+    ctx.stroke();
+    drawCar(x + w * 0.36, y + h * 0.60, 42, 22, "#dceaff", { shadowAlpha: 0.36 });
+    drawCar(x + w * 0.66, y + h * 0.38, 34, 18, "#e94d48", { shadowAlpha: 0.36 });
+    text("↑", x + w * 0.73, y + h * 0.78, 24, "#ffd94f", "1000", "center", true);
+    ctx.restore();
   }
 
   function drawStartReadyModal() {
@@ -2093,7 +2210,7 @@ const CanvasQteTest = (() => {
       text("點擊範圍是外圈內部，不必剛好點在中心。", cx, box.y + 154, 17, "rgba(214,228,255,0.84)", "800", "center");
       for (let i = 0; i < 3; i++) {
         const x = cx - 110 + i * 110;
-        drawQteCircle(x, demoY, 34, 0.25 + i * 0.22, null, false, true, false, 420, 1150);
+        drawQteDemoCircle(x, demoY, 34, 0.25 + i * 0.22);
       }
       text("看準節奏，連續點完 5 顆。", cx, box.y + 292, 17, "#ffd94f", "900", "center");
       return;
@@ -2148,7 +2265,13 @@ const CanvasQteTest = (() => {
   }
 
   function drawRhythm(time) {
-    const yLine = app.h * 0.36;
+    if (!isRhythmMode()) {
+      app.zones.circles = [];
+      return;
+    }
+    const minY = statusHudRect().y + statusHudRect().h + RHYTHM_OUTER_R + RHYTHM_UI_AVOID_PAD;
+    const maxY = app.h - RHYTHM_OUTER_R - RHYTHM_UI_AVOID_PAD;
+    const yLine = Math.min(maxY, Math.max(app.h * 0.42, minY));
     const gap = Math.min(130, app.w * 0.085);
     const startX = app.w / 2 - gap * 2;
     app.zones.circles = [];
@@ -2159,12 +2282,12 @@ const CanvasQteTest = (() => {
       if (elapsed < 0) continue;
       const duration = getRhythmDuration(i);
       const ratio = Math.min(1, elapsed / duration);
-      const pos = app.qteScatterPos && app.mode === "rhythm-formal"
+      const pos = app.qteScatterPos && isRhythmMode()
         ? app.qteScatterPos[i]
         : { x: startX + i * gap, y: yLine };
       const { x, y } = pos;
       const result = app.qteResults[i];
-      const isFormal = app.mode === "rhythm-formal";
+      const isFormal = isRhythmMode();
       const finalized = !!app.qteFinalized[i];
       const showOutcome = !!result && (!isFormal || finalized);
       const displayOutcome = showOutcome && result ? result : null;
@@ -2176,30 +2299,11 @@ const CanvasQteTest = (() => {
         app.zones.circles.push({ x, y, r: RHYTHM_OUTER_R, i, duration });
       }
     }
-    if (app.mode === "rhythm-tutorial" && !app.qteTutorialDone) {
-      const ctx = app.ctx;
-      const msg = "在完美時機點擊圓圈！";
-      const ty = yLine + 92;
-      const fs = 22;
-      ctx.save();
-      ctx.font = `900 ${fs}px system-ui, "Microsoft JhengHei", sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      const tw = ctx.measureText(msg).width;
-      const padX = 18;
-      const padY = 10;
-      const pillW = tw + padX * 2;
-      const pillH = fs + padY * 2;
-      const pillX = app.w / 2 - pillW / 2;
-      const pillY = ty - fs * 0.72 - padY;
-      fillRoundRect(pillX, pillY, pillW, pillH, 10, "rgba(4, 10, 18, 0.82)");
-      text(msg, app.w / 2, ty, fs, "#ffd94f", "900", "center", true);
-      ctx.restore();
-    }
   }
 
   /** 可點擊範圍外圈：極細實線黃色（固定半徑，永遠畫在最上層之一） */
   function drawQteYellowTargetRing(ctx, x, y, outerR) {
+    if (!isRhythmMode()) return;
     ctx.save();
     ctx.strokeStyle = "rgba(255, 236, 170, 0.92)";
     ctx.lineWidth = 1;
@@ -2207,6 +2311,24 @@ const CanvasQteTest = (() => {
     ctx.beginPath();
     ctx.arc(x, y, outerR, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawQteDemoCircle(x, y, r, ratio) {
+    const ctx = app.ctx;
+    const innerR = Math.max(6, r * (1 - ratio));
+    ctx.save();
+    ctx.fillStyle = "rgba(80, 160, 255, 0.18)";
+    ctx.strokeStyle = "rgba(150, 205, 255, 0.72)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 210, 95, 0.34)";
+    ctx.beginPath();
+    ctx.arc(x, y, innerR, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -2326,9 +2448,10 @@ const CanvasQteTest = (() => {
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(0, 0, app.w, app.h);
     const boxY = app.h * 0.3;
+    const success = app.defenseSucceeded;
     panel(app.w / 2 - 280, boxY, 560, 220, "rgba(6,14,24,0.92)", "#69a4e0");
-    text("防守成功！", app.w / 2, boxY + 88, 40, "#57e585", "1000", "center");
-    text("準備結算本圈成績", app.w / 2, boxY + 140, 18, "#d7e6f8", "700", "center");
+    text(success ? "防守成功！" : "防守失敗！", app.w / 2, boxY + 88, 40, success ? "#57e585" : "#ff6b7a", "1000", "center");
+    text(success ? "加速值保留，準備結算本圈成績" : "加速值歸零，準備重新加速", app.w / 2, boxY + 140, 18, "#d7e6f8", "700", "center");
     button("defense-result-ok", "繼續", app.w / 2 - 100, boxY + 158, 200, 48);
   }
 
@@ -2413,6 +2536,8 @@ const CanvasQteTest = (() => {
     }
     if (app.mode === "card-reward-toast") {
       text("已加入牌庫", app.w / 2, app.h * 0.78, 28, "#ffe082", "1000", "center");
+    } else {
+      button("reward-skip", "略過", app.w / 2 - 72, baseY + cardH + 34, 144, 44, !!app.rewardPickAnim, "gray");
     }
   }
 
@@ -2491,9 +2616,14 @@ const CanvasQteTest = (() => {
     text(message, app.w / 2, app.h * 0.42, 34, color, "1000", "center");
   }
 
-  function button(id, label, x, y, w, h, disabled = false) {
+  function button(id, label, x, y, w, h, disabled = false, variant = "primary") {
     app.zones.buttons.push({ id, rect: { x, y, w, h }, disabled });
-    roundPanel(x, y, w, h, 10, disabled ? "rgba(20,44,72,0.5)" : "rgba(20,44,72,0.9)", "rgba(105,164,224,0.55)");
+    const gray = variant === "gray";
+    const fill = disabled
+      ? gray ? "rgba(54,60,70,0.45)" : "rgba(20,44,72,0.5)"
+      : gray ? "rgba(70,76,88,0.88)" : "rgba(20,44,72,0.9)";
+    const stroke = gray ? "rgba(190,198,210,0.46)" : "rgba(105,164,224,0.55)";
+    roundPanel(x, y, w, h, 10, fill, stroke);
     text(label, x + w / 2, y + 31, 18, disabled ? "rgba(216,236,255,0.55)" : "#d8ecff", "800", "center");
   }
 
