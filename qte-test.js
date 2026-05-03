@@ -123,13 +123,16 @@ const CanvasQteTest = (() => {
     message: "",
     backdropCanvas: null,
     lapIndex: 1,
-    rank: 3,
+    rank: 5,
     rankTotal: 5,
     winOverlay: null,
     winReplayTimer: 0,
     qteScatterPos: null,
     qteTapPending: {},
     qteFinalized: {},
+    qteResolveAt: 0,
+    qtesSinceReward: 0,
+    winAfterOvertake: false,
     resultFromOvertake: false,
     defenseRound: 0,
     rewardOptions: [],
@@ -225,11 +228,14 @@ const CanvasQteTest = (() => {
     app.defenseProgress = 0;
     app.message = "";
     app.lapIndex = 1;
-    app.rank = 3;
+    app.rank = 5;
     app.rankTotal = 5;
     app.qteScatterPos = null;
     app.qteTapPending = {};
     app.qteFinalized = {};
+    app.qteResolveAt = 0;
+    app.qtesSinceReward = 0;
+    app.winAfterOvertake = false;
     app.resultFromOvertake = false;
     app.defenseRound = 0;
     app.rewardOptions = [];
@@ -345,7 +351,7 @@ const CanvasQteTest = (() => {
         handleButton(hit);
         return;
       }
-      if (app.mode === "rhythm-tutorial" || app.mode === "rhythm-formal") {
+      if (app.mode === "rhythm-formal") {
         hitCircle(p);
         return;
       }
@@ -401,7 +407,7 @@ const CanvasQteTest = (() => {
 
   /** 教學或第一圈正式節奏：僅放寬時間判定（點擊範圍一律為外框半徑 RHYTHM_OUTER_R） */
   function rhythmStage1Easy() {
-    return app.mode === "rhythm-tutorial" || (app.mode === "rhythm-formal" && app.lapIndex <= 1);
+    return app.mode === "rhythm-formal";
   }
 
   function rhythmBeatWindowSec() {
@@ -448,18 +454,13 @@ const CanvasQteTest = (() => {
     }
     if (id === "overtake" && canStartOvertake()) startOvertake();
     if (id === "next-lap") {
-      app.lapIndex += 1;
-      startSecondRound();
+      continueAfterQte();
     }
     if (id === "defense-result-ok") {
-      app.mode = "lap-result";
+      continueAfterQte();
     }
     if (id === "lap-result-continue") {
-      hideGameWinOverlay();
-      app.rewardOptions = rollRewardOptions();
-      app.rewardHoverSlot = -1;
-      app.rewardPickAnim = null;
-      app.mode = "card-reward-choice";
+      openRewardChoice();
     }
   }
 
@@ -490,15 +491,10 @@ const CanvasQteTest = (() => {
       app.qteDismissAt = {};
       app.qteTapPending = {};
       app.qteFinalized = {};
-      if (app.lapIndex <= 1) {
-        app.mode = "rhythm-tutorial";
-        app.qteTutorialPaused = false;
-        app.qteTutorialDone = false;
-      } else {
-        app.mode = "rhythm-formal";
-        app.burstPerfectsThisRhythm = 0;
-        app.qteScatterPos = app.lapIndex >= 2 ? generateScatterPositions() : null;
-      }
+      app.qteResolveAt = 0;
+      app.mode = "rhythm-formal";
+      app.burstPerfectsThisRhythm = 0;
+      app.qteScatterPos = app.lapIndex <= 1 ? null : generateScatterPositions();
     }, 1500);
   }
 
@@ -538,6 +534,7 @@ const CanvasQteTest = (() => {
     app.qteDismissAt = {};
     app.qteTapPending = {};
     app.qteFinalized = {};
+    app.qteResolveAt = 0;
     app.qteScatterPos = app.lapIndex >= 2 ? generateScatterPositions() : null;
   }
 
@@ -550,6 +547,30 @@ const CanvasQteTest = (() => {
     dealFiveFromDeck();
     app.played = [];
     app.stable = [];
+  }
+
+  function openRewardChoice() {
+    hideGameWinOverlay();
+    app.qtesSinceReward = 0;
+    app.rewardOptions = rollRewardOptions();
+    app.rewardHoverSlot = -1;
+    app.rewardPickAnim = null;
+    app.mode = "card-reward-choice";
+  }
+
+  function continueAfterQte() {
+    if (app.winAfterOvertake) {
+      app.winAfterOvertake = false;
+      app.mode = "final-win";
+      showGameWinOverlay();
+      return;
+    }
+    if (app.qtesSinceReward >= 2) {
+      openRewardChoice();
+      return;
+    }
+    app.lapIndex += 1;
+    startSecondRound();
   }
 
   function startDefense() {
@@ -570,6 +591,16 @@ const CanvasQteTest = (() => {
   function tryFinishRhythmFormal() {
     if (app.mode !== "rhythm-formal") return;
     if (app.qteClicked.size < 5) return;
+    if (!app.qteResolveAt) {
+      const dismissTimes = Object.values(app.qteDismissAt);
+      const lastDismissAt = dismissTimes.length ? Math.max(...dismissTimes) : performance.now() + 1200;
+      app.qteResolveAt = lastDismissAt;
+    }
+  }
+
+  function finalizeRhythmFormal() {
+    if (app.mode !== "rhythm-formal") return;
+    const wasFirstPlace = app.rank === 1;
     refreshDeckPerks();
     if (app.perkBurst) {
       app.burstTargetReduction = Math.min(3, app.burstPerfectsThisRhythm);
@@ -577,15 +608,14 @@ const CanvasQteTest = (() => {
       app.burstTargetReduction = 0;
     }
     app.rank = Math.max(1, app.rank - 1);
+    app.qteResolveAt = 0;
+    app.qtesSinceReward += 1;
+    app.winAfterOvertake = wasFirstPlace;
     app.mode = "result";
     app.resultFromOvertake = true;
   }
 
   function update(time) {
-    if (app.mode === "rhythm-tutorial") {
-      const pauseAt = (app.qteCircleStarts[2] || app.qteStart) + getRhythmDuration(2);
-      if (time >= pauseAt && !app.qteTutorialPaused && !app.qteTutorialDone) app.qteTutorialPaused = true;
-    }
     if (app.mode === "rhythm-formal") {
       for (let i = 0; i < 5; i++) {
         const start = app.qteCircleStarts[i] ?? app.qteStart;
@@ -625,6 +655,9 @@ const CanvasQteTest = (() => {
       }
       tryFinishRhythmFormal();
     }
+    if (app.mode === "rhythm-formal" && app.qteResolveAt && time >= app.qteResolveAt) {
+      finalizeRhythmFormal();
+    }
     if (app.mode === "defense") updateDefense(time);
     if (app.rewardPickAnim) {
       const dt = time - app.rewardPickAnim.t0;
@@ -640,12 +673,7 @@ const CanvasQteTest = (() => {
     }
     if (app.mode === "card-reward-toast" && time >= app.rewardToastUntil) {
       app.rewardToastUntil = 0;
-      if (app.rank === 1) {
-        app.mode = "final-win";
-        showGameWinOverlay();
-      } else {
-        startSecondRound();
-      }
+      startSecondRound();
     }
   }
 
@@ -696,6 +724,7 @@ const CanvasQteTest = (() => {
     else app.defenseProgress = Math.max(0, app.defenseProgress - diff.missPenalty);
     app.defenseProgress = Math.max(app.defenseProgress, ((time - app.defenseStart) / 10000) * 100);
     if (time - app.defenseStart >= 10000 || app.defenseProgress >= 100) {
+      app.qtesSinceReward += 1;
       app.mode = "defense-result";
     }
   }
@@ -718,14 +747,6 @@ const CanvasQteTest = (() => {
   function hitCircle(p) {
     const hit = hitRhythmCircleAt(p);
     if (!hit) return;
-    if (app.mode === "rhythm-tutorial") {
-      if (hit.i === 2 && app.qteTutorialPaused && !app.qteTutorialDone) {
-        app.qteTutorialDone = true;
-        app.qteResults[hit.i] = "hit";
-        setTimeout(startFormalRhythm, 500);
-      }
-      return;
-    }
     if (app.mode === "rhythm-formal" && !app.qteFinalized[hit.i]) {
       const now = performance.now();
       const start = app.qteCircleStarts[hit.i] || app.qteStart;
@@ -967,7 +988,7 @@ const CanvasQteTest = (() => {
     const marginB = 20;
     let cx = marginL + R;
     let cy = app.h - marginB - R - 10;
-    if (tutorialBlocking()) {
+    if (false && tutorialBlocking()) {
       /** 與手牌、HUD 相同：在黃框「外」、全螢幕模糊上；不可壓到黃框、也不塞進框內 */
       const tb = getTutorialModalBox();
       const mx = tb.x;
@@ -1571,9 +1592,9 @@ const CanvasQteTest = (() => {
     }
     const cx = x + w / 2;
     const isRb = card.type === "reward_buff";
-    const iconSize = isRb ? 46 : 50;
+    const iconSize = isRb && pickOffer ? 38 : isRb ? 46 : 50;
     let iconCy = isRb ? y + h * 0.33 : y + h * 0.42;
-    if (pickOffer && isRb && card.category) iconCy = y + h * 0.44;
+    if (pickOffer && isRb && card.category) iconCy = y + h * 0.41;
     drawCardCenterIcon(card, cx, iconCy, iconSize);
     if (card.type === "accel" || card.type === "hyper_accel") {
       const fs = 24;
@@ -1608,10 +1629,10 @@ const CanvasQteTest = (() => {
       text(card.note, x + w / 2, noteBaseline, 13, "#5c5240", "800", "center", true);
     }
     if (card.type === "reward_buff" && card.effect) {
-      const effSize = 11;
+      const effSize = pickOffer ? 10.5 : 11;
       const lineH = effSize + 5;
       const padX = 14;
-      const textTop = iconCy + iconSize / 2 + 8;
+      const textTop = iconCy + iconSize / 2 + (pickOffer ? 6 : 8);
       const maxAvail = barTop - 12 - textTop;
       const maxLines = Math.max(1, Math.min(4, Math.floor(maxAvail / lineH)));
       const lines = wrapTextToLines(card.effect, w - padX * 2, effSize, maxLines);
@@ -1756,7 +1777,7 @@ const CanvasQteTest = (() => {
       const elapsed = time - start;
       if (elapsed < 0) continue;
       const duration = getRhythmDuration(i);
-      const ratio = app.mode === "rhythm-tutorial" && app.qteTutorialPaused && !app.qteTutorialDone && i === 2 ? 1 : Math.min(1, elapsed / duration);
+      const ratio = Math.min(1, elapsed / duration);
       const pos = app.qteScatterPos && app.mode === "rhythm-formal"
         ? app.qteScatterPos[i]
         : { x: startX + i * gap, y: yLine };
@@ -1765,9 +1786,8 @@ const CanvasQteTest = (() => {
       const isFormal = app.mode === "rhythm-formal";
       const finalized = !!app.qteFinalized[i];
       const showOutcome = !!result && (!isFormal || finalized);
-      const frozenTutorial = app.mode === "rhythm-tutorial" && app.qteTutorialPaused && !app.qteTutorialDone && i === 2;
       const displayOutcome = showOutcome && result ? result : null;
-      const drawn = drawQteCircle(x, y, RHYTHM_OUTER_R, ratio, displayOutcome, frozenTutorial, isFormal, finalized, elapsed, duration);
+      const drawn = drawQteCircle(x, y, RHYTHM_OUTER_R, ratio, displayOutcome, false, isFormal, finalized, elapsed, duration);
       const activeEnd = start + duration;
       if (!isFormal) {
         if (drawn) app.zones.circles.push({ x, y, r: RHYTHM_OUTER_R, i, duration });
@@ -1964,12 +1984,12 @@ const CanvasQteTest = (() => {
       text("新的卡牌會影響之後的速度、超車 QTE 或防守 QTE。", app.w / 2, titleY + 104, 15, "rgba(244,248,255,0.88)", "700", "center");
       text("每次三選一都會出現一張稀有卡（固定在最右側）。", app.w / 2, titleY + 126, 15, "rgba(180, 210, 255, 0.92)", "800", "center");
     }
-    const cardW = 122;
-    const cardH = 164;
-    const gap = 24;
+    const cardW = 140;
+    const cardH = 188;
+    const gap = Math.max(18, Math.min(26, app.w * 0.018));
     const total = 3 * cardW + 2 * gap;
     const baseX = app.w / 2 - total / 2;
-    const baseY = app.h * 0.38;
+    const baseY = app.h * 0.35;
     app.zones.rewardSlots = [];
     const pick = app.rewardPickAnim;
     const pickSlot = pick ? pick.slot : -1;
