@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="QTE 節奏與防守流程的 Canvas 原型測試頁。">
+  <meta name="color-scheme" content="dark">
+  <title>QTE TEST - New York New York</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* 獨立開啟本頁時，避免沿用 index 的 body 排版（flex + padding） */
+    body.qte-test-page {
+      display: block;
+      padding: 0;
+      margin: 0;
+      min-height: 100vh;
+    }
+    .qte-noscript-msg {
+      margin: 0;
+      padding: 24px;
+      max-width: 36rem;
+      font: 600 16px system-ui, "Microsoft JhengHei", sans-serif;
+      color: #f4f8ff;
+      background: #0d100e;
+      min-height: 100vh;
+    }
+  </style>
+</head>
+<body class="qte-test-page">
+  <section class="qte-test hidden" id="qteTestRoot" aria-label="QTE TEST 測試流程"></section>
+  <noscript>
+    <p class="qte-noscript-msg">請啟用 JavaScript 以執行 QTE 測試。</p>
+  </noscript>
+  <script src="qte-test.js"></script>
+</body>
+</html>

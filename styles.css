@@ -143,6 +143,37 @@ p  { margin: 0; color: var(--muted); line-height: 1.38; max-width: 560px; }
 /* ── Controls ── */
 .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .hint-line { margin-top: 8px; color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+.hint-line--warn {
+  margin-top: 4px;
+  color: var(--warn);
+}
+.component-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.tyre-status {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  font-size: 0.82rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.radio-status-bar {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--accent);
+}
 
 button { font: inherit; }
 
@@ -164,6 +195,49 @@ button { font: inherit; }
 .primary:disabled { opacity: 0.38; cursor: not-allowed; }
 .ghost  { background: transparent; color: var(--ink); }
 .ghost:hover:not(:disabled) { background: rgba(255,255,255,0.05); }
+
+/* Index：QTE TEST 懸浮鈕（視窗右上、醒目） */
+#qteTestButton.qte-test-fab {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top, 0px));
+  right: max(14px, env(safe-area-inset-right, 0px));
+  z-index: 2500;
+  margin: 0;
+  padding: 11px 18px;
+  min-height: 44px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0a1208;
+  background: linear-gradient(165deg, #fff4c2 0%, #ffd54a 28%, #ff9800 55%, #ff6d00 100%);
+  box-shadow:
+    0 0 0 2px rgba(255, 235, 160, 0.95),
+    0 0 24px rgba(255, 152, 0, 0.55),
+    0 6px 0 #c2410c,
+    0 10px 28px rgba(0, 0, 0, 0.45);
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+#qteTestButton.qte-test-fab:hover {
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 2px #fff9e0,
+    0 0 32px rgba(255, 180, 60, 0.7),
+    0 8px 0 #c2410c,
+    0 14px 32px rgba(0, 0, 0, 0.5);
+}
+#qteTestButton.qte-test-fab:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 0 0 2px rgba(255, 235, 160, 0.85),
+    0 0 16px rgba(255, 152, 0, 0.45),
+    0 3px 0 #c2410c,
+    0 6px 18px rgba(0, 0, 0, 0.4);
+}
 
 /* ── Phase panels ── */
 .phase-panel.hidden { display: none; }
@@ -213,9 +287,19 @@ button { font: inherit; }
   background: #0d100e;
   overflow: hidden;
 }
+.track-box--flush {
+  padding: 0;
+}
 .track-wrap canvas {
   max-height: calc(66vh - 104px);
   object-fit: contain;
+}
+.track-wrap canvas.track-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+  aspect-ratio: 560 / 460;
 }
 .log-box {
   grid-column: 1 / span 3;
@@ -987,4 +1071,202 @@ footer {
   font-size: 0.65rem;
   flex-shrink: 0;
   opacity: 0.85;
+}
+
+/* ── QTE TEST（Canvas：qte-test.html；舊 DOM 棋盤版樣式已移除）── */
+body.qte-active {
+  padding: 0;
+  display: block;
+}
+body.qte-active main { display: none; }
+
+.qte-test.hidden { display: none; }
+
+.qte-test {
+  box-sizing: border-box;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #05090d;
+  color: var(--ink);
+}
+.qte-test * { box-sizing: border-box; }
+
+body.qte-canvas-only {
+  overflow: hidden;
+  background: #05090d;
+}
+
+.qte-canvas-only .qte-test {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  padding: 0;
+  overflow: hidden;
+  background: #05090d;
+}
+
+.qte-full-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* 遊戲獲勝（HTML 覆層：金黃漸層標題 + 黃色彩帶） */
+.qte-win-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(4, 10, 18, 0.72);
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+.qte-win-overlay.hidden {
+  display: none;
+}
+.qte-win-overlay:not(.hidden) {
+  display: flex;
+}
+.qte-win-overlay--visible {
+  pointer-events: auto;
+  opacity: 1;
+}
+.qte-win-ribbons {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.qte-win-ribbon {
+  position: absolute;
+  width: min(22vw, 180px);
+  height: 10px;
+  border-radius: 5px;
+  top: -8%;
+  left: 0;
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 248, 220, 0),
+    #fff8dc 12%,
+    #ffe082 35%,
+    #ffc107 55%,
+    #ffb300 72%,
+    #fff3c4 88%,
+    rgba(255, 248, 220, 0)
+  );
+  box-shadow: 0 0 18px rgba(255, 200, 60, 0.45);
+  animation: qteWinRibbonDrift 2.6s ease-out forwards;
+}
+@keyframes qteWinRibbonDrift {
+  0% {
+    transform: translate(0, 0) rotate(var(--rot, 12deg));
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(var(--dx, 0), 108vh) rotate(calc(var(--rot, 12deg) + 28deg));
+    opacity: 0.35;
+  }
+}
+.qte-win-content {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 1.5rem 1.25rem 2rem;
+  max-width: min(96vw, 520px);
+}
+.qte-win-sub {
+  margin: 0 0 0.5rem;
+  font: 800 clamp(1rem, 3.2vw, 1.35rem) system-ui, "Microsoft JhengHei", sans-serif;
+  color: rgba(244, 248, 255, 0.92);
+  letter-spacing: 0.06em;
+  opacity: 0;
+  transform: translateY(10px);
+}
+.qte-win-overlay--visible .qte-win-sub {
+  animation: qteWinFadeUp 0.55s ease 0.12s forwards;
+}
+.qte-win-title {
+  margin: 0;
+  font: 900 clamp(2.4rem, 10vw, 4.25rem) system-ui, "Microsoft JhengHei", sans-serif;
+  line-height: 1.12;
+  letter-spacing: 0.04em;
+  background: linear-gradient(
+    118deg,
+    #fffef5 0%,
+    #fff3bf 14%,
+    #ffd54a 32%,
+    #ffb300 52%,
+    #ffc947 68%,
+    #ffe9a8 86%,
+    #fffef0 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 3px 28px rgba(255, 180, 40, 0.55));
+  opacity: 0;
+  transform: scale(0.88);
+}
+.qte-win-overlay--visible .qte-win-title {
+  animation: qteWinTitlePop 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.08s forwards;
+}
+@keyframes qteWinFadeUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes qteWinTitlePop {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.qte-win-replay {
+  margin: 2.25rem auto 0;
+  padding: 0.65rem 2.4rem;
+  font: 800 1.05rem system-ui, "Microsoft JhengHei", sans-serif;
+  color: #0a1624;
+  cursor: pointer;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff8e6, #ffd54a 45%, #e6a000);
+  box-shadow:
+    0 4px 0 #a67400,
+    0 8px 28px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(16px);
+  pointer-events: none;
+  transition: filter 0.15s ease, transform 0.12s ease;
+}
+.qte-win-replay:hover {
+  filter: brightness(1.06);
+}
+.qte-win-replay:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 2px 0 #a67400,
+    0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.qte-win-overlay--replay-ready .qte-win-replay {
+  animation: qteWinReplayIn 0.55s ease forwards;
+  pointer-events: auto;
+}
+@keyframes qteWinReplayIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
