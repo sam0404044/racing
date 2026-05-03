@@ -191,8 +191,38 @@ const CanvasQteTest = (() => {
     return CARD_PLAY_MODES.includes(app.mode);
   }
 
+  function isMobileLayout() {
+    return app.w < 760 || app.h < 620;
+  }
+
+  function rhythmOuterRadius() {
+    return isMobileLayout() ? Math.max(34, Math.min(42, app.w * 0.11)) : RHYTHM_OUTER_R;
+  }
+
   function statusHudRect() {
+    if (isMobileLayout()) return { x: 12, y: 12, w: Math.min(288, app.w - 24), h: 168 };
     return { x: app.w - 312, y: 24, w: 288, h: 214 };
+  }
+
+  function mobileHandMetrics() {
+    const gap = 6;
+    const maxW = Math.max(0, app.w - 24);
+    const cardW = Math.min(76, Math.max(52, (maxW - gap * 4) / 5));
+    const cardH = Math.round(cardW * 1.34);
+    return { cardW, cardH, gap, y: app.h - cardH - 14 };
+  }
+
+  function playAreaRect() {
+    if (isMobileLayout()) {
+      const hand = mobileHandMetrics();
+      return { x: 12, y: hand.y - 94, w: app.w - 24, h: 76 };
+    }
+    const width = Math.min(560, app.w - 760);
+    return { x: app.w / 2 - width / 2, y: app.h - 430, w: width, h: 104 };
+  }
+
+  function mobileControlRowY() {
+    return playAreaRect().y - 96;
   }
 
   function cardTableVisible() {
@@ -436,7 +466,7 @@ const CanvasQteTest = (() => {
   }
 
   function setupInput() {
-    app.canvas.addEventListener("mousemove", e => {
+    function updatePointerFromEvent(e) {
       const p = point(e);
       app.mouse = p;
       if (app.mode === "card-reward-choice" && !app.rewardPickAnim) {
@@ -446,6 +476,11 @@ const CanvasQteTest = (() => {
         app.drag.x = p.x - app.drag.dx;
         app.drag.y = p.y - app.drag.dy;
       }
+      return p;
+    }
+
+    app.canvas.addEventListener("mousemove", e => {
+      updatePointerFromEvent(e);
     });
 
     function onCanvasPrimaryDown(e) {
@@ -494,7 +529,7 @@ const CanvasQteTest = (() => {
       { passive: false }
     );
 
-    app.canvas.addEventListener("mouseup", e => {
+    function finishDrag(e) {
       if (!app.drag) return;
       const p = point(e);
       const stableDrop = app.zones.stableHit || app.zones.stable;
@@ -506,13 +541,37 @@ const CanvasQteTest = (() => {
         advanceCards();
       }
       app.drag = null;
+    }
+
+    app.canvas.addEventListener("touchmove", e => {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      updatePointerFromEvent(e);
+    }, { passive: false });
+
+    app.canvas.addEventListener("mouseup", e => {
+      finishDrag(e);
     });
+
+    app.canvas.addEventListener("touchend", e => {
+      e.preventDefault();
+      finishDrag(e);
+    }, { passive: false });
+
+    app.canvas.addEventListener("touchcancel", e => {
+      e.preventDefault();
+      app.drag = null;
+    }, { passive: false });
   }
 
   function point(e) {
     const rect = app.canvas.getBoundingClientRect();
     if (e.touches && e.touches[0]) {
       const t = e.touches[0];
+      return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+    }
+    if (e.changedTouches && e.changedTouches[0]) {
+      const t = e.changedTouches[0];
       return { x: t.clientX - rect.left, y: t.clientY - rect.top };
     }
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -659,7 +718,7 @@ const CanvasQteTest = (() => {
   }
 
   function generateScatterPositions() {
-    const r = RHYTHM_OUTER_R;
+    const r = rhythmOuterRadius();
     const marginX = [r + RHYTHM_UI_AVOID_PAD, app.w - r - RHYTHM_UI_AVOID_PAD];
     const marginY = [r + RHYTHM_UI_AVOID_PAD, Math.min(app.h * 0.66, app.h - r - RHYTHM_UI_AVOID_PAD)];
     for (let attempt = 0; attempt < 90; attempt++) {
@@ -686,8 +745,8 @@ const CanvasQteTest = (() => {
       }
       if (ok) return pts;
     }
-    const minY = statusHudRect().y + statusHudRect().h + RHYTHM_OUTER_R + RHYTHM_UI_AVOID_PAD;
-    const maxY = app.h - RHYTHM_OUTER_R - RHYTHM_UI_AVOID_PAD;
+    const minY = statusHudRect().y + statusHudRect().h + r + RHYTHM_UI_AVOID_PAD;
+    const maxY = app.h - r - RHYTHM_UI_AVOID_PAD;
     const y = Math.min(maxY, Math.max(app.h * 0.42, minY));
     const gap = Math.min(130, app.w * 0.085);
     const startX = app.w / 2 - gap * 2;
@@ -1580,34 +1639,37 @@ const CanvasQteTest = (() => {
   function drawHud() {
     const status = statusHudRect();
     panel(status.x, status.y, status.w, status.h, "rgba(8,18,32,0.88)", "rgba(105,164,224,0.50)");
-    text("狀態", status.x + 22, status.y + 34, 24, "#cfe7ff", "700");
+    text("狀態", status.x + 22, status.y + 34, isMobileLayout() ? 22 : 24, "#cfe7ff", "700");
     text(`本局名次 ${app.rank} / ${app.rankTotal}`, status.x + 22, status.y + 58, 14, "rgba(214,228,255,0.82)", "700");
     drawAccelMeterRow(status.x + 22, status.y + 76);
     meter("穩定性", `${app.stable.length} / 5`, status.x + 22, status.y + 134, app.stable.length * 20, "#80ef70");
   }
 
   function drawPlayArea(time) {
-    const width = Math.min(560, app.w - 760);
-    const x = app.w / 2 - width / 2;
-    const y = app.h - 430;
-    app.zones.play = { x, y, w: width, h: 104 };
-    panel(x, y, width, 104, "rgba(13,20,34,0.82)", dropDisabled("play") ? "rgba(120,128,140,0.30)" : "#ffd94f", true);
-    text("拖曳打出卡牌", x + width / 2, y - 18 + Math.sin(time * 0.005) * 4, 18, "#ffdd82", "700", "center");
+    const r = playAreaRect();
+    app.zones.play = r;
+    panel(r.x, r.y, r.w, r.h, "rgba(13,20,34,0.82)", dropDisabled("play") ? "rgba(120,128,140,0.30)" : "#ffd94f", true);
+    text("拖曳打出卡牌", r.x + r.w / 2, r.y - 12 + Math.sin(time * 0.005) * 4, isMobileLayout() ? 15 : 18, "#ffdd82", "700", "center");
     if (app.mode === "tutorial-play") {
-      const arrowY = y + 26 + Math.sin(time * 0.008) * 4;
-      text("▲   ▲   ▲", x + width / 2, arrowY, 32, "rgba(255,179,187,0.78)", "900", "center");
+      const arrowY = r.y + 22 + Math.sin(time * 0.008) * 4;
+      text("▲   ▲   ▲", r.x + r.w / 2, arrowY, isMobileLayout() ? 24 : 32, "rgba(255,179,187,0.78)", "900", "center");
     }
-    drawMiniCards(app.played, x, y + 34, width, 58);
+    drawMiniCards(app.played, r.x, r.y + (isMobileLayout() ? 24 : 34), r.w, isMobileLayout() ? 44 : 58);
   }
 
   function drawStabilityDrop(time) {
     if (!stabilityDropVisible()) return;
     const t = typeof time === "number" ? time : performance.now();
-    const r = { x: app.w - 292, y: app.h - 220, w: 268, h: 142 };
+    const mobile = isMobileLayout();
+    const r = mobile
+      ? { x: app.w / 2 + 6, y: mobileControlRowY(), w: app.w / 2 - 18, h: 84 }
+      : { x: app.w - 292, y: app.h - 220, w: 268, h: 142 };
     app.zones.stableHit = { x: r.x, y: r.y, w: r.w, h: r.h };
-    app.zones.stable = { x: r.x + 20, y: r.y + 58, w: r.w - 40, h: 58 };
+    app.zones.stable = mobile
+      ? { x: r.x + 10, y: r.y + 38, w: r.w - 20, h: 34 }
+      : { x: r.x + 20, y: r.y + 58, w: r.w - 40, h: 58 };
     panel(r.x, r.y, r.w, r.h, "rgba(10,42,24,0.9)", dropDisabled("stable") ? "rgba(120,128,140,0.35)" : "#57e585", true);
-    text("穩定性區域", r.x + r.w / 2, r.y + 34, 24, "#aaff9a", "900", "center");
+    text("穩定性區域", r.x + r.w / 2, r.y + (mobile ? 27 : 34), mobile ? 16 : 24, "#aaff9a", "900", "center");
     if (app.mode === "tutorial-stable") {
       const arrowX = r.x - 10 + Math.sin(t * 0.008) * 2.5;
       const col = "rgba(150, 255, 200, 0.9)";
@@ -1620,24 +1682,27 @@ const CanvasQteTest = (() => {
   }
 
   function drawDeckArea(time) {
-    const r = { x: app.w - 292, y: app.h - 318, w: 268, h: 88 };
+    const mobile = isMobileLayout();
+    const r = mobile
+      ? { x: 12, y: mobileControlRowY(), w: app.w / 2 - 18, h: 84 }
+      : { x: app.w - 292, y: app.h - 318, w: 268, h: 88 };
     app.zones.deck = r;
     panel(r.x, r.y, r.w, r.h, "rgba(12,26,44,0.88)", "rgba(132,184,236,0.46)");
-    text("牌庫", r.x + 24, r.y + 34, 20, "#d8ecff", "900");
-    drawDeckRemainingStack(r.x + r.w - 64, r.y + 16);
+    text("牌庫", r.x + 18, r.y + 31, mobile ? 17 : 20, "#d8ecff", "900");
+    drawDeckRemainingStack(r.x + r.w - (mobile ? 38 : 64), r.y + (mobile ? 12 : 16));
     const count = app.deckRemainingCount;
     const label = count <= 0 ? "空" : count <= 3 ? "少" : "多";
     const pulse = 0.7 + Math.sin(time * 0.004) * 0.15;
-    text(label, r.x + 24, r.y + 56, 13, `rgba(210,232,255,${pulse})`, "800");
+    text(label, r.x + 18, r.y + (mobile ? 54 : 56), 13, `rgba(210,232,255,${pulse})`, "800");
   }
 
   function drawHand(time) {
-    const cardW = 122;
-    const cardH = 164;
-    const gap = 10;
+    const mobile = isMobileLayout();
+    const metrics = mobile ? mobileHandMetrics() : { cardW: 122, cardH: 164, gap: 10, y: app.h - 270 };
+    const { cardW, cardH, gap } = metrics;
     const total = app.hand.length * cardW + Math.max(0, app.hand.length - 1) * gap;
     const x = app.w / 2 - total / 2;
-    const y = app.h - 270;
+    const y = metrics.y;
     app.zones.cards = [];
     app.hand.forEach((card, i) => {
       if (app.drag && app.drag.card.id === card.id) return;
@@ -1867,7 +1932,8 @@ const CanvasQteTest = (() => {
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    if (view.rarity) {
+    const compactCard = w < 90;
+    if (view.rarity && !compactCard) {
       const tag = view.rarity;
       const tagColor = view.rarity === "稀有" ? "#e8c878" : "#c8d0e0";
       const tagBg = view.rarity === "稀有" ? "rgba(28, 36, 52, 0.96)" : "rgba(55, 65, 82, 0.55)";
@@ -1884,23 +1950,23 @@ const CanvasQteTest = (() => {
     ctx.fillStyle = rarityBar;
     ctx.fillRect(x, barTop, w, barH);
     ctx.restore();
-    text(view.name, x + 14, y + 26, 16, "#3d3528", "900", "left", true);
-    if (view.category) {
+    text(view.name, x + (compactCard ? 8 : 14), y + (compactCard ? 20 : 26), compactCard ? 12 : 16, "#3d3528", "900", "left", true);
+    if (view.category && !compactCard) {
       text(view.category, x + 14, y + 46, 12, "#5a6b82", "800", "left", true);
     }
     const cx = x + w / 2;
     const isRb = card.type === "reward_buff";
     const hasDescription = !!view.description;
-    const iconSize = isRb && pickOffer ? 38 : isRb ? 46 : 50;
+    const iconSize = compactCard ? Math.max(24, w * 0.46) : isRb && pickOffer ? 38 : isRb ? 46 : 50;
     let iconCy = isRb ? y + h * 0.39 : y + h * 0.42;
     if (hasDescription) iconCy -= pickOffer ? 2 : 4;
     drawCardCenterIcon(card, cx, iconCy, iconSize);
     let descriptionTop = barTop - 12;
     if (hasDescription) {
-      const descSize = pickOffer ? 10.5 : 11;
+      const descSize = compactCard ? 8.5 : pickOffer ? 10.5 : 11;
       const lineH = descSize + 5;
-      const padX = 14;
-      const maxLines = pickOffer ? 3 : 2;
+      const padX = compactCard ? 8 : 14;
+      const maxLines = compactCard ? 2 : pickOffer ? 3 : 2;
       const lines = wrapTextToLines(view.description, w - padX * 2, descSize, maxLines);
       const totalH = lines.length * lineH;
       descriptionTop = barTop - 12 - totalH;
@@ -1911,7 +1977,7 @@ const CanvasQteTest = (() => {
       }
     }
     if (card.type === "accel" || card.type === "hyper_accel" || card.type === "mistake") {
-      const fs = 24;
+      const fs = compactCard ? 18 : 24;
       const val = view.value;
       ctx.save();
       ctx.font = `1000 ${fs}px system-ui, "Microsoft JhengHei", sans-serif`;
@@ -2027,16 +2093,16 @@ const CanvasQteTest = (() => {
   }
 
   function getTutorialModalBox() {
-    const margin = 24;
+    const margin = isMobileLayout() ? 12 : 24;
     /** 教學提示寬度：約 70vw（canvas 邏輯寬等同視窗），並保留左右 margin */
-    const vw = 0.7;
+    const vw = isMobileLayout() ? 0.94 : 0.7;
     const w = Math.min(app.w * vw, app.w - margin * 2);
-    const h = Math.min(400, app.h - margin * 2);
+    const h = Math.min(isMobileLayout() ? 430 : 400, app.h - margin * 2);
     return { x: (app.w - w) / 2, y: (app.h - h) / 2, w, h };
   }
 
   function getCenteredModalBox(maxW, maxH) {
-    const margin = 24;
+    const margin = isMobileLayout() ? 12 : 24;
     const w = Math.min(maxW, app.w - margin * 2);
     const h = Math.min(maxH, app.h - margin * 2);
     return { x: (app.w - w) / 2, y: (app.h - h) / 2, w, h };
@@ -2050,57 +2116,60 @@ const CanvasQteTest = (() => {
     const isStable = app.mode === "tutorial-stable";
     const box = getTutorialModalBox();
     drawModalPanel(box);
-    const padX = 32;
-    text("教學提示", box.x + padX, box.y + 58, 30, "#dfeeff", "900");
-    text(teachingPageText(), box.x + padX, box.y + 100, 28, "#ffd94f", "900");
+    const mobile = isMobileLayout();
+    const padX = mobile ? 22 : 32;
+    text("教學提示", box.x + padX, box.y + (mobile ? 48 : 58), mobile ? 26 : 30, "#dfeeff", "900");
+    text(teachingPageText(), box.x + padX, box.y + (mobile ? 84 : 100), mobile ? 24 : 28, "#ffd94f", "900");
     const bodyMaxW = box.w - padX * 2;
     if (isStable) {
-      wrapText("將 1 張牌拖曳到穩定性區域。放入這裡的牌不會發動效果，但會讓超車更簡單。", box.x + padX, box.y + 136, bodyMaxW, 18, "#f4f8ff", 4);
+      wrapText("將 1 張牌拖曳到穩定性區域。放入這裡的牌不會發動效果，但會讓超車更簡單。", box.x + padX, box.y + (mobile ? 118 : 136), bodyMaxW, mobile ? 16 : 18, "#f4f8ff", 4);
     } else {
-      text("將任意 4 張加速牌拖曳到打出區。", box.x + padX, box.y + 148, 19, "#f4f8ff", "900");
+      text("將任意 4 張加速牌拖曳到打出區。", box.x + padX, box.y + (mobile ? 130 : 148), mobile ? 16 : 19, "#f4f8ff", "900");
     }
-    const demoY = box.y + box.h * 0.54;
-    const cardS = 100;
-    const targetW = 200;
-    const targetH = 100;
-    const gapAfterCard = 36;
-    const arrowBand = isStable ? 56 : 40;
+    const demoY = box.y + box.h * (mobile ? 0.58 : 0.54);
+    const cardS = mobile ? 64 : 100;
+    const targetW = mobile ? Math.min(150, box.w * 0.42) : 200;
+    const targetH = mobile ? 72 : 100;
+    const gapAfterCard = mobile ? 16 : 36;
+    const arrowBand = mobile ? 32 : isStable ? 56 : 40;
     const rowW = cardS + gapAfterCard + arrowBand + targetW;
     const rowLeft = box.x + (box.w - rowW) / 2;
-    panel(rowLeft, demoY - 50, cardS, targetH, "rgba(55,60,68,0.95)", "rgba(190,198,210,0.82)");
-    text("卡牌", rowLeft + cardS / 2, demoY + 6, 22, "#eef4ff", "900", "center");
+    panel(rowLeft, demoY - targetH / 2, cardS, targetH, "rgba(55,60,68,0.95)", "rgba(190,198,210,0.82)");
+    text("卡牌", rowLeft + cardS / 2, demoY + 6, mobile ? 17 : 22, "#eef4ff", "900", "center");
     const targetX = rowLeft + cardS + gapAfterCard + arrowBand;
     if (isStable) {
       const arrowX = targetX - 10;
-      text("→", arrowX, demoY + 6, 34, "rgba(160, 230, 200, 0.92)", "900", "right");
+      text("→", arrowX, demoY + 6, mobile ? 26 : 34, "rgba(160, 230, 200, 0.92)", "900", "right");
     } else {
       const arrowCx = rowLeft + cardS + gapAfterCard + arrowBand / 2;
-      text("→", arrowCx, demoY + 6, 34, "rgba(214,222,235,0.88)", "900", "center");
+      text("→", arrowCx, demoY + 6, mobile ? 26 : 34, "rgba(214,222,235,0.88)", "900", "center");
     }
-    strokeRect(targetX, demoY - 50, targetW, targetH, "rgba(190,198,210,0.82)", 4, [9, 7]);
-    text(isStable ? "穩定性區域" : "打出區", targetX + targetW / 2, demoY + 8, 22, "#eef4ff", "900", "center");
-    button("tutorial-ok", "確定", box.x + box.w - 180, box.y + box.h - 68, 160, 48);
+    strokeRect(targetX, demoY - targetH / 2, targetW, targetH, "rgba(190,198,210,0.82)", 4, [9, 7]);
+    text(isStable ? "穩定性區域" : "打出區", targetX + targetW / 2, demoY + 8, mobile ? 16 : 22, "#eef4ff", "900", "center");
+    button("tutorial-ok", "確定", box.x + box.w - (mobile ? 156 : 180), box.y + box.h - 62, mobile ? 134 : 160, 46);
   }
 
   function drawMistakeTutorial() {
     const box = getTutorialModalBox();
     drawModalPanel(box);
-    const padX = 32;
-    text("教學提示", box.x + padX, box.y + 58, 30, "#dfeeff", "900");
-    text(teachingPageText(), box.x + padX, box.y + 100, 28, "#ffd94f", "900");
+    const mobile = isMobileLayout();
+    const padX = mobile ? 22 : 32;
+    text("教學提示", box.x + padX, box.y + (mobile ? 48 : 58), mobile ? 26 : 30, "#dfeeff", "900");
+    text(teachingPageText(), box.x + padX, box.y + (mobile ? 84 : 100), mobile ? 24 : 28, "#ffd94f", "900");
 
-    const cardW = 86;
-    const cardH = 116;
-    const demoY = box.y + box.h * 0.55;
-    const rowW = cardW + 36 + 360;
+    const cardW = mobile ? 66 : 86;
+    const cardH = mobile ? 90 : 116;
+    const demoY = box.y + box.h * (mobile ? 0.55 : 0.55);
+    const textW = mobile ? Math.min(210, box.w - cardW - 48) : 360;
+    const rowW = cardW + (mobile ? 20 : 36) + textW;
     const rowLeft = box.x + (box.w - rowW) / 2;
     drawCard({ ...CARD_TYPES.mistake, id: "tutorial-mistake-demo" }, rowLeft, demoY - cardH / 2, cardW, cardH, false);
 
-    const tx = rowLeft + cardW + 36;
-    text("再厲害的車手也難免有失誤。", tx, demoY - 34, 19, "#f4f8ff", "900");
-    text("打出失誤是不能加速的，", tx, demoY + 2, 18, "#f4f8ff", "800");
-    text("好好善用它吧。", tx, demoY + 36, 18, "#d1d5db", "900");
-    button("mistake-tutorial-ok", "確定", box.x + box.w - 180, box.y + box.h - 68, 160, 48);
+    const tx = rowLeft + cardW + (mobile ? 20 : 36);
+    text("再厲害的車手也難免有失誤。", tx, demoY - 34, mobile ? 15 : 19, "#f4f8ff", "900");
+    text("打出失誤是不能加速的，", tx, demoY + 2, mobile ? 15 : 18, "#f4f8ff", "800");
+    text("好好善用它吧。", tx, demoY + 36, mobile ? 15 : 18, "#d1d5db", "900");
+    button("mistake-tutorial-ok", "確定", box.x + box.w - (mobile ? 156 : 180), box.y + box.h - 62, mobile ? 134 : 160, 46);
   }
 
   function drawOvertakeReadyModal() {
@@ -2183,12 +2252,13 @@ const CanvasQteTest = (() => {
   function drawQteTeachingModal() {
     const isOvertake = app.mode === "tutorial-overtake-qte";
     const page = Math.max(0, Math.min(QTE_TUTORIAL_TOTAL - 1, app.qteTeachPage || 0));
-    const box = getCenteredModalBox(640, 380);
+    const mobile = isMobileLayout();
+    const box = getCenteredModalBox(640, mobile ? 420 : 380);
     drawModalPanel(box);
     const cx = box.x + box.w / 2;
     const title = isOvertake ? "超車 QTE 教學" : "阻擋 QTE 教學";
-    text(title, cx, box.y + 54, 30, "#dfeeff", "900", "center");
-    text(teachingPageText(), box.x + 36, box.y + 96, 26, "#ffd94f", "900");
+    text(title, cx, box.y + (mobile ? 48 : 54), mobile ? 25 : 30, "#dfeeff", "900", "center");
+    text(teachingPageText(), box.x + (mobile ? 24 : 36), box.y + (mobile ? 88 : 96), mobile ? 22 : 26, "#ffd94f", "900");
 
     if (isOvertake) {
       drawOvertakeQteTeachPage(box, page);
@@ -2199,57 +2269,63 @@ const CanvasQteTest = (() => {
     const last = page >= QTE_TUTORIAL_TOTAL - 1;
     const btnId = last ? (isOvertake ? "qte-tutorial-start-overtake" : "qte-tutorial-start-defense") : "qte-tutorial-next";
     const btnText = last ? (isOvertake ? "開始超車" : "開始防守") : "下一頁";
-    button(btnId, btnText, box.x + box.w - 196, box.y + box.h - 68, 160, 48);
+    button(btnId, btnText, box.x + box.w - (mobile ? 158 : 196), box.y + box.h - 62, mobile ? 134 : 160, 46);
   }
 
   function drawOvertakeQteTeachPage(box, page) {
+    const mobile = isMobileLayout();
     const cx = box.x + box.w / 2;
-    const demoY = box.y + 218;
+    const demoY = box.y + (mobile ? 232 : 218);
+    const radius = mobile ? 26 : 34;
     if (page === 0) {
-      text("圓圈會由大往內收縮，接近拍點時點擊。", cx, box.y + 124, 19, "#f4f8ff", "900", "center");
-      text("點擊範圍是外圈內部，不必剛好點在中心。", cx, box.y + 154, 17, "rgba(214,228,255,0.84)", "800", "center");
+      text("圓圈會由大往內收縮，接近拍點時點擊。", cx, box.y + (mobile ? 124 : 124), mobile ? 16 : 19, "#f4f8ff", "900", "center");
+      text("點擊範圍是外圈內部，不必剛好點在中心。", cx, box.y + (mobile ? 152 : 154), mobile ? 14 : 17, "rgba(214,228,255,0.84)", "800", "center");
       for (let i = 0; i < 3; i++) {
-        const x = cx - 110 + i * 110;
-        drawQteDemoCircle(x, demoY, 34, 0.25 + i * 0.22);
+        const gap = mobile ? 76 : 110;
+        const x = cx - gap + i * gap;
+        drawQteDemoCircle(x, demoY, radius, 0.25 + i * 0.22);
       }
-      text("看準節奏，連續點完 5 顆。", cx, box.y + 292, 17, "#ffd94f", "900", "center");
+      text("看準節奏，連續點完 5 顆。", cx, box.y + (mobile ? 310 : 292), mobile ? 15 : 17, "#ffd94f", "900", "center");
       return;
     }
-    text("判定會分成 Perfect、Good、Miss。", cx, box.y + 124, 19, "#f4f8ff", "900", "center");
-    text("越接近拍點，越容易拿到好判定。", cx, box.y + 154, 17, "rgba(214,228,255,0.84)", "800", "center");
+    text("判定會分成 Perfect、Good、Miss。", cx, box.y + 124, mobile ? 16 : 19, "#f4f8ff", "900", "center");
+    text("越接近拍點，越容易拿到好判定。", cx, box.y + 152, mobile ? 14 : 17, "rgba(214,228,255,0.84)", "800", "center");
     const labels = [
       { grade: "perfect", label: "Perfect" },
       { grade: "good", label: "Good" },
       { grade: "miss", label: "Miss" },
     ];
     labels.forEach((item, i) => {
-      const x = cx - 120 + i * 120;
-      drawQteCircle(x, demoY, 34, 1, item.grade, false, true, true, 1150, 1150);
-      text(item.label, x, demoY + 66, 16, item.grade === "miss" ? "#ffb4b8" : "#d7ffe4", "900", "center");
+      const gap = mobile ? 86 : 120;
+      const x = cx - gap + i * gap;
+      drawQteCircle(x, demoY, radius, 1, item.grade, false, true, true, 1150, 1150);
+      text(item.label, x, demoY + (mobile ? 52 : 66), mobile ? 14 : 16, item.grade === "miss" ? "#ffb4b8" : "#d7ffe4", "900", "center");
     });
   }
 
   function drawDefenseQteTeachPage(box, page) {
+    const mobile = isMobileLayout();
     const cx = box.x + box.w / 2;
-    const demoY = box.y + 212;
-    const bar = { x: cx - 210, y: demoY, w: 420, h: 52 };
+    const demoY = box.y + (mobile ? 226 : 212);
+    const barW = Math.min(420, box.w - (mobile ? 52 : 120));
+    const bar = { x: cx - barW / 2, y: demoY, w: barW, h: mobile ? 44 : 52 };
     if (page === 0) {
-      text("防守時要移動滑鼠，追住綠色安全區。", cx, box.y + 124, 19, "#f4f8ff", "900", "center");
-      text("黃色游標停在綠區內，防守進度會更快累積。", cx, box.y + 154, 17, "rgba(214,228,255,0.84)", "800", "center");
+      text("防守時要移動指標，追住綠色安全區。", cx, box.y + 124, mobile ? 16 : 19, "#f4f8ff", "900", "center");
+      text("黃色游標停在綠區內，防守進度會更快累積。", cx, box.y + 152, mobile ? 14 : 17, "rgba(214,228,255,0.84)", "800", "center");
       roundPanel(bar.x, bar.y, bar.w, bar.h, 10, "rgba(229,70,74,0.86)", "rgba(247,250,247,0.35)", 2);
-      roundPanel(bar.x + 155, bar.y, 110, bar.h, 9, "rgba(122,221,123,0.60)", "rgba(122,221,123,0.30)", 2);
-      roundPanel(bar.x + 194, bar.y, 32, bar.h, 8, "rgba(37,209,127,0.86)", "rgba(37,209,127,0.26)", 2);
-      roundPanel(bar.x + 192, bar.y + bar.h / 2 - 12, 36, 24, 6, "#ffd94f", "#ffe15b", 2);
-      text("紅區外危險，綠區安全，中心更好。", cx, box.y + 292, 17, "#ffd94f", "900", "center");
+      roundPanel(bar.x + bar.w * 0.37, bar.y, bar.w * 0.26, bar.h, 9, "rgba(122,221,123,0.60)", "rgba(122,221,123,0.30)", 2);
+      roundPanel(bar.x + bar.w * 0.46, bar.y, bar.w * 0.08, bar.h, 8, "rgba(37,209,127,0.86)", "rgba(37,209,127,0.26)", 2);
+      roundPanel(bar.x + bar.w * 0.46 - 2, bar.y + bar.h / 2 - 12, 36, 24, 6, "#ffd94f", "#ffe15b", 2);
+      text("紅區外危險，綠區安全，中心更好。", cx, box.y + (mobile ? 310 : 292), mobile ? 15 : 17, "#ffd94f", "900", "center");
       return;
     }
-    text("撐到時間結束，或把進度條推滿就成功。", cx, box.y + 124, 19, "#f4f8ff", "900", "center");
-    text("穩定性越高，防守會越容易。", cx, box.y + 154, 17, "rgba(214,228,255,0.84)", "800", "center");
+    text("撐到時間結束，或把進度條推滿就成功。", cx, box.y + 124, mobile ? 16 : 19, "#f4f8ff", "900", "center");
+    text("穩定性越高，防守會越容易。", cx, box.y + 152, mobile ? 14 : 17, "rgba(214,228,255,0.84)", "800", "center");
     panel(bar.x, bar.y + 8, bar.w, 18, "rgba(14,20,30,0.92)", "rgba(247,250,247,0.18)");
     app.ctx.fillStyle = "#57e585";
     app.ctx.fillRect(bar.x + 3, bar.y + 11, (bar.w - 6) * 0.72, 12);
-    text("防守進度", cx, bar.y - 12, 18, "#d7e6f8", "900", "center");
-    text("保持游標在綠區，讓進度穩定前進。", cx, box.y + 292, 17, "#ffd94f", "900", "center");
+    text("防守進度", cx, bar.y - 12, mobile ? 16 : 18, "#d7e6f8", "900", "center");
+    text("保持游標在綠區，讓進度穩定前進。", cx, box.y + (mobile ? 310 : 292), mobile ? 15 : 17, "#ffd94f", "900", "center");
   }
 
   function drawSplash() {
@@ -2269,8 +2345,9 @@ const CanvasQteTest = (() => {
       app.zones.circles = [];
       return;
     }
-    const minY = statusHudRect().y + statusHudRect().h + RHYTHM_OUTER_R + RHYTHM_UI_AVOID_PAD;
-    const maxY = app.h - RHYTHM_OUTER_R - RHYTHM_UI_AVOID_PAD;
+    const outerR = rhythmOuterRadius();
+    const minY = statusHudRect().y + statusHudRect().h + outerR + RHYTHM_UI_AVOID_PAD;
+    const maxY = app.h - outerR - RHYTHM_UI_AVOID_PAD;
     const yLine = Math.min(maxY, Math.max(app.h * 0.42, minY));
     const gap = Math.min(130, app.w * 0.085);
     const startX = app.w / 2 - gap * 2;
@@ -2291,12 +2368,12 @@ const CanvasQteTest = (() => {
       const finalized = !!app.qteFinalized[i];
       const showOutcome = !!result && (!isFormal || finalized);
       const displayOutcome = showOutcome && result ? result : null;
-      const drawn = drawQteCircle(x, y, RHYTHM_OUTER_R, ratio, displayOutcome, false, isFormal, finalized, elapsed, duration);
+      const drawn = drawQteCircle(x, y, outerR, ratio, displayOutcome, false, isFormal, finalized, elapsed, duration);
       const activeEnd = start + duration;
       if (!isFormal) {
-        if (drawn) app.zones.circles.push({ x, y, r: RHYTHM_OUTER_R, i, duration });
+        if (drawn) app.zones.circles.push({ x, y, r: outerR, i, duration });
       } else if (!finalized && elapsed >= 0 && time <= activeEnd) {
-        app.zones.circles.push({ x, y, r: RHYTHM_OUTER_R, i, duration });
+        app.zones.circles.push({ x, y, r: outerR, i, duration });
       }
     }
   }
@@ -2414,12 +2491,14 @@ const CanvasQteTest = (() => {
 
   function drawDefense() {
     const ctx = app.ctx;
-    const bar = { x: app.w / 2 - 360, y: app.h * 0.36, w: 720, h: 72 };
+    const mobile = isMobileLayout();
+    const barW = mobile ? app.w - 40 : 720;
+    const bar = { x: app.w / 2 - barW / 2, y: app.h * (mobile ? 0.42 : 0.36), w: barW, h: mobile ? 58 : 72 };
     app.zones.defenseBar = bar;
     const diff = defenseDifficulty();
     const safeW = bar.w * (diff.safeWidth / 100);
     const perfectW = bar.w * (diff.perfectWidth / 100);
-    panel(bar.x - 24, bar.y - 34, bar.w + 48, 172, "rgba(5,8,8,0.42)", "rgba(105,164,224,0.35)");
+    panel(bar.x - (mobile ? 12 : 24), bar.y - 34, bar.w + (mobile ? 24 : 48), mobile ? 154 : 172, "rgba(5,8,8,0.42)", "rgba(105,164,224,0.35)");
     roundPanel(bar.x, bar.y, bar.w, bar.h, 12, "rgba(229,70,74,0.9)", "rgba(247,250,247,0.35)", 2);
     const safeX = bar.x + (app.safeCenter / 100) * bar.w - safeW / 2;
     roundPanel(safeX, bar.y, safeW, bar.h, 10, "rgba(122,221,123,0.58)", "rgba(122,221,123,0.28)", 2);
@@ -2429,42 +2508,41 @@ const CanvasQteTest = (() => {
     panel(bar.x, bar.y + 104, bar.w, 18, "rgba(14,20,30,0.92)", "rgba(247,250,247,0.18)");
     ctx.fillStyle = "#57e585";
     ctx.fillRect(bar.x + 3, bar.y + 107, (bar.w - 6) * Math.min(1, app.defenseProgress / 100), 12);
-    text("移動滑鼠，追住快速移動的綠色區域", app.w / 2, bar.y + 152, 20, "#ffd94f", "900", "center");
+    text(isMobileLayout() ? "移動手指，追住快速移動的綠色區域" : "移動滑鼠，追住快速移動的綠色區域", app.w / 2, bar.y + 152, isMobileLayout() ? 16 : 20, "#ffd94f", "900", "center");
   }
 
   function drawResult() {
     hideGameWinOverlay();
-    const boxY = app.h * 0.28;
-    const boxH = 280;
-    panel(app.w / 2 - 310, boxY, 620, boxH, "rgba(4,8,8,0.58)", "#57e585");
-    text("本圈獲勝", app.w / 2, boxY + 70, 48, "#57e585", "1000", "center");
-    text("成功超越一台車子", app.w / 2, boxY + 126, 24, "#f4f8ff", "900", "center");
-    text(`本圈名次 ${app.rank}/${app.rankTotal}`, app.w / 2, boxY + 166, 24, "#f4f8ff", "900", "center");
-    button("next-lap", "下一圈", app.w / 2 - 110, boxY + 200, 220, 52);
+    const box = getCenteredModalBox(620, isMobileLayout() ? 240 : 280);
+    panel(box.x, box.y, box.w, box.h, "rgba(4,8,8,0.58)", "#57e585");
+    text("本圈獲勝", app.w / 2, box.y + 70, isMobileLayout() ? 36 : 48, "#57e585", "1000", "center");
+    text("成功超越一台車子", app.w / 2, box.y + 126, isMobileLayout() ? 20 : 24, "#f4f8ff", "900", "center");
+    text(`本圈名次 ${app.rank}/${app.rankTotal}`, app.w / 2, box.y + 166, isMobileLayout() ? 20 : 24, "#f4f8ff", "900", "center");
+    button("next-lap", "下一圈", app.w / 2 - 100, box.y + box.h - 68, 200, 50);
   }
 
   function drawDefenseResult() {
     const ctx = app.ctx;
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(0, 0, app.w, app.h);
-    const boxY = app.h * 0.3;
     const success = app.defenseSucceeded;
-    panel(app.w / 2 - 280, boxY, 560, 220, "rgba(6,14,24,0.92)", "#69a4e0");
-    text(success ? "防守成功！" : "防守失敗！", app.w / 2, boxY + 88, 40, success ? "#57e585" : "#ff6b7a", "1000", "center");
-    text(success ? "加速值保留，準備結算本圈成績" : "加速值歸零，準備重新加速", app.w / 2, boxY + 140, 18, "#d7e6f8", "700", "center");
-    button("defense-result-ok", "繼續", app.w / 2 - 100, boxY + 158, 200, 48);
+    const box = getCenteredModalBox(560, 220);
+    panel(box.x, box.y, box.w, box.h, "rgba(6,14,24,0.92)", "#69a4e0");
+    text(success ? "防守成功！" : "防守失敗！", app.w / 2, box.y + 84, isMobileLayout() ? 32 : 40, success ? "#57e585" : "#ff6b7a", "1000", "center");
+    text(success ? "加速值保留，準備結算本圈成績" : "加速值歸零，準備重新加速", app.w / 2, box.y + 136, isMobileLayout() ? 15 : 18, "#d7e6f8", "700", "center");
+    button("defense-result-ok", "繼續", app.w / 2 - 100, box.y + box.h - 62, 200, 48);
   }
 
   function drawLapResult() {
     const ctx = app.ctx;
     ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.fillRect(0, 0, app.w, app.h);
-    const boxY = app.h * 0.28;
-    panel(app.w / 2 - 310, boxY, 620, 260, "rgba(4,8,8,0.72)", "#57e585");
-    text("本圈獲勝", app.w / 2, boxY + 70, 48, "#57e585", "1000", "center");
-    text("成功超越一台車子", app.w / 2, boxY + 126, 24, "#f4f8ff", "900", "center");
-    text(`本圈名次 ${app.rank}/${app.rankTotal}`, app.w / 2, boxY + 166, 24, "#f4f8ff", "900", "center");
-    button("lap-result-continue", "繼續", app.w / 2 - 110, boxY + 200, 220, 52);
+    const box = getCenteredModalBox(620, 260);
+    panel(box.x, box.y, box.w, box.h, "rgba(4,8,8,0.72)", "#57e585");
+    text("本圈獲勝", app.w / 2, box.y + 70, isMobileLayout() ? 36 : 48, "#57e585", "1000", "center");
+    text("成功超越一台車子", app.w / 2, box.y + 126, isMobileLayout() ? 20 : 24, "#f4f8ff", "900", "center");
+    text(`本圈名次 ${app.rank}/${app.rankTotal}`, app.w / 2, box.y + 166, isMobileLayout() ? 20 : 24, "#f4f8ff", "900", "center");
+    button("lap-result-continue", "繼續", app.w / 2 - 100, box.y + box.h - 62, 200, 50);
   }
 
   function hitRewardSlot(p) {
@@ -2480,20 +2558,21 @@ const CanvasQteTest = (() => {
     const ctx = app.ctx;
     ctx.fillStyle = "rgba(0,0,0,0.68)";
     ctx.fillRect(0, 0, app.w, app.h);
-    const titleY = app.h * 0.1;
-    text("進站調校", app.w / 2, titleY, 36, "#ffe082", "1000", "center");
-    text("選擇一張卡加入牌庫", app.w / 2, titleY + 44, 18, "#d7e6f8", "700", "center");
+    const mobile = isMobileLayout();
+    const titleY = mobile ? 50 : app.h * 0.1;
+    text("進站調校", app.w / 2, titleY, mobile ? 30 : 36, "#ffe082", "1000", "center");
+    text("選擇一張卡加入牌庫", app.w / 2, titleY + (mobile ? 36 : 44), mobile ? 16 : 18, "#d7e6f8", "700", "center");
     if (!app.seenRewardTutorial) {
-      text("每圈結束後，你可以選擇一張卡加入牌庫。", app.w / 2, titleY + 82, 15, "rgba(244,248,255,0.88)", "700", "center");
-      text("新的卡牌會影響之後的速度、超車 QTE 或防守 QTE。", app.w / 2, titleY + 104, 15, "rgba(244,248,255,0.88)", "700", "center");
-      text("每次三選一都會出現一張稀有卡（固定在最右側）。", app.w / 2, titleY + 126, 15, "rgba(180, 210, 255, 0.92)", "800", "center");
+      text("每圈結束後，你可以選擇一張卡加入牌庫。", app.w / 2, titleY + (mobile ? 66 : 82), mobile ? 13 : 15, "rgba(244,248,255,0.88)", "700", "center");
+      text("新的卡牌會影響速度、QTE 或防守。", app.w / 2, titleY + (mobile ? 86 : 104), mobile ? 13 : 15, "rgba(244,248,255,0.88)", "700", "center");
+      text("每次三選一都會出現一張稀有卡。", app.w / 2, titleY + (mobile ? 106 : 126), mobile ? 13 : 15, "rgba(180, 210, 255, 0.92)", "800", "center");
     }
-    const cardW = 140;
-    const cardH = 188;
-    const gap = Math.max(18, Math.min(26, app.w * 0.018));
+    const gap = mobile ? 8 : Math.max(18, Math.min(26, app.w * 0.018));
+    const cardW = mobile ? Math.min(108, (app.w - 36 - gap * 2) / 3) : 140;
+    const cardH = mobile ? Math.round(cardW * 1.36) : 188;
     const total = 3 * cardW + 2 * gap;
     const baseX = app.w / 2 - total / 2;
-    const baseY = app.h * 0.35;
+    const baseY = mobile ? Math.max(titleY + 128, app.h * 0.28) : app.h * 0.35;
     app.zones.rewardSlots = [];
     const pick = app.rewardPickAnim;
     const pickSlot = pick ? pick.slot : -1;
@@ -2535,9 +2614,9 @@ const CanvasQteTest = (() => {
       app.zones.rewardSlots.push({ x, y, w: cardW, h: cardH });
     }
     if (app.mode === "card-reward-toast") {
-      text("已加入牌庫", app.w / 2, app.h * 0.78, 28, "#ffe082", "1000", "center");
+      text("已加入牌庫", app.w / 2, mobile ? baseY + cardH + 42 : app.h * 0.78, mobile ? 24 : 28, "#ffe082", "1000", "center");
     } else {
-      button("reward-skip", "略過", app.w / 2 - 72, baseY + cardH + 34, 144, 44, !!app.rewardPickAnim, "gray");
+      button("reward-skip", "略過", app.w / 2 - 72, baseY + cardH + (mobile ? 24 : 34), 144, 44, !!app.rewardPickAnim, "gray");
     }
   }
 

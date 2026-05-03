@@ -67,11 +67,12 @@ body.qte-canvas-only {
 
 .qte-canvas-only .qte-test {
   width: 100vw;
-  height: 100vh;
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
   padding: 0;
   overflow: hidden;
   background: #05090d;
+  touch-action: none;
 }
 
 .qte-full-canvas {
@@ -80,6 +81,8 @@ body.qte-canvas-only {
   min-height: 0;
   display: block;
   image-rendering: pixelated;
+  touch-action: none;
+  user-select: none;
 }
 
 .qte-win-overlay {
