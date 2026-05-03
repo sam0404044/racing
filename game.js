@@ -1527,10 +1527,10 @@ function renderPhaseUI() {
       els.playerPassBtn.disabled = game.playerPassed || game.actionTurn !== "player";
     }
     if (els.skipBonusBtn) {
-      els.skipBonusBtn.hidden = !game.pendingBonus;
+      els.skipBonusBtn.style.display = game.pendingBonus ? "" : "none";
     }
   } else if (els.skipBonusBtn) {
-    els.skipBonusBtn.hidden = true;
+    els.skipBonusBtn.style.display = "none";
   }
 
   if (game.phase === PHASE.FIELD) {
