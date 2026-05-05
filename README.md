@@ -1,6 +1,6 @@
 # 賽車 / Racing
 
-卡牌與賽道為主的 HTML5 試玩專案，另含 **最後車手 / Final Driver** 的 QTE 操作測試頁與遊戲規則說明。
+卡牌與賽道為主的 HTML5 試玩專案：**New York New York**（`index.html`）為主遊戲試玩；另含 **最後車手 / Final Driver** 的 QTE 測試頁（`qte-test.html`）與各自對應的規則文件。
 
 ## 線上瀏覽（GitHub Pages）
 
@@ -9,9 +9,10 @@
 | 頁面 | 網址 |
 |------|------|
 | 主遊戲試玩（New York New York） | https://sam0404044.github.io/racing/ |
+| **主遊戲規則（Markdown）** | https://github.com/sam0404044/racing/blob/main/GAME_RULES_NEW_YORK.md |
 | QTE 測試（最後車手） | https://sam0404044.github.io/racing/qte-test.html |
-| 遊戲規則（HTML） | https://sam0404044.github.io/racing/GAME_RULES.html |
-| 遊戲規則（Markdown 原始檔） | https://github.com/sam0404044/racing/blob/main/GAME_RULES.md |
+| 最後車手規則（HTML） | https://sam0404044.github.io/racing/GAME_RULES.html |
+| 最後車手規則（Markdown） | https://github.com/sam0404044/racing/blob/main/GAME_RULES.md |
 
 若你 fork 或改名倉庫，請把路徑中的 `sam0404044` / `racing` 改成自己的帳號與專案名稱。
 
@@ -35,7 +36,8 @@ npx --yes serve .
 | `styles.css` | 主樣式 |
 | `qte-test.html`, `qte-test.js`, `qte-test.css` | QTE 測試頁（Canvas） |
 | `qte-preview.png` | QTE 頁分享預覽圖 |
-| `GAME_RULES.md`, `GAME_RULES.html` | 遊戲規則文件 |
+| `GAME_RULES_NEW_YORK.md` | 主遊戲（index）規則 |
+| `GAME_RULES.md`, `GAME_RULES.html` | 最後車手 QTE 試玩規則 |
 
 ## 授權
 
