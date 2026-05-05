@@ -1,0 +1,38 @@
+????	??	ID	????	??	Power ??	???	????	????
+	??? cardPool	step_by_step	步步進逼	??	1	0		X 為場上獲得加速的牌數量，壓力值 = X。
+	??? cardPool	double_lane	二次變線	??	1	1		將自己場上所有牌轉移到彎道外側。移除此牌。
+	??? cardPool	tyre_manage	輪胎管理	??	0	0		選擇場上 X 張牌移除（不含此牌），-X 速度，下次消耗輪胎時預防 X/2 耗損。移除此牌。
+	??? cardPool	radio_intercept	無線電監聽	??	0	0		查看對手此牌同側的總壓力值並移除此牌。或：將對手場上一道指令移除。
+	??? cardPool	push_push	Push! Push!	??	0	4		操作 X 動力單元元件，X 為當前 Power。
+	??? cardPool	fake_cut	假動作切線	??	1	2		此回合結束時，可將自己一個行動換側。移除此牌。
+	??? cardPool	race_rhythm	比賽節奏	??	1	-2		隨機指定 1 側，每次此牌移入或移出（含移除）此側時，操作動力元件。
+	??? cardPool	mind_game	心理戰	??	0	2		此牌在場上時，所有人都不能行動。回合開始時棄一張手牌，否則移除此牌。
+	??? cardPool	noise_jam	雜訊干擾	??	0	0		隨機指定 1 側。回合結束時，若此牌在指定側：棄對手 1 道指令；反之，棄自己 1 道指令。
+	??? cardPool	oversteer	過度轉向	??	1	2		可打出一道可操作的指令。移除此牌。
+	??? cardPool	mastery	得心應手	??	1	2		此牌的附贈動作可執行兩次。
+	??? cardPool	fake_info	假資訊	??	1	0		隨機指定 1 側。結算階段開始時，若此指令在指定側，此側施加壓力 +3。
+	??? cardPool	calm_breath	調整呼吸	??	1	-2		將此牌與自己另 1 張牌移除，抽 1 張牌。
+	??? cardPool	full_approach	全速逼近	??	2	3		此側壓力 +3。操作 1 動力元件。
+	??? cardPool	cut_corner	截彎取直	??	2	4		將自己另 1 側場上的 1 張牌棄掉，此牌施加壓力 +3。
+	??? cardPool	plasma_boost	等離子增壓	??	0	1	Power +1	+1 Power。
+	??? cardPool	racing_101	賽車 101	??	1	2		抽 1 張牌。移除此牌。
+	??? cardPool	conserve	養精蓄銳	??	1	1		放逐一道手牌。下回合通訊階段自動入場，不佔出牌計數。移除此牌。
+	??? cardPool	phishing	釣魚郵件	??	0	1		若此牌被對手移除時，對手下回合不能下指令。
+	??? cardPool	big_data	大數據運算	??	0	0		OPT 2：看牌庫頂 2 張，以任意順序放回牌庫頂或牌庫底。
+	??? cardPool	position_press	卡位壓迫	??	1	2		每次後方車在此側施加壓力，此牌壓力 +1。
+	??? cardPool	solidarity	有難同當	??	0	0		若自己場上的牌被移除時，移除對手場上 1 張牌。移除此牌。
+	??? cardPool	schadenfreude	幸災樂禍	??	1	1		當對方場上牌被移除時，操作 1 動力單元元件。移除此牌。
+	??? cardPool	kick_them_down	落井下石	??	1	1		當對方場上牌被移除時，可以下 1 道反應指令。移除此牌。
+	??? cardPool	showoff	作秀	??	2	0		每當場上有牌被移除時，可隨機移除自己 1 張牌並 +1 作秀指示物。結算時依指示物數消耗 SP，選擇等量效果。
+	QTE Prototype ???	qte_card_accel	加速	???			+2	加速 +2
+	QTE Prototype ???	qte_card_throttle	踩下油門	???				本回合加速 +1
+	QTE Prototype ???	qte_card_hyper_accel	超加速	???			+3	超加速 +3
+	QTE Prototype ???	qte_card_mistake	失誤	???			+0	失誤 +0
+	QTE Prototype ????	qte_reward_hyper_accel	超加速	速度			+3	+3 速度
+	QTE Prototype ????	qte_reward_rhythm_preview	節奏預判	超車 QTE				最後 1 顆圓圈變慢；Perfect 區 +25%
+	QTE Prototype ????	qte_reward_stable_chassis	穩定底盤	防守 QTE				綠區變寬、紅區變窄
+	QTE Prototype ????	qte_reward_fuel_boost	踩下油門	強化			本回合加速 +1	本回合所有加速牌 +1 速度
+	QTE Prototype ????	qte_reward_burst_tap	爆發踩點	超車 QTE				每次 Perfect 額外推進超車目標
+	QTE Prototype ????	qte_reward_precision_steer	精準轉向	防守 QTE				防守指標晃動幅度降低
+	QTE Prototype ????	qte_reward_focus_mode	專注模式	通用 QTE				本回合所有 QTE 節奏變慢 15%
+	QTE Prototype ????	qte_reward_pressure_response	壓力反應	通用 QTE				若上一拍 Miss，下一拍判定區大幅放寬
