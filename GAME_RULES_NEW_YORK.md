@@ -3,7 +3,7 @@
 本文件依目前 **`index.html` 介面文案** 與 **`game.js` / `cards.js` 實作**整理，供試玩對照。  
 若程式版本更新，以程式碼為準。
 
-> **另**：倉庫內的 [`GAME_RULES.md`](GAME_RULES.md)／[`GAME_RULES.html`](GAME_RULES.html) 描述的是 **`qte-test.html`（最後車手 / Final Driver）** 的 QTE 原型規則，與本頁主遊戲不同。
+> **另**：倉庫內的 [`GAME_RULES.md`](GAME_RULES.md)／[`GAME_RULES.html`](GAME_RULES.html) 描述的是 **`index.html`（最後車手 / Final Driver）** 的正式版本規則，與本頁 New York New York 歷史試玩不同。
 
 ---
 

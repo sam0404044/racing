@@ -3,192 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Project: New York New York — Playtest v0.3</title>
-  <link rel="stylesheet" href="styles.css">
+  <meta name="description" content="最後車手 / Final Driver，一場結合卡牌、超車 QTE 與防守判定的賽車遊戲。">
+  <meta name="color-scheme" content="dark">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="最後車手 / Final Driver">
+  <meta property="og:description" content="打出卡牌、抓準超車節奏、守住領先位置。">
+  <meta property="og:url" content="https://sam0404044.github.io/racing/">
+  <meta property="og:image" content="https://sam0404044.github.io/racing/qte-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="最後車手 / Final Driver">
+  <meta name="twitter:description" content="打出卡牌、抓準超車節奏、守住領先位置。">
+  <meta name="twitter:image" content="https://sam0404044.github.io/racing/qte-preview.png">
+  <title>最後車手 / Final Driver</title>
+  <link rel="canonical" href="https://sam0404044.github.io/racing/">
+  <link rel="image_src" href="qte-preview.png">
+  <link rel="stylesheet" href="final-driver.css">
 </head>
-<body>
-  <main>
-
-    <!-- ── 主畫面 ── -->
-    <section class="game-shell">
-
-      <!-- 左欄：車況 + 部件 -->
-      <div class="stats-col">
-
-        <section class="box rival-box">
-          <h2>🔴 紅車車況</h2>
-          <div class="stat-grid">
-            <div class="stat"><span>名次</span><b id="rPos">—</b></div>
-            <div class="stat"><span>速度</span><b id="rSpeed">?</b></div>
-            <div class="stat"><span>車體操控</span><b id="rVH">?</b></div>
-            <div class="stat"><span>抓地力</span><b id="rGrip">?</b></div>
-            <div class="stat accent"><span>SP</span><b id="rSP">—</b></div>
-            <div class="stat full"><span>防守狀態</span><b id="rShield">—</b></div>
-          </div>
-          <p class="hint-line">對手數值隱藏，使用「賽道掃描」可偵測速度。</p>
-        </section>
-
-        <section class="box player-box">
-          <h2>🟢 你的車況</h2>
-          <div class="stat-grid">
-            <div class="stat"><span>名次</span><b id="pPos">—</b></div>
-            <div class="stat"><span>速度</span><b id="pSpeed">—</b></div>
-            <div class="stat"><span>基礎速度</span><b id="pBS">—</b></div>
-            <div class="stat"><span>車體操控</span><b id="pVH">—</b></div>
-            <div class="stat"><span>抓地力</span><b id="pGrip">—</b></div>
-            <div class="stat"><span>檔位</span><b id="pGear">—</b></div>
-            <div class="stat accent"><span>SP</span><b id="pSP">—</b></div>
-            <div class="stat"><span>INT</span><b id="pINT">—</b></div>
-            <div class="stat full"><span>防守狀態</span><b id="pShield">—</b></div>
-          </div>
-        </section>
-
-        <!-- ═══════ 部件面板 ═══════ -->
-        <section class="box">
-          <h2>🔩 車輛部件</h2>
-          <p class="hint-line">行動階段翻開有「附贈：操作車子」的指令卡後，點擊部件觸發牌頂元件。</p>
-          <p class="hint-line" style="color:var(--warn);margin-top:4px">⚡ 通則：任何效果增加速度時會以基礎速度為倍率結算。<br>舉例：速度 +1 → 車子速度會 +1 × 當前基礎速度</p>
-          <div id="componentPanel" style="display:flex;flex-direction:column;gap:8px;margin-top:10px;"></div>
-          <div id="tyreStatus" style="margin-top:8px;padding:8px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);font-size:0.82rem;display:flex;flex-direction:column;gap:3px;"></div>
-        </section>
-
-      </div>
-
-      <!-- 右欄：賽場 + 階段控制 -->
-      <div class="field-col">
-
-        <!-- ═══════ 鳥瞰賽道 + 賽場整合 ═══════ -->
-        <section class="box track-box" style="padding:0;overflow:hidden;">
-          <div class="track-wrap">
-            <canvas id="trackCanvas" style="width:100%;height:auto;display:block;border-radius:6px;aspect-ratio:560/460;"></canvas>
-            <!-- NPC 牌 overlay（上方牌區）-->
-            <div class="field-overlay npc-overlay" id="npcOverlay">
-              <div class="overlay-lane" id="npcLeftZone"></div>
-              <div class="overlay-lane" id="npcRightZone"></div>
-            </div>
-            <!-- 玩家牌 overlay（下方牌區）-->
-            <div class="field-overlay player-overlay" id="playerOverlay">
-              <div class="overlay-lane droppable" id="playerLeftZone"></div>
-              <div class="overlay-lane droppable" id="playerRightZone"></div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ── Header HUD ── -->
-        <header>
-          <div>
-            <h1>New York New York</h1>
-            <p>賽車指令卡牌遊戲　Playtest v0.3　│　部件系統 + 附贈動作</p>
-            <div class="header-actions">
-              <a class="qte-link-button" href="qte-test.html">Open QTE Test</a>
-            </div>
-          </div>
-          <div class="hud" aria-live="polite">
-            <div class="pill"><span>階段</span><b id="phaseLabel">—</b></div>
-            <div class="pill"><span>回合</span><b id="roundLabel">—</b></div>
-            <div class="pill"><span>狀態</span><b id="statusLabel">—</b></div>
-            <div class="pill"><span>牌庫</span><b id="deckCount">—</b></div>
-            <div class="pill"><span>棄牌</span><b id="discardCount">—</b></div>
-            <div class="pill"><span>手牌</span><b id="handCount">—</b></div>
-          </div>
-        </header>
-
-        <!-- ═══════ 計畫階段面板 ═══════ -->
-        <section class="box phase-panel hidden" id="panelPlan">
-          <h2>📋 計畫階段</h2>
-          <p>已補牌。確認手牌與部件狀態後進入通訊階段。</p>
-        </section>
-
-        <!-- ═══════ 通訊階段面板 ═══════ -->
-        <section class="box phase-panel hidden" id="panelRadio">
-          <h2>📡 通訊階段</h2>
-          <p>將手牌拖到左側或右側（面朝下）。資訊指令也需選側，行動階段開始時立即生效。</p>
-          <p class="hint-line">上限：複雜 × 1、簡易 × 2（資訊不限）。確認後無法撤回。</p>
-          <div style="margin-top:8px;padding:6px 10px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);font-size:0.84rem;font-weight:700;color:var(--accent)">
-            已出牌：<span id="radioStatus">尚未出牌</span>
-          </div>
-        </section>
-
-        <!-- ═══════ 行動階段面板 ═══════ -->
-        <section class="box phase-panel hidden" id="panelAction">
-          <h2>⚡ 行動階段</h2>
-          <p id="actionTurnLabel">等待行動…</p>
-          <p class="hint-line">點擊場上自己面朝下的牌翻開執行。附贈「操作車子」時，點擊左側部件面板的部件。附贈「再下令」時，點擊/拖曳手牌。複雜行動執行後自動 Pass。</p>
-        </section>
-
-        <!-- ═══════ 賽場階段面板 ═══════ -->
-        <section class="box phase-panel hidden" id="panelField">
-          <h2>🚦 賽場階段</h2>
-          <p>選擇是否嘗試超車。若超車，選擇以哪一側施壓。</p>
-        </section>
-
-        <!-- ═══════ 結算階段面板 ═══════ -->
-        <section class="box phase-panel hidden" id="panelResolution">
-          <h2>🏁 結算階段</h2>
-          <p>正在結算賽段結果…</p>
-        </section>
-
-        <!-- 賽況 log -->
-        <section class="box log-box">
-          <h2>賽況</h2>
-          <div class="log" id="log" aria-live="polite"></div>
-        </section>
-
-        <div class="controls">
-          <button class="ghost" id="resetButton" type="button">重新比賽</button>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ── 自訂 Tooltip ── -->
-    <div id="cardTooltip"></div>
-
-    <!-- ── 選側 Modal ── -->
-    <div id="sideModal" class="side-modal hidden">
-      <div class="side-modal-box">
-        <p>選擇打入哪一側（面朝下）</p>
-        <div class="side-modal-btns">
-          <button id="sideLeft"  type="button" class="primary">← 左側</button>
-          <button id="sideRight" type="button" class="primary">右側 →</button>
-        </div>
-        <button id="sideCancel" type="button" class="ghost">取消</button>
-      </div>
-    </div>
-
-    <!-- ── 手牌區 ── -->
-    <section class="card-dock" aria-label="手牌區">
-      <div class="drag-play-arrow" id="dragPlayArrow" aria-hidden="true">
-        <span>出牌區</span>
-        <b>↑</b>
-      </div>
-      <div class="card-dock-actions" id="phaseActionDock">
-        <div class="dock-action-label" id="phaseActionLabel">計畫階段</div>
-        <div class="dock-action-group hidden" data-phase-action="plan">
-          <button class="primary" id="nextPhaseBtn" type="button">通訊</button>
-        </div>
-        <div class="dock-action-group hidden" data-phase-action="radio">
-          <button class="primary" id="confirmRadioBtn" type="button">確認</button>
-        </div>
-        <div class="dock-action-group hidden" data-phase-action="action">
-          <button class="primary" id="playerPassBtn" type="button">Pass</button>
-          <button class="ghost" id="skipBonusBtn" type="button" style="display:none">跳過</button>
-        </div>
-        <div class="dock-action-group hidden" data-phase-action="field">
-          <button class="primary" id="overtakeLeftBtn"  type="button">左側</button>
-          <button class="primary" id="overtakeRightBtn" type="button">右側</button>
-          <button class="ghost"   id="noOvertakeBtn"    type="button">不超</button>
-        </div>
-      </div>
-      <div class="cards" id="cards" aria-label="手牌"></div>
-    </section>
-
-    <footer>
-      v0.3：將手牌拖到賽道左側或右側區域（面朝下）。行動階段點擊場上自己的牌翻開執行。
-    </footer>
-  </main>
-  <script src="cards.js"></script>
-  <script src="game.js"></script>
-  <script src="track.js"></script>
+<body class="qte-test-page">
+  <section class="qte-test hidden" id="qteTestRoot" aria-label="最後車手 / Final Driver"></section>
+  <noscript>
+    <p class="qte-noscript-msg">請啟用 JavaScript，以開始最後車手 / Final Driver。</p>
+  </noscript>
+  <script src="final-driver.js"></script>
 </body>
 </html>
