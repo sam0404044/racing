@@ -74,7 +74,7 @@ const cardPool = [
   // ── 新設計牌 ────────────────────────────────
 
 
-  { id:"step_by_step", name:"步步進逼", type:"complex", powerCost:1, pressure:0,
+  { id:"step_by_step", name:"步步進逼", type:"complex", pressure:0,
     keywords:[KW.SKILLED], bonus:"operate",
     text:"X 為場上獲得加速的牌數量，壓力值 = X。",
     changes:{},
@@ -86,7 +86,7 @@ const cardPool = [
     }
   },
 
-  { id:"double_lane", name:"二次變線", type:"complex", powerCost:1, pressure:1,
+  { id:"double_lane", name:"二次變線", type:"complex", pressure:1,
     bonus:"operate",
     text:"將自己場上所有牌轉移到彎道外側。移除此牌。",
     changes:{},
@@ -108,7 +108,7 @@ const cardPool = [
     }
   },
 
-  { id:"tyre_manage", name:"輪胎管理", type:"complex", powerCost:0, pressure:0,
+  { id:"tyre_manage", name:"輪胎管理", type:"complex", pressure:0,
     keywords:[KW.BURDEN],
     text:"選擇場上 X 張牌移除（不含此牌），-X 速度，下次消耗輪胎時預防 X/2 耗損。移除此牌。",
     changes:{},
@@ -141,7 +141,7 @@ const cardPool = [
     }
   },
 
-  { id:"radio_intercept", name:"無線電監聽", type:"simple", powerCost:0, pressure:0,
+  { id:"radio_intercept", name:"無線電監聽", type:"simple", pressure:0,
     text:"查看對手此牌同側的總壓力值並移除此牌。或：將對手場上一道指令移除。",
     changes:{},
     resolve(ctx) {
@@ -176,18 +176,17 @@ const cardPool = [
     }
   },
 
-  { id:"push_push", name:"Push! Push!", type:"complex", powerCost:0, pressure:4,
+  { id:"push_push", name:"Push! Push!", type:"complex", pressure:4,
     bonus:"tyre",
-    text:"操作 X 動力單元元件，X 為當前 Power。",
+    text:"連續操作 3 次動力單元元件。",
     changes:{},
     resolve(ctx) {
-      const x = game.player.power;
-      game.message(`Push! Push!：連續操作動力單元 ${x} 次。`);
-      for (let i=0; i<x; i++) operateEngineAuto();
+      game.message(`Push! Push!：連續操作動力單元 3 次。`);
+      for (let i=0; i<3; i++) operateEngineAuto();
     }
   },
 
-  { id:"fake_cut", name:"假動作切線", type:"complex", powerCost:1, pressure:2,
+  { id:"fake_cut", name:"假動作切線", type:"complex", pressure:2,
     text:"此回合結束時，可將自己一個行動換側。移除此牌。",
     changes:{},
     resolve(ctx) {
@@ -220,7 +219,7 @@ const cardPool = [
     }
   },
 
-  { id:"race_rhythm", name:"比賽節奏", type:"complex", powerCost:1, pressure:-2,
+  { id:"race_rhythm", name:"比賽節奏", type:"complex", pressure:-2,
     text:"隨機指定 1 側，每次此牌移入或移出（含移除）此側時，操作動力元件。",
     changes:{},
     resolve(ctx) {
@@ -253,7 +252,7 @@ const cardPool = [
     }
   },
 
-  { id:"mind_game", name:"心理戰", type:"info", powerCost:0, pressure:2,
+  { id:"mind_game", name:"心理戰", type:"info", pressure:2,
     text:"此牌在場上時，所有人都不能行動。回合開始時棄一張手牌，否則移除此牌。",
     changes:{},
     resolve(ctx) { game.message("心理戰：行動鎖定，直到此牌離場。", "player"); },
@@ -298,7 +297,7 @@ const cardPool = [
     }
   },
 
-  { id:"noise_jam", name:"雜訊干擾", type:"info", powerCost:0, pressure:0,
+  { id:"noise_jam", name:"雜訊干擾", type:"info", pressure:0,
     text:"隨機指定 1 側。回合結束時，若此牌在指定側：棄對手 1 道指令；反之，棄自己 1 道指令。",
     changes:{},
     resolve(ctx) { ctx.card._jamSide=randomSide(); game.message(`雜訊干擾：指定${ctx.card._jamSide==="left"?"左":"右"}側。`); },
@@ -318,7 +317,7 @@ const cardPool = [
     }
   },
 
-  { id:"oversteer", name:"過度轉向", type:"simple", powerCost:1, pressure:2,
+  { id:"oversteer", name:"過度轉向", type:"simple", pressure:2,
     text:"可打出一道可操作的指令。移除此牌。",
     changes:{},
     resolve(ctx) {
@@ -359,14 +358,14 @@ const cardPool = [
     }
   },
 
-  { id:"mastery", name:"得心應手", type:"simple", powerCost:1, pressure:2,
+  { id:"mastery", name:"得心應手", type:"simple", pressure:2,
     bonus:"operate", bonusDouble:true,
     text:"此牌的附贈動作可執行兩次。",
     changes:{},
     resolve(ctx) { game.message("得心應手：附贈動作可執行兩次。"); }
   },
 
-  { id:"fake_info", name:"假資訊", type:"info", powerCost:1, pressure:0,
+  { id:"fake_info", name:"假資訊", type:"info", pressure:0,
     text:"隨機指定 1 側。結算階段開始時，若此指令在指定側，此側施加壓力 +3。",
     changes:{},
     resolve(ctx) { ctx.card._fakeInfoSide=randomSide(); game.message(`假資訊：指定${ctx.card._fakeInfoSide==="left"?"左":"右"}側，結算時判斷。`); },
@@ -382,7 +381,7 @@ const cardPool = [
     }
   },
 
-  { id:"calm_breath", name:"調整呼吸", type:"simple", powerCost:1, pressure:-2,
+  { id:"calm_breath", name:"調整呼吸", type:"simple", pressure:-2,
     bonus:"reorder",
     text:"將此牌與自己另 1 張牌移除，抽 1 張牌。",
     changes:{},
@@ -410,7 +409,7 @@ const cardPool = [
     }
   },
 
-  { id:"full_approach", name:"全速逼近", type:"simple", powerCost:2, pressure:3,
+  { id:"full_approach", name:"全速逼近", type:"simple", pressure:3,
     bonus:"operate",
     text:"此側壓力 +3。操作 1 動力元件。",
     changes:{},
@@ -421,7 +420,7 @@ const cardPool = [
     }
   },
 
-  { id:"cut_corner", name:"截彎取直", type:"complex", powerCost:2, pressure:4,
+  { id:"cut_corner", name:"截彎取直", type:"complex", pressure:4,
     bonus:"operate",
     text:"將自己另 1 側場上的 1 張牌棄掉，此牌施加壓力 +3。",
     changes:{},
@@ -446,12 +445,12 @@ const cardPool = [
     }
   },
 
-  { id:"plasma_boost", name:"等離子增壓", type:"simple", powerCost:0, pressure:1,
-    bonus:"operate", text:"+1 Power。", changes:{power:1},
-    resolve(ctx) { applyChanges(ctx.owner,{power:1}); game.message("等離子增壓：Power +1。"); }
+  { id:"plasma_boost", name:"等離子增壓", type:"simple", pressure:1,
+    bonus:"operate", text:"+1 SP。", changes:{sp:1},
+    resolve(ctx) { applyChanges(ctx.owner,{sp:1}); game.message("等離子增壓：SP +1。"); }
   },
 
-  { id:"racing_101", name:"賽車 101", type:"simple", powerCost:1, pressure:2,
+  { id:"racing_101", name:"賽車 101", type:"simple", pressure:2,
     keywords:[KW.BURDEN], bonus:"reorder",
     text:"抽 1 張牌。移除此牌。", changes:{},
     resolve(ctx) {
@@ -462,7 +461,7 @@ const cardPool = [
     }
   },
 
-  { id:"conserve", name:"養精蓄銳", type:"complex", powerCost:1, pressure:1,
+  { id:"conserve", name:"養精蓄銳", type:"complex", pressure:1,
     keywords:[KW.BURDEN],
     text:"放逐一道手牌。下回合通訊階段自動入場，不佔出牌計數。移除此牌。", changes:{},
     resolve(ctx) {
@@ -494,14 +493,14 @@ const cardPool = [
     }
   },
 
-  { id:"phishing", name:"釣魚郵件", type:"complex", powerCost:0, pressure:1,
+  { id:"phishing", name:"釣魚郵件", type:"complex", pressure:1,
     keywords:[KW.REACTION],
     text:"若此牌被對手移除時，對手下回合不能下指令。", changes:{},
     resolve(ctx) { game.message("釣魚郵件：在場監聽。"); },
     onRemovedByOpponent() { game.npcRadioBlocked=true; game.message("釣魚郵件觸發：對手下回合無法下指令！"); }
   },
 
-  { id:"big_data", name:"大數據運算", type:"info", powerCost:0, pressure:0,
+  { id:"big_data", name:"大數據運算", type:"info", pressure:0,
     text:"OPT 2：看牌庫頂 2 張，以任意順序放回牌庫頂或牌庫底。", changes:{},
     resolve(ctx) {
       if (game.deck.length === 0) { game.message("大數據運算：牌庫為空。"); return; }
@@ -524,7 +523,7 @@ const cardPool = [
     }
   },
 
-  { id:"position_press", name:"卡位壓迫", type:"complex", powerCost:1, pressure:2,
+  { id:"position_press", name:"卡位壓迫", type:"complex", pressure:2,
     bonus:"operate",
     text:"每次後方車在此側施加壓力，此牌壓力 +1。", changes:{},
     resolve(ctx) { ctx.card._pressSide=ctx.side; game.message("卡位壓迫：監聽後方車施壓。"); },
@@ -540,7 +539,7 @@ const cardPool = [
     }
   },
 
-  { id:"solidarity", name:"有難同當", type:"simple", powerCost:0, pressure:0,
+  { id:"solidarity", name:"有難同當", type:"simple", pressure:0,
     keywords:[KW.REACTION],
     text:"若自己場上的牌被移除時，移除對手場上 1 張牌。移除此牌。", changes:{},
     resolve(ctx) { game.message("有難同當：在場監聽。"); },
@@ -556,7 +555,7 @@ const cardPool = [
     }
   },
 
-  { id:"schadenfreude", name:"幸災樂禍", type:"simple", powerCost:1, pressure:1,
+  { id:"schadenfreude", name:"幸災樂禍", type:"simple", pressure:1,
     keywords:[KW.REACTION],
     text:"當對方場上牌被移除時，操作 1 動力單元元件。移除此牌。", changes:{},
     resolve(ctx) { game.message("幸災樂禍：在場監聽。"); },
@@ -573,7 +572,7 @@ const cardPool = [
     }
   },
 
-  { id:"kick_them_down", name:"落井下石", type:"simple", powerCost:1, pressure:1,
+  { id:"kick_them_down", name:"落井下石", type:"simple", pressure:1,
     keywords:[KW.REACTION],
     text:"當對方場上牌被移除時，可以下 1 道反應指令。移除此牌。", changes:{},
     resolve(ctx) { game.message("落井下石：在場監聽。"); },
@@ -590,7 +589,7 @@ const cardPool = [
     }
   },
 
-  { id:"showoff", name:"作秀", type:"complex", powerCost:2, pressure:0,
+  { id:"showoff", name:"作秀", type:"complex", pressure:0,
     keywords:[KW.SKILLED],
     text:"每當場上有牌被移除時，可隨機移除自己 1 張牌並 +1 作秀指示物。結算時依指示物數消耗 SP，選擇等量效果。",
     changes:{},
@@ -642,10 +641,10 @@ const cardPool = [
 
 // ── NPC 指令牌庫 ──────────────────────────────
 const npcCardPool = [
-  { id:"npc_accel",   name:"紅車加速",  type:"complex", pressure:2, powerCost:1, text:"速度 +2、抓地力 -1。",             changes:{speed_bs:2, grip:-1} },
-  { id:"npc_defend",  name:"紅車防守",  type:"simple",  pressure:2, powerCost:1, text:"車體操控 +1、抓地力 +1。防干擾。",  changes:{vh:1, grip:1}, shield:true },
-  { id:"npc_block",   name:"紅車干擾",  type:"complex", pressure:3, powerCost:1, text:"對手速度 -1、抓地力 -1。",          changes:{}, targetChanges:{speed:-1, grip:-1} },
-  { id:"npc_conserve",name:"紅車保守",  type:"simple",  pressure:1, powerCost:0, text:"抓地力 +2。",                      changes:{grip:2} },
-  { id:"npc_sprint",  name:"紅車衝刺",  type:"complex", pressure:3, powerCost:1, text:"速度 +3、車體操控 -1、抓地力 -2。",  changes:{speed_bs:3, vh:-1, grip:-2} },
-  { id:"npc_corner",  name:"紅車入彎",  type:"simple",  pressure:2, powerCost:1, text:"車體操控 +2、抓地力 +1。",          changes:{vh:2, grip:1} },
+  { id:"npc_accel",   name:"紅車加速",  type:"complex", pressure:2, text:"速度 +2、抓地力 -1。",             changes:{speed_bs:2, grip:-1} },
+  { id:"npc_defend",  name:"紅車防守",  type:"simple",  pressure:2, text:"車體操控 +1、抓地力 +1。防干擾。",  changes:{vh:1, grip:1}, shield:true },
+  { id:"npc_block",   name:"紅車干擾",  type:"complex", pressure:3, text:"對手速度 -1、抓地力 -1。",          changes:{}, targetChanges:{speed:-1, grip:-1} },
+  { id:"npc_conserve",name:"紅車保守",  type:"simple",  pressure:1, text:"抓地力 +2。",                      changes:{grip:2} },
+  { id:"npc_sprint",  name:"紅車衝刺",  type:"complex", pressure:3, text:"速度 +3、車體操控 -1、抓地力 -2。",  changes:{speed_bs:3, vh:-1, grip:-2} },
+  { id:"npc_corner",  name:"紅車入彎",  type:"simple",  pressure:2, text:"車體操控 +2、抓地力 +1。",          changes:{vh:2, grip:1} },
 ];

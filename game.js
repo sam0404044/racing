@@ -30,7 +30,6 @@ const tooltip = {
       <small>${fc.text || ""}</small>
       ${kwLine}
       ${reactionNote}
-      <div class="tt-row"><span>動力消耗</span><span>${fc.powerCost || 0}</span></div>
       <div class="tt-row"><span>壓力</span><span>${fc.pressure || 0}</span></div>
       ${stateLines}
       ${bonusLine}`;
@@ -82,7 +81,7 @@ const HAND_LIMIT    = 7;
 const DRAW_PER_TURN = 4;
 const BASE_SPEED    = 3;
 const MAX_SPEED     = 6;
-const BASE_POWER    = 3;
+
 const MAX_GEAR      = 5;
 const MAX_ROUNDS    = 3;
 const INT_LIMIT = 7;   // 場上牌數上限（含負擔牌）
@@ -112,7 +111,7 @@ function buildComponentDecks() {
       id: "engine",
       name: "動力單元",
       // 被動：在 makeCarState 裡已設定初始值，每回合重算
-      passive: { baseSpeed: BASE_SPEED, maxSpeed: MAX_SPEED, power: BASE_POWER },
+      passive: { baseSpeed: BASE_SPEED, maxSpeed: MAX_SPEED },
       // 元件牌堆（順序固定，循環）
       components: [
         {
@@ -279,7 +278,6 @@ function makeCarState() {
     speed: 0, baseSpeed: BASE_SPEED, maxSpeed: MAX_SPEED,
     vh: 0, grip: 4,
     gear: 1, maxGear: MAX_GEAR,
-    power: BASE_POWER, maxPower: BASE_POWER,
     shield: false, sp: 0, pressure: 0,
     position: 1,
   };
@@ -407,9 +405,6 @@ function startPlanPhase() {
   if (game.round > 1) fireRoundEnd();
 
   game.phase = PHASE.PLAN;
-  game.player.power = game.player.maxPower;
-  game.npc.power    = game.npc.maxPower;
-
   game.playerPassed = false;
   game.npcPassed    = false;
   game.actionTurn   = resolveActionFirstTurn();
@@ -642,11 +637,6 @@ function executeAction(side, cardIndex) {
   const fieldCard = pile[cardIndex];
   if (!fieldCard || fieldCard.revealed) { game.message("這張牌已翻開或不存在。"); render(); return; }
 
-  if ((fieldCard.powerCost || 0) > game.player.power) {
-    game.message(`動力不足（需要 ${fieldCard.powerCost}，剩餘 ${game.player.power}）。`);
-    render(); return;
-  }
-
   // 反應牌不能主動翻開
   if (fieldCard.keywords?.includes(KW.REACTION)) {
     game.message(`「${fieldCard.name}」是反應牌，只能在滿足條件時觸發。`);
@@ -659,7 +649,6 @@ function executeAction(side, cardIndex) {
     render(); return;
   }
 
-  game.player.power -= (fieldCard.powerCost || 0);
   fieldCard.revealed = true;
   resolveCardEffect(fieldCard, game.player, game.npc, side);
   game.message(`翻開「${fieldCard.name}」並結算效果。`, "player");
@@ -1124,7 +1113,6 @@ function clampCar(car) {
   car.vh       = clamp(car.vh, -5, 10);
   car.grip     = clamp(car.grip, 0, 10);
   car.gear     = clamp(car.gear, 1, car.maxGear || MAX_GEAR);
-  car.power    = clamp(car.power, 0, car.maxPower || BASE_POWER);
   car.pressure = clamp(car.pressure, 0, 999);
   car.sp       = clamp(car.sp, 0, 999);
 }
@@ -1391,7 +1379,6 @@ const PHASE_NAMES = {
 function renderHud() {
   if (els.phaseLabel)   els.phaseLabel.textContent   = PHASE_NAMES[game.phase] || game.phase;
   if (els.roundLabel)   els.roundLabel.textContent   = `${game.round} / ${MAX_ROUNDS}`;
-  if (els.energy)       els.energy.textContent       = `${game.player.power} / ${game.player.maxPower}`;
   if (els.deckCount)    els.deckCount.textContent    = game.deck.length;
   if (els.discardCount) els.discardCount.textContent = game.discard.length;
   if (els.handCount)    els.handCount.textContent    = game.hand.length;
@@ -1411,7 +1398,6 @@ function renderHud() {
   if (els.pVH)       els.pVH.textContent       = p.vh.toFixed(1);
   if (els.pGrip)     els.pGrip.textContent     = p.grip.toFixed(1);
   if (els.pGear)     els.pGear.textContent     = p.gear;
-  if (els.pPower)    els.pPower.textContent    = `${p.power}/${p.maxPower}`;
   if (els.pSP)       els.pSP.textContent       = p.sp;
   if (els.pINT)      els.pINT.textContent      = `${playerINT()} / ${INT_LIMIT}`;
   if (els.pPressure) els.pPressure.textContent = p.pressure;
@@ -1748,7 +1734,7 @@ function renderComponentPanel() {
   const compEmoji = { engine: "⚙️", aero: "🌬", gearbox: "🔧" };
 
   const compPassiveDesc = {
-    engine:  `基礎速度 ${game.player.baseSpeed.toFixed(1)}　速度上限 ${game.player.maxSpeed}　動力 ${game.player.maxPower}`,
+    engine:  `基礎速度 ${game.player.baseSpeed.toFixed(1)}　速度上限 ${game.player.maxSpeed}`,
     aero:    `（無固定加成）`,
     gearbox: `最高 ${game.player.maxGear} 檔<br>每升 1 檔：基礎速度 -0.5　速度上限 +3`,
   };
@@ -1880,10 +1866,9 @@ function renderFieldZone(zoneId, cards, owner, side) {
     const div = document.createElement("div");
     const tc = { complex: "#f05d5e", simple: "#25d17f", info: "#ffcf4d" }[fc.type] || "#aaa";
     const isMyTurn       = game.phase === PHASE.ACTION && !game.playerPassed && game.actionTurn === "player";
-    const canAfford      = (fc.powerCost || 0) <= game.player.power;
     const noBonusPending = !game.pendingBonus;
     const isReaction     = fc.keywords?.includes(KW.REACTION);
-    const canExecute     = owner === "player" && !fc.revealed && isMyTurn && canAfford && noBonusPending && !isReaction;
+    const canExecute     = owner === "player" && !fc.revealed && isMyTurn && noBonusPending && !isReaction;
 
     if (fc.revealed) {
       div.className = "field-card-mini revealed-mini";
@@ -1901,8 +1886,7 @@ function renderFieldZone(zoneId, cards, owner, side) {
         <span class="mini-name">${fc.name}</span>
         <span class="mini-pressure" style="color:${tc}">壓 ${fc.pressure || 0}</span>
         ${isReaction ? '<span class="mini-reaction-icon">🔒</span>' : ""}
-        ${isRadioPhase ? '<span class="mini-warn" style="color:var(--muted)">↩</span>' : ""}
-        ${!canAfford && !isReaction && !isRadioPhase ? '<span class="mini-warn">⚡不足</span>' : ""}`;
+        ${isRadioPhase ? '<span class="mini-warn" style="color:var(--muted)">↩</span>' : ""}`;
       div.addEventListener("mouseenter", e => tooltip.show(e, fc));
       div.addEventListener("mouseleave", () => tooltip.hide());
 
@@ -1948,9 +1932,8 @@ function renderCards() {
     const summary = Array.from(card.text || "").slice(0, 18).join("") + (Array.from(card.text || "").length > 18 ? "…" : "");
 
     btn.innerHTML = `
-      <span class="cost" style="background:${tc};color:#111">${card.powerCost} 動力</span>
+      <span class="cost" style="background:${tc};color:#111">${getTypeName(card.type)}</span>
       <span>
-        <span class="type" style="background:${tc}22;color:${tc}">${getTypeName(card.type)}</span>
         <strong>${card.name}</strong>
         ${kwTags}
         <small class="card-summary">${summary}</small>
