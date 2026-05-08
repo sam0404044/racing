@@ -24,8 +24,23 @@ const CanvasQteTest = (() => {
   const NORMAL_STAGE_BGM_SRC = "assets/BGM/001.mp3";
   const BLIND_DESERT_CG_SRC = "assets/blind-card-desert-boss.png";
   const BLIND_DESERT_BGM_SRC = "assets/BGM/BOSS.mp3";
+  const BOSS_ENTRANCE_LAYER_SRCS = [
+    "assets/BOSS/boss-intro-red-banner.png",
+    "assets/BOSS/boss-intro-title-code.png",
+    "assets/BOSS/boss-intro-quote-panel.png",
+    "assets/BOSS/boss-intro-sand-sweep.png",
+    "assets/BOSS/boss-intro-bottom-panel.png",
+    "assets/BOSS/boss-intro-stats-bars.png",
+    "assets/BOSS/boss-intro-mask-emblem.png",
+    "assets/BOSS/boss-intro-portrait.png",
+  ];
   const bossCgImage = new Image();
   bossCgImage.src = BLIND_DESERT_CG_SRC;
+  const bossEntranceLayers = BOSS_ENTRANCE_LAYER_SRCS.map(src => {
+    const img = new Image();
+    img.src = src;
+    return img;
+  });
   const normalBgm = new Audio(NORMAL_STAGE_BGM_SRC);
   normalBgm.loop = true;
   normalBgm.preload = "auto";
@@ -788,6 +803,10 @@ const CanvasQteTest = (() => {
     if (id === "start-tutorial") {
       playNormalBgm();
       app.mode = "tutorial-play";
+      return;
+    }
+    if (id === "debug-boss-transition") {
+      startBossStageTransition();
       return;
     }
     if (id === "boss-intro-start") {
@@ -1613,11 +1632,13 @@ const CanvasQteTest = (() => {
     const start = app.bossTransitionStart || time;
     const elapsed = time - start;
     const fadeOutDur = 900;
+    const entranceDur = 2600;
     const mapFadeDur = 1500;
     const uiFadeDur = 1000;
-    const mapStart = fadeOutDur;
-    const uiStart = fadeOutDur + mapFadeDur;
-    const finish = uiStart + uiFadeDur;
+    const entranceStart = fadeOutDur;
+    const mapStart = fadeOutDur + entranceDur;
+    const uiStart = mapStart + mapFadeDur;
+    const finish = mapStart + mapFadeDur + uiFadeDur;
 
     if (elapsed < fadeOutDur) {
       drawRace(time);
@@ -1628,8 +1649,14 @@ const CanvasQteTest = (() => {
       fillScreenBlack(a);
       if (a > 0.55) {
         revealBossTransitionBgm();
-        drawBossTransitionTitle((a - 0.55) / 0.45, time);
       }
+      return;
+    }
+
+    if (elapsed < mapStart) {
+      revealBossTransitionBgm();
+      fillScreenBlack(1);
+      drawBossEntranceLayers(elapsed - entranceStart, entranceDur, time);
       return;
     }
 
@@ -1643,7 +1670,7 @@ const CanvasQteTest = (() => {
       const a = 1 - smooth01((elapsed - mapStart) / mapFadeDur);
       fillScreenBlack(a);
       revealBossTransitionBgm();
-      drawBossTransitionTitle(Math.max(0, Math.min(1, a + 0.12)), time);
+      drawBossEntranceLayers(entranceDur, entranceDur, time, a);
       return;
     }
 
@@ -1667,6 +1694,157 @@ const CanvasQteTest = (() => {
     ctx.save();
     ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, alpha))})`;
     ctx.fillRect(0, 0, app.w, app.h);
+    ctx.restore();
+  }
+
+  function drawBossEntranceLayers(age, totalDur, time, fadeOut = 1) {
+    const ctx = app.ctx;
+    const w = app.w;
+    const h = app.h;
+    const settled = Math.max(0, Math.min(1, fadeOut));
+    const t = n => smooth01((age - n) / 520);
+    ctx.save();
+    ctx.globalAlpha = settled;
+    const bg = ctx.createLinearGradient(0, 0, w, h);
+    bg.addColorStop(0, "#030303");
+    bg.addColorStop(0.46, "#100706");
+    bg.addColorStop(1, "#27150b");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    const banner = bossEntranceLayers[0];
+    const quotePlate = bossEntranceLayers[2];
+    const detailB = bossEntranceLayers[4];
+    const mask = bossEntranceLayers[6];
+    const portrait = bossEntranceLayers[7];
+    const redIn = t(140);
+    const titleIn = t(620);
+    const portraitIn = t(820);
+    const infoIn = t(1280);
+    const shake = Math.sin(time * 0.006) * 2.5 * (1 - Math.min(1, age / totalDur));
+
+    ctx.save();
+    ctx.translate(-w * (1 - redIn) * 0.18 + shake, h * 0.02);
+    ctx.rotate(-0.105);
+    if (banner) drawImageInRect(banner, -w * 0.14, h * 0.10, w * 1.30, h * 0.50, 0.98 * redIn, "cover");
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.34 * t(420);
+    ctx.fillStyle = "#d60d12";
+    for (let i = 0; i < 8; i++) {
+      const x = w * (0.03 + i * 0.135);
+      ctx.fillRect(x, h * 0.22 + (i % 2) * 9, w * 0.055, 8);
+    }
+    ctx.restore();
+
+    if (detailB) drawImageInRect(detailB, w * 0.64, h * 0.17, w * 0.38, h * 0.42, 0.38 * infoIn, "contain");
+    if (mask) drawImageInRect(mask, w * 0.71, h * 0.48, w * 0.24, h * 0.28, 0.58 * infoIn, "contain");
+
+    if (portrait) {
+      const px = w * (0.56 + (1 - portraitIn) * 0.08);
+      const py = h * (0.00 + (1 - portraitIn) * 0.04);
+      drawImageInRect(portrait, px, py, w * 0.46, h * 0.88, portraitIn, "contain");
+    }
+
+    drawSandParticles(w * 0.04, h * 0.04, w * 0.92, h * 0.84, {
+      count: 180,
+      alpha: 0.28 * settled,
+      size: 1.25,
+      drift: 58,
+      fade: 120,
+      seedOffset: 881,
+    });
+
+    if (quotePlate) drawImageInRect(quotePlate, w * 0.045, h * 0.435, w * 0.42, h * 0.18, infoIn, "contain");
+
+    drawBossEntranceTypography(titleIn, infoIn, time, settled);
+    ctx.restore();
+  }
+
+  function drawBossEntranceTypography(titleIn, infoIn, time, fadeOut = 1) {
+    const ctx = app.ctx;
+    const w = app.w;
+    const h = app.h;
+    const fade = Math.max(0, Math.min(1, fadeOut));
+    ctx.save();
+    ctx.globalAlpha = titleIn * fade;
+    ctx.fillStyle = "#e6edf2";
+    ctx.font = '800 14px Consolas, "Microsoft JhengHei", monospace';
+    ctx.textAlign = "left";
+    ctx.fillText(">>> RACER INTRO", w * 0.045, h * 0.15);
+    ctx.font = '1000 72px Impact, "Arial Black", "Microsoft JhengHei", sans-serif';
+    ctx.shadowColor = "rgba(0,0,0,0.62)";
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "#fff4e8";
+    ctx.fillText("SAND VEIL", w * 0.045, h * 0.34);
+    ctx.shadowBlur = 0;
+    ctx.font = '900 28px Consolas, "Microsoft JhengHei", monospace';
+    ctx.fillStyle = "#080808";
+    ctx.fillText("CODE: 09", w * 0.05, h * 0.41);
+
+    ctx.globalAlpha = infoIn * fade;
+    const stripY = h * 0.73;
+    ctx.fillStyle = "rgba(2,2,2,0.82)";
+    ctx.fillRect(0, stripY, w, h * 0.20);
+    ctx.strokeStyle = "rgba(238,32,34,0.78)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.38, stripY + 12);
+    ctx.lineTo(w * 0.32, stripY + h * 0.20 - 12);
+    ctx.stroke();
+    ctx.font = '900 18px Consolas, "Microsoft JhengHei", monospace';
+    ctx.fillStyle = "#ff272a";
+    ctx.fillText("DRIVER", w * 0.43, stripY + 34);
+    ctx.font = '1000 40px Impact, "Arial Black", sans-serif';
+    ctx.fillStyle = "#fff1df";
+    ctx.fillText("SAND VEIL", w * 0.43, stripY + 78);
+    ctx.font = '900 19px Consolas, "Microsoft JhengHei", monospace';
+    ctx.fillStyle = "#ff272a";
+    ctx.fillText("CODE: 09", w * 0.62, stripY + 78);
+    const labels = ["速度", "操控", "視野干擾", "耐久"];
+    labels.forEach((label, i) => {
+      const y = stripY + 112 + i * 24;
+      ctx.font = '800 16px "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = "#d8c7a8";
+      ctx.fillText(label, w * 0.43, y);
+      for (let j = 0; j < 10; j++) {
+        ctx.fillStyle = j < 5 + ((i + 2) % 4) ? "#d91c21" : "rgba(98, 67, 50, 0.7)";
+        ctx.fillRect(w * 0.49 + j * 18, y - 11, 13, 8);
+      }
+    });
+    ctx.globalAlpha = titleIn * fade * (0.55 + Math.sin(time * 0.007) * 0.08);
+    ctx.fillStyle = "#ff1d22";
+    ctx.fillRect(w * 0.02, h * 0.08, w * 0.018, 5);
+    ctx.fillRect(w * 0.045, h * 0.08, w * 0.018, 5);
+    ctx.fillRect(w * 0.07, h * 0.08, w * 0.018, 5);
+    ctx.restore();
+  }
+
+  function drawCoverImage(img, alpha = 1, scaleBoost = 1, driftX = 0, driftY = 0) {
+    const ctx = app.ctx;
+    const iw = img.naturalWidth || img.width || 16;
+    const ih = img.naturalHeight || img.height || 9;
+    const scale = Math.max(app.w / iw, app.h / ih) * scaleBoost;
+    const dw = iw * scale;
+    const dh = ih * scale;
+    ctx.save();
+    ctx.globalAlpha *= Math.max(0, Math.min(1, alpha));
+    ctx.drawImage(img, (app.w - dw) / 2 + driftX, (app.h - dh) / 2 + driftY, dw, dh);
+    ctx.restore();
+  }
+
+  function drawImageInRect(img, x, y, w, h, alpha = 1, mode = "contain") {
+    if (!img || !img.complete || !(img.naturalWidth || img.width)) return;
+    const ctx = app.ctx;
+    const iw = img.naturalWidth || img.width || 16;
+    const ih = img.naturalHeight || img.height || 9;
+    const scale = mode === "cover" ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    ctx.save();
+    ctx.globalAlpha *= Math.max(0, Math.min(1, alpha));
+    ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
     ctx.restore();
   }
 
@@ -2465,20 +2643,17 @@ const CanvasQteTest = (() => {
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    if (view.rarity) {
-      const tag = view.rarity;
-      const tagColor = view.rarity === "稀有" ? "#e8c878" : "#c8d0e0";
-      const tagBg = view.rarity === "稀有" ? "rgba(28, 36, 52, 0.96)" : "rgba(55, 65, 82, 0.55)";
-      fillRoundRect(x + w - 54, y + 8, 48, 20, 6, tagBg);
-      text(tag, x + w - 30, y + 23, 11, tagColor, "900", "center", true);
-    }
     const barH = 4;
     const barGap = 7;
     const barTop = y + h - barH;
     ctx.save();
     beginRoundRectPath(ctx, x, y, w, h, 12);
     ctx.clip();
-    const rarityBar = card.type === "throttle" ? "#8f7d62" : card.type === "hyper_accel" ? "#c45c28" : card.type === "reward_buff" ? "#4a6a9e" : "#5c6f63";
+    const rarityBar = view.rarity === "稀有"
+      ? "#d9a72f"
+      : view.rarity === "普通"
+        ? "#7f90a8"
+        : card.type === "throttle" ? "#8f7d62" : card.type === "hyper_accel" ? "#c45c28" : card.type === "reward_buff" ? "#4a6a9e" : "#5c6f63";
     ctx.fillStyle = rarityBar;
     ctx.fillRect(x, barTop, w, barH);
     ctx.restore();
@@ -2826,7 +3001,8 @@ const CanvasQteTest = (() => {
     }
     const bottomHrY = lastTextBaseline + 30;
     drawHrAt(bottomHrY);
-    button("start-tutorial", "開始遊戲", box.x + box.w / 2 - 110, bottomHrY + 28, 220, 48, false, "start");
+    button("start-tutorial", "開始遊戲", cx - 214, bottomHrY + 28, 200, 48, false, "start");
+    button("debug-boss-transition", "進入 Boss 關", cx + 14, bottomHrY + 28, 200, 48);
   }
 
   function drawBossIntroModal() {
