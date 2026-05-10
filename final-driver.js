@@ -199,6 +199,9 @@ const CanvasQteTest = (() => {
     burstTargetReduction: 0,
     pressureWideBand: false,
     lastRhythmHadMiss: false,
+    aiConfirmOpen: false,
+    aiHoldActive: false,
+    aiHoldStart: 0,
     carMotion: null,
   };
 
@@ -668,6 +671,16 @@ const CanvasQteTest = (() => {
       if (e.button != null && e.button !== 0) return;
       const p = point(e);
       app.mouse = p;
+      if (app.aiConfirmOpen) {
+        const hold = app.zones.aiHoldCircle;
+        if (hold && dist(p.x, p.y, hold.x, hold.y) <= hold.r) {
+          app.aiHoldActive = true;
+          app.aiHoldStart = performance.now();
+        }
+        const close = app.zones.aiClose;
+        if (close && dist(p.x, p.y, close.x, close.y) <= close.r) handleButton("ai-auto-cancel");
+        return;
+      }
       if (app.mode === "card-reward-choice" && !app.rewardPickAnim) {
         const slot = hitRewardSlot(p);
         if (slot >= 0) {
@@ -710,7 +723,11 @@ const CanvasQteTest = (() => {
       { passive: false }
     );
 
-    app.canvas.addEventListener("mouseup", e => {
+    const onCanvasPrimaryUp = e => {
+      if (app.aiHoldActive) {
+        app.aiHoldActive = false;
+        app.aiHoldStart = 0;
+      }
       if (!app.drag) return;
       const p = point(e);
       const stableDrop = app.zones.stableHit || app.zones.stable;
@@ -726,7 +743,10 @@ const CanvasQteTest = (() => {
         advanceCards();
       }
       app.drag = null;
-    });
+    };
+    app.canvas.addEventListener("mouseup", onCanvasPrimaryUp);
+    app.canvas.addEventListener("touchend", onCanvasPrimaryUp);
+    app.canvas.addEventListener("mouseleave", onCanvasPrimaryUp);
   }
 
   function point(e) {
@@ -800,6 +820,18 @@ const CanvasQteTest = (() => {
   }
 
   function handleButton(id) {
+    if (id === "ai-auto-open") {
+      app.aiConfirmOpen = true;
+      app.aiHoldActive = false;
+      app.aiHoldStart = 0;
+      return;
+    }
+    if (id === "ai-auto-cancel") {
+      app.aiConfirmOpen = false;
+      app.aiHoldActive = false;
+      app.aiHoldStart = 0;
+      return;
+    }
     if (id === "start-tutorial") {
       playNormalBgm();
       app.mode = "tutorial-play";
@@ -1044,6 +1076,11 @@ const CanvasQteTest = (() => {
   }
 
   function update(time) {
+    if (app.aiHoldActive && time - app.aiHoldStart >= 3000) {
+      app.aiConfirmOpen = false;
+      app.aiHoldActive = false;
+      app.aiHoldStart = 0;
+    }
     if (isRhythmMode()) {
       for (let i = 0; i < 5; i++) {
         const start = app.qteCircleStarts[i] ?? app.qteStart;
@@ -1545,10 +1582,150 @@ const CanvasQteTest = (() => {
     ctx.fillStyle = COL.pillText;
     ctx.fillText(label, cx, py + pillH / 2 + 0.5);
     ctx.restore();
+    drawAutoBattleButton(cx, cy, R);
+    if (app.aiConfirmOpen) drawAutoBattleConfirmModal(time);
+  }
+
+  function drawAutoBattleButton(cx, cy, faceR) {
+    const w = 126;
+    const h = 38;
+    const x = Math.max(14, cx - w / 2);
+    const y = Math.max(16, cy - faceR - 62);
+    button("ai-auto-open", "自動戰鬥", x, y, w, h, false, "ai");
+  }
+
+  function drawAutoBattleConfirmModal(time) {
+    const ctx = app.ctx;
+    const box = getCenteredModalBox(520, 340);
+    const progress = app.aiHoldActive ? Math.min(1, (time - app.aiHoldStart) / 3000) : 0;
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.62)";
+    ctx.fillRect(0, 0, app.w, app.h);
+    drawModalPanel(box, "#ffd94f");
+    if (progress >= 0.5) drawAutoBattleElectroFrame(box, progress, time);
+    drawAutoBattleCloseButton(box);
+    const cx = box.x + box.w / 2;
+    text("自動戰鬥", cx, box.y + 58, 30, "#ffe082", "1000", "center");
+    text("接下來的卡牌與 QTE 會由 AI 來操作，", cx, box.y + 104, 18, "#e8f0ff", "800", "center");
+    text("讓你可以方便快速通關。", cx, box.y + 132, 18, "#e8f0ff", "800", "center");
+    text("按住下方圓圈，等它填滿後才會生效。", cx, box.y + 170, 15, "rgba(255,232,180,0.92)", "800", "center");
+
+    const r = 42;
+    const holdX = cx;
+    const holdY = box.y + 248;
+    app.zones.aiHoldCircle = { x: holdX, y: holdY, r };
+    ctx.save();
+    ctx.shadowColor = "rgba(255,217,79,0.35)";
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = "rgba(8,16,27,0.95)";
+    ctx.beginPath();
+    ctx.arc(holdX, holdY, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255,217,79,0.55)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(holdX, holdY, r - 2, 0, Math.PI * 2);
+    ctx.stroke();
+    if (progress > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(holdX, holdY, r - 10, 0, Math.PI * 2);
+      ctx.clip();
+      const fillY = holdY + r - 10 - (r * 2 - 20) * progress;
+      const fill = ctx.createLinearGradient(holdX, fillY, holdX, holdY + r);
+      fill.addColorStop(0, progress >= 0.8 ? "#ff2534" : "#fff0a6");
+      fill.addColorStop(1, progress >= 0.8 ? "#111111" : "#d7a72a");
+      ctx.fillStyle = fill;
+      ctx.fillRect(holdX - r, fillY, r * 2, holdY + r - fillY);
+      ctx.restore();
+      ctx.strokeStyle = progress >= 0.8 ? "#ff2633" : "#ffd94f";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(holdX, holdY, r - 10, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.font = '900 16px system-ui, "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff3c4";
+    ctx.fillText("確定", holdX, holdY);
+    ctx.restore();
+    ctx.restore();
+  }
+
+  function drawAutoBattleCloseButton(box) {
+    const ctx = app.ctx;
+    const r = 13;
+    const x = box.x + box.w - 26;
+    const y = box.y + 24;
+    app.zones.aiClose = { x, y, r };
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 232, 180, 0.82)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y - 5);
+    ctx.lineTo(x + 5, y + 5);
+    ctx.moveTo(x + 5, y - 5);
+    ctx.lineTo(x - 5, y + 5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawAutoBattleElectroFrame(box, progress, time) {
+    const ctx = app.ctx;
+    const strong = progress >= 0.8;
+    const count = strong ? 28 : 16;
+    const alpha = strong ? 0.9 : 0.58;
+    ctx.save();
+    ctx.strokeStyle = strong ? `rgba(255, 38, 50, ${alpha})` : `rgba(255, 226, 102, ${alpha})`;
+    ctx.lineWidth = strong ? 1.8 : 1.25;
+    ctx.shadowColor = strong ? "rgba(255, 0, 20, 0.72)" : "rgba(255, 217, 79, 0.52)";
+    ctx.shadowBlur = strong ? 14 : 9;
+    for (let i = 0; i < count; i++) {
+      const seed = i * 18.37 + time * 0.012;
+      const edge = i % 4;
+      let x1;
+      let y1;
+      if (edge === 0) {
+        x1 = box.x + 22 + (box.w - 44) * ((Math.sin(seed) + 1) / 2);
+        y1 = box.y - 3;
+      } else if (edge === 1) {
+        x1 = box.x + box.w + 3;
+        y1 = box.y + 22 + (box.h - 44) * ((Math.sin(seed) + 1) / 2);
+      } else if (edge === 2) {
+        x1 = box.x + 22 + (box.w - 44) * ((Math.sin(seed) + 1) / 2);
+        y1 = box.y + box.h + 3;
+      } else {
+        x1 = box.x - 3;
+        y1 = box.y + 22 + (box.h - 44) * ((Math.sin(seed) + 1) / 2);
+      }
+      const flicker = 0.62 + 0.38 * Math.sin(time * 0.03 + i * 2.1);
+      const len = (strong ? 10 + (i % 3) * 4 : 7 + (i % 3) * 3) * flicker;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 + Math.cos(seed) * len, y1 + Math.sin(seed * 1.3) * len);
+      ctx.stroke();
+      if (strong) {
+        ctx.strokeStyle = `rgba(0, 0, 0, ${0.45 + (i % 2) * 0.18})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(x1 + 1.5, y1 + 1);
+        ctx.lineTo(x1 + Math.cos(seed + 0.8) * (len * 0.7), y1 + Math.sin(seed * 1.1) * (len * 0.7));
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(255, 38, 50, ${alpha})`;
+        ctx.lineWidth = 1.8;
+      }
+    }
+    ctx.restore();
   }
 
   function draw(time) {
     app.zones.buttons = [];
+    if (!app.aiConfirmOpen) {
+      app.zones.aiHoldCircle = null;
+      app.zones.aiClose = null;
+    }
     if (!isRhythmMode()) app.zones.circles = [];
     if (!stabilityDropVisible()) {
       app.zones.stableHit = null;
@@ -1713,6 +1890,7 @@ const CanvasQteTest = (() => {
     ctx.fillRect(0, 0, w, h);
 
     const banner = bossEntranceLayers[0];
+    const titleCode = bossEntranceLayers[1];
     const quotePlate = bossEntranceLayers[2];
     const detailB = bossEntranceLayers[4];
     const mask = bossEntranceLayers[6];
@@ -1728,6 +1906,7 @@ const CanvasQteTest = (() => {
     ctx.rotate(-0.105);
     if (banner) drawImageInRect(banner, -w * 0.14, h * 0.10, w * 1.30, h * 0.50, 0.98 * redIn, "cover");
     ctx.restore();
+    if (titleCode) drawImageInRect(titleCode, w * 0.035, h * 0.105, w * 0.58, h * 0.39, titleIn, "contain");
 
     ctx.save();
     ctx.globalAlpha = 0.34 * t(420);
@@ -3529,10 +3708,11 @@ const CanvasQteTest = (() => {
     app.zones.buttons.push({ id, rect: { x, y, w, h }, disabled });
     const gray = variant === "gray";
     const start = variant === "start";
+    const ai = variant === "ai";
     const fill = disabled
-      ? gray ? "rgba(54,60,70,0.45)" : start ? "rgba(91,34,34,0.52)" : "rgba(20,44,72,0.5)"
-      : gray ? "rgba(70,76,88,0.88)" : start ? "rgba(169,39,42,0.94)" : "rgba(20,44,72,0.9)";
-    const stroke = gray ? "rgba(190,198,210,0.46)" : start ? "rgba(255,188,108,0.88)" : "rgba(105,164,224,0.55)";
+      ? gray ? "rgba(54,60,70,0.45)" : start ? "rgba(91,34,34,0.52)" : ai ? "rgba(52,52,20,0.52)" : "rgba(20,44,72,0.5)"
+      : gray ? "rgba(70,76,88,0.88)" : start ? "rgba(169,39,42,0.94)" : ai ? "rgba(82,70,20,0.94)" : "rgba(20,44,72,0.9)";
+    const stroke = gray ? "rgba(190,198,210,0.46)" : start ? "rgba(255,188,108,0.88)" : ai ? "rgba(255,217,79,0.78)" : "rgba(105,164,224,0.55)";
     if (start && !disabled) {
       const ctx = app.ctx;
       ctx.save();
@@ -3546,7 +3726,18 @@ const CanvasQteTest = (() => {
       app.ctx.fillStyle = "rgba(255, 219, 130, 0.18)";
       app.ctx.fillRect(x + 8, y + 7, w - 16, 6);
     }
-    text(label, x + w / 2, y + 31, 18, disabled ? "rgba(216,236,255,0.55)" : start ? "#fff4d6" : "#d8ecff", start ? "1000" : "800", "center");
+    if (ai) {
+      const ctx = app.ctx;
+      ctx.save();
+      ctx.font = '1000 15px system-ui, "Microsoft JhengHei", sans-serif';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = disabled ? "rgba(216,236,255,0.55)" : "#fff0b8";
+      ctx.fillText(label, x + w / 2, y + h / 2);
+      ctx.restore();
+    } else {
+      text(label, x + w / 2, y + 31, 18, disabled ? "rgba(216,236,255,0.55)" : start ? "#fff4d6" : "#d8ecff", start ? "1000" : "800", "center");
+    }
   }
 
   function hitButton(p) {
