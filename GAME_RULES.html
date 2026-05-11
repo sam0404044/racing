@@ -15,12 +15,12 @@
       --accent: #ffd94f;
       --green: #57e585;
       --red: #ff6b7a;
+      --orange: #ff9a6a;
+      --sand: #f5c96c;
       --code-bg: rgba(255, 217, 79, 0.12);
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -47,11 +47,7 @@
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
     }
 
-    h1,
-    h2,
-    h3 {
-      line-height: 1.25;
-    }
+    h1, h2, h3 { line-height: 1.25; }
 
     h1 {
       margin: 0 0 24px;
@@ -74,26 +70,14 @@
       font-size: 1.15rem;
     }
 
-    p {
-      margin: 0 0 14px;
-      color: var(--text);
-    }
+    h3.sand { color: var(--sand); }
+    h3.orange { color: var(--orange); }
 
-    ul,
-    ol {
-      margin: 0 0 16px;
-      padding-left: 1.35rem;
-    }
+    p { margin: 0 0 14px; color: var(--text); }
 
-    li {
-      margin: 0.22rem 0;
-      color: var(--muted);
-    }
-
-    li::marker {
-      color: var(--accent);
-      font-weight: 800;
-    }
+    ul, ol { margin: 0 0 16px; padding-left: 1.35rem; }
+    li { margin: 0.22rem 0; color: var(--muted); }
+    li::marker { color: var(--accent); font-weight: 800; }
 
     code {
       padding: 0.12em 0.35em;
@@ -119,6 +103,74 @@
       background: rgba(255, 217, 79, 0.08);
       color: #f8e8ad;
     }
+
+    .note.boss {
+      border-left-color: var(--orange);
+      background: rgba(255, 154, 106, 0.08);
+      color: #ffd0b0;
+    }
+
+    .note.warn {
+      border-left-color: var(--red);
+      background: rgba(255, 107, 122, 0.08);
+      color: #ffb8c0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 24px;
+      font-size: 0.96rem;
+    }
+
+    table th, table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    table th {
+      color: var(--accent);
+      font-weight: 700;
+      background: rgba(255, 217, 79, 0.05);
+    }
+
+    table td { color: var(--muted); }
+    table td strong { color: var(--text); font-weight: 700; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75em;
+      font-weight: 700;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+
+    .tag.cmd  { background: rgba(200, 100, 40, 0.25); color: #ffb070; border: 1px solid rgba(200, 100, 40, 0.5); }
+    .tag.team { background: rgba(80, 160, 120, 0.25); color: #7be0a0; border: 1px solid rgba(80, 160, 120, 0.5); }
+    .tag.boss { background: rgba(255, 90, 60, 0.25); color: #ff8060; border: 1px solid rgba(255, 90, 60, 0.5); }
+
+    .circuit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin: 16px 0 24px;
+    }
+
+    .circuit-card {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .circuit-card .icon { font-size: 1.6rem; }
+    .circuit-card .name { color: var(--accent); font-weight: 800; margin: 4px 0; }
+    .circuit-card .desc { color: var(--muted); font-size: 0.9rem; }
+    .circuit-card .sand { color: var(--sand); font-size: 0.85rem; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -127,152 +179,206 @@
       <h1>最後車手 / Final Driver 遊戲規則</h1>
 
       <h2>遊戲目標</h2>
-      <p class="lead">賽道共有 5 位車手，玩家從最後一名（第 5 名）開始，目標是透過卡牌累積加速值、完成超車 QTE，逐步超越對手並取得第 1 名。</p>
-      <p>每次成功超車會讓名次前進 1 名。當超車後到達第 1 名時，遊戲進入最終勝利。</p>
+      <p class="lead">賽道共有 5 位車手，玩家從最後一名（第 5 名）開始，目標是透過卡牌指揮車手累積速度、完成超車 QTE，逐步超越對手並擊敗 Boss 取得第 1 名。</p>
+      <p>遊戲分為四個教學關卡與一個正式關卡。教學關專注教會玩家每個系統（打牌、QTE、賽道差異、防守 + Pass）；正式關卡則整合所有系統，加上回合間的卡牌選擇與 Boss 戰。</p>
 
-      <h2>基本流程</h2>
+      <h2>核心循環</h2>
       <ol>
-        <li>開場彈窗顯示遊戲介紹。</li>
-        <li>玩家進入第一回合卡牌教學。</li>
-        <li>打出加速牌累積加速值。</li>
-        <li>將一張牌放入穩定性區域。</li>
-        <li>加速值達到超車門檻後，進入超車準備。</li>
-        <li>完成超車 QTE 後，名次前進。</li>
-        <li>進入防守 QTE，守住領先位置。</li>
-        <li>每完成一組超車與防守後，進入進站獎勵。</li>
-        <li>重複流程直到名次到達第 1 名。</li>
+        <li>每回合發手牌、刷新動力。</li>
+        <li>打出指令牌累積速度、車隊牌則留場提供持續效果。</li>
+        <li><strong>速度 &gt; 對手才能超車</strong>：不同道 → 直接超車；同道 → 強制 QTE 超車。</li>
+        <li>速度不夠 → 按 <strong>Pass</strong>；若後車速度 &gt; 你的速度,進入<strong>防守 QTE</strong>。</li>
+        <li>結算名次後進入下一回合。</li>
       </ol>
+      <p class="note"><strong>核心規則:</strong> 速度必須<strong>嚴格大於</strong>對手才能超車 —— 平手不算。這意味著你必須先靠打牌堆速度,才能挑戰超車。所有關卡通用,不只第五關。</p>
+      <p class="note"><strong>速度結算:</strong> 每回合結束(超車成功 / Pass / 防守 等)<strong>速度都會歸零</strong>,下回合從 0 重新累積。例外:第五關車隊牌「維持胎溫」會讓結算後保留 +1 速度。</p>
+      <p class="note warn"><strong>數值規則:</strong> 此遊戲所有算式都採用<strong>無條件捨去</strong>(向下取整)。包括但不限於:賽道速度加成(×1.25 / ×0.9 等)、沙暴遮蔽張數(50% / 70%)、所有牌效果的數值乘除。例如:速度 7 在內彎 ×1.25 = 8(捨去 .75);手牌 5 張被沙暴遮 50% = 2 張(捨去 .5)。</p>
 
       <h2>名次規則</h2>
       <ul>
-        <li>初始名次：<code>5 / 5</code>（共 5 位車手，從最後一名開始）</li>
-        <li>成功超車：名次前進 1 名。</li>
-        <li>超車後到達第 1 名：遊戲勝利。</li>
+        <li>初始名次：<code>5 / 5</code>（共 5 位車手，從最後一名開始）。</li>
+        <li><strong>成功超車</strong>：名次前進 1 名。</li>
+        <li><strong>防守失敗</strong>：名次後退 1 名（最低為第 5 名）。</li>
+        <li>到達第 1 名（擊敗 Boss）= 遊戲勝利。</li>
       </ul>
-
-      <h2>加速值規則</h2>
-      <ul>
-        <li>基礎超車門檻為 <code>8</code>。</li>
-        <li>加速條顯示上限為 <code>10</code>，但實際加速值可以超過門檻。</li>
-        <li>部分獎勵效果可以降低有效超車門檻，但最低不低於 <code>5</code>。</li>
-        <li>加速值由「保留加速值」與本輪打出的加速牌共同計算。</li>
-      </ul>
-
-      <h3>加速值來源</h3>
-      <ul>
-        <li><code>加速</code>：<code>+2</code></li>
-        <li><code>超加速</code>：<code>+3</code></li>
-        <li><code>失誤</code>：<code>+0</code></li>
-        <li><code>踩下油門</code>：本回合所有加速牌額外 <code>+1</code></li>
-      </ul>
-
-      <h2>加速值保留與歸零</h2>
-      <ul>
-        <li>超車成功後：加速值歸零，打出區清空。</li>
-        <li>防守成功後：保留目前加速值數字，但打出區卡牌會清空。</li>
-        <li>防守失敗後：加速值歸零，打出區清空。</li>
-      </ul>
+      <p class="note">第 5 名後方沒有追車，<strong>不會觸發防守</strong>，也不會繼續下掉。</p>
 
       <h2>卡牌規則</h2>
-      <h3>起始牌庫</h3>
-      <ul>
-        <li><code>加速</code> x 8</li>
-        <li><code>失誤</code> x 2</li>
-      </ul>
+      <h3>卡牌類別</h3>
+      <table>
+        <thead><tr><th>類別</th><th>定位</th><th>消失時機</th></tr></thead>
+        <tbody>
+          <tr><td><strong>指令牌</strong> <span class="tag cmd">CMD</span></td><td>立即指揮車子的動作（加速、踩油門、過彎）</td><td>打出後立刻消失</td></tr>
+          <tr><td><strong>車隊牌</strong> <span class="tag team">TEAM</span></td><td>影響道、狀態或駕駛特性，留場持續生效</td><td>依牌面所述（永久 / 名次上升時 / 一次性 / 回合結束）</td></tr>
+        </tbody>
+      </table>
 
       <h3>出牌</h3>
       <ul>
-        <li>玩家每輪會抽 5 張手牌。</li>
-        <li>卡牌可以拖曳到打出區或穩定性區域。</li>
-        <li>打到打出區的加速牌會增加加速值。</li>
-        <li>放到穩定性區域的牌會增加穩定性，用於防守 QTE。</li>
-        <li><code>失誤</code> 牌不能提供加速值。</li>
+        <li>每張牌有 <code>cost</code>，從動力扣除。</li>
+        <li>拖曳到自己的道 → 結算效果（指令牌加速 / 車隊牌進場）。</li>
+        <li>拖曳到其他道 → 換道（一律消耗 1 動力，不論卡牌 cost）。</li>
+        <li>動力每回合刷新。</li>
       </ul>
 
-      <h3>第一回合教學</h3>
+      <h2>QTE 規則</h2>
+      <h3>超車 QTE</h3>
       <ul>
-        <li>發 5 張牌。</li>
-        <li>玩家需要打出 4 張加速牌，並放 1 張到穩定性區域。</li>
-        <li>加速門檻暫定為 8。</li>
+        <li>進入時出現 5 個節奏圓圈，玩家需在圈收縮接近拍點時點擊。</li>
+        <li>判定：<code>Perfect</code>（2 分）/ <code>Good</code>（1 分）/ <code>Miss</code>（0 分）。</li>
+        <li>滿分 10 分，達 6 分（門檻）算超車成功。</li>
+        <li>第二圈後可能散佈到不同位置；不會出現在邊緣或狀態 UI 上。</li>
       </ul>
 
-      <h3>第一輪防守前手牌</h3>
+      <h3>防守 QTE</h3>
       <ul>
-        <li>發 5 張牌。</li>
-        <li>內容包含 3 張加速牌與 2 張失誤牌。</li>
-        <li>即使打出所有加速牌，也只有 6 點加速值，未必能直接通過超車門檻。</li>
+        <li>玩家移動滑鼠，讓黃色游標追住綠色安全區。</li>
+        <li>游標在安全區內 → 進度增加；在完美區（綠區中央）→ 增加更快；在紅區 → 進度下降。</li>
+        <li>撐到時間結束或進度推滿 = 防守成功。</li>
       </ul>
 
-      <h2>超車 QTE 規則</h2>
+      <h2 id="stage5">關卡 5：沙暴登頂</h2>
+      <p class="lead">第一個正式關卡。沒有手把手教學、整合前 4 關全部系統，並引入<strong>排名循環</strong>、<strong>賽道循環</strong>、<strong>三選一卡牌成長</strong>與<strong>Boss 戰</strong>。</p>
+
+      <h3>對手陣容</h3>
+      <table>
+        <thead><tr><th>對手</th><th>速度</th><th>行為</th><th>定位</th></tr></thead>
+        <tbody>
+          <tr><td><strong>破風者</strong></td><td>6</td><td>玩家動作 2 次後切到玩家道</td><td>切入手 — 強制 QTE 練習</td></tr>
+          <tr><td><strong>沙塵旅人</strong></td><td>7</td><td>動作 2、4 次後各加速 +1</td><td>阻擋手 — 持續壓制</td></tr>
+          <tr><td><strong>老鷹</strong></td><td>5</td><td>每次動作後加速 +1（最多 3 次）</td><td>節奏壓制 — 動作越多他越快</td></tr>
+          <tr><td><strong>沙暴領主</strong> <span class="tag boss">BOSS</span></td><td>8</td><td>動作 3 次後切到玩家道</td><td>盲牌沙漠的主宰</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sand">賽道循環</h3>
+      <p><strong>每一輪結束</strong>（超車成功 / 未超車 / Pass / 防守結束）都會切換到下一段賽道。第 4 段跑完循環回第 1 段。進入 Boss 戰時鎖定 Boss 戰專用賽道。</p>
+      <div class="circuit-grid">
+        <div class="circuit-card">
+          <div class="icon">🛣</div>
+          <div class="name">1. 正常 3 道</div>
+          <div class="desc">標準起始賽道</div>
+          <div class="sand">▮▯▯▯ 沙暴微弱</div>
+        </div>
+        <div class="circuit-card">
+          <div class="icon">▮</div>
+          <div class="name">2. 狹窄 1 道</div>
+          <div class="desc">強制 QTE 超車</div>
+          <div class="sand">▮▯▯▯ 沙暴微弱</div>
+        </div>
+        <div class="circuit-card">
+          <div class="icon">↪</div>
+          <div class="name">3. 彎道 2 道</div>
+          <div class="desc">內彎 ×1.25 / 外彎 ×0.9</div>
+          <div class="sand">▮▮▯▯ 沙暴中等</div>
+        </div>
+        <div class="circuit-card">
+          <div class="icon">🛣</div>
+          <div class="name">4. 正常 3 道</div>
+          <div class="desc">沙暴猛烈：cost 被遮蔽</div>
+          <div class="sand">▮▮▮▯ 沙暴強</div>
+        </div>
+        <div class="circuit-card" style="border-color: rgba(255,154,106,0.5);">
+          <div class="icon">⚠</div>
+          <div class="name">B1. 沙暴峽谷</div>
+          <div class="desc">Boss 戰 — 盲牌沙漠 3 道</div>
+          <div class="sand">▮▮▮▮ 沙暴滿</div>
+        </div>
+        <div class="circuit-card" style="border-color: rgba(255,154,106,0.5);">
+          <div class="icon">☷</div>
+          <div class="name">B2. 沙暴峰會</div>
+          <div class="desc">Boss 戰 — 雙線高速彎</div>
+          <div class="sand">▮▮▮▮ 沙暴滿</div>
+        </div>
+      </div>
+      <p class="note">右上角會顯示<strong>下一段賽道預告</strong>，方便提前規劃手牌與動線。</p>
+
+      <h3 class="sand">沙暴強度</h3>
+      <table>
+        <thead><tr><th>強度</th><th>效果</th></tr></thead>
+        <tbody>
+          <tr><td>▮▯▯▯ 微弱(c1)</td><td>純視覺氛圍,不影響玩法</td></tr>
+          <tr><td>▮▮▯▯ 中等(c2)</td><td>每回合固定遮 <strong>1 張</strong>手牌的 cost</td></tr>
+          <tr><td>▮▮▮▯ 強(c3)</td><td>每回合遮<strong>手牌的 50%</strong>(無條件捨去,如 5 張 → 2 張)</td></tr>
+          <tr><td>▮▮▮▯ 強(c4)</td><td>每回合遮<strong>手牌的 70%</strong>(無條件捨去,如 5 張 → 3 張)</td></tr>
+          <tr><td>▮▮▮▮ 滿(Boss)</td><td><strong>全手牌盲牌</strong>,打完前 2 張後其他牌才顯示</td></tr>
+        </tbody>
+      </table>
+      <p class="note">遮蔽的張數在<strong>回合開始時固定</strong>,選好就不會變動;但每回合會重新隨機選擇要遮哪幾張。</p>
+
+      <h3>排名循環</h3>
       <ul>
-        <li>進入超車準備時，若加速值達到有效門檻，就可以開始超車。</li>
-        <li>超車 QTE 會出現 5 個節奏圈。</li>
-        <li>玩家需要在圈收縮接近拍點時點擊。</li>
-        <li>判定結果包含：
-          <ul>
-            <li><code>Perfect</code></li>
-            <li><code>Good</code></li>
-            <li><code>Miss</code></li>
-          </ul>
-        </li>
-        <li>點擊判定範圍是外圈內部，不需要精準點在中心。</li>
-        <li>第二圈後，QTE 圈可能會散佈到不同位置。</li>
-        <li>QTE 圈會避開畫面邊緣、狀態面板與左下角表情 UI。</li>
+        <li>玩家從第 5 名起，前方依序有對手 + Boss（Boss 永遠在第 1 名）。</li>
+        <li>當前對手從<strong>前方非 Boss 對手</strong>中隨機抽選。</li>
+        <li><strong>剛超過你的對手 = 必定是你下回合的對手</strong>（不隨機，直接指定）。</li>
+        <li>同理，後方追車也是從已被你超過的對手中抽選。</li>
+        <li><strong>Pass / 超車失敗時，前方非 Boss 對手與後方對手會各自洗牌一次</strong> —— 你下回合可能遇到不同的對手 / 追車（這代表場上其他車手互相超車的賽事流動）。</li>
+        <li>到達第 2 名 → 前方只剩 Boss → 進入 Boss 戰。</li>
       </ul>
 
-      <h2>防守 QTE 規則</h2>
+      <h3 class="orange">Boss 戰：沙暴領主</h3>
       <ul>
-        <li>防守時玩家需要移動滑鼠，讓黃色游標追住綠色安全區。</li>
-        <li>游標在綠色安全區內時，防守進度會增加。</li>
-        <li>游標在中心完美區內時，防守進度增加更快。</li>
-        <li>游標在紅色危險區時，防守進度會下降。</li>
-        <li>撐到時間結束或把進度條推滿即可完成防守判定。</li>
+        <li>Boss 速度 <strong>8</strong>,有 <strong>3 點專注值</strong>(不是血量)。</li>
+        <li>每次成功超車削減 1 點專注,但 Boss 立刻反超回來。</li>
+        <li>專注值 &gt; 0 時,玩家無法真正超過 Boss。</li>
+        <li>專注值 = 0 → Boss 露出<strong>破綻</strong>,下次成功超車 = 通關!</li>
+        <li><strong>Boss 戰防守失敗 → 退出 Boss 戰</strong>:名次掉到第 3,下回合對手 = 剛超過你的人(一般車手,不是 Boss);賽段切回 c1~c4 隨機一段;BGM 切回正常。需要再打到第 2 名重挑 Boss。</li>
+        <li><strong>Boss 專注值會保留</strong>:被打出 Boss 戰後,下次回來 Boss 戰時,從上次扣到的專注值繼續打,不會重置。</li>
+        <li><strong>Boss 戰賽段也會循環</strong>:Boss 戰有兩個專用賽段(沙暴峽谷 / 沙暴峰會),每一輪結束(Pass / 削減專注 / 防守 等)切換。</li>
       </ul>
+      <div class="note boss">
+        <strong>沙暴領主的特殊機制：</strong>每回合<strong>前 2 張打出的牌</strong>為盲牌 — 你看不到牌名、cost、效果，只能憑記憶或盲打。
+      </div>
 
-      <h3>穩定性影響</h3>
+      <h3>三選一：場上發生的事 + 車手成長</h3>
+      <p>每次<strong>真正成功超車一個對手</strong>後(不含扣 Boss 專注),跳出三張牌讓你選 1 張。</p>
       <ul>
-        <li>穩定性越高，防守越容易。</li>
-        <li>穩定性會加寬安全區。</li>
-        <li><code>穩定底盤</code> 獎勵也會讓綠區變寬、紅區變窄。</li>
+        <li>每次必有 1 張指令牌 + 1 張車隊牌 + 1 張隨機,保證類別變化。</li>
+        <li><strong>永久型車隊牌</strong>(工程師調校、大數據預測、冷靜!)<strong>選後直接進場</strong>,效果立即生效。</li>
+        <li><strong>非永久型車隊牌與所有指令牌</strong>:進牌庫,需要在回合中打出才生效。</li>
+        <li>沒選的牌會放掉,不入牌庫。</li>
+        <li>可以按「略過」不拿。</li>
       </ul>
 
-      <h2>獎勵規則</h2>
-      <p>每完成一組超車與防守後，進入進站調校獎勵畫面。</p>
+      <h3>起始牌庫與抽牌</h3>
+      <p>第五關玩家起始牌庫跟前 4 關一致,只有基礎卡牌:</p>
       <ul>
-        <li>每次提供 3 張獎勵卡。</li>
-        <li>前 2 張為普通獎勵。</li>
-        <li>第 3 張固定為稀有獎勵。</li>
-        <li>玩家可以選擇 1 張加入牌庫。</li>
-        <li>玩家也可以按「略過」不拿獎勵。</li>
+        <li><code>加速</code> × 6 (cost 1,速度 +2)</li>
+        <li><code>超加速</code> × 2 (cost 2,速度 +6)</li>
+        <li><code>失誤</code> × 2 (cost 0,無效果)</li>
       </ul>
+      <p>每回合手牌 <strong>5 張</strong>。採用<strong>真實牌堆機制</strong>:打出的牌進棄牌堆,抽完才把棄牌堆洗回牌堆,意味著每張卡(包括失誤)在循環中只會出現該有的次數,可能會經歷「沒失誤的爽回合」與「全失誤的爛回合」。</p>
+      <p>三選一獎勵會將更強的牌(指令 / 車隊)永久加入牌庫,讓你逐漸建立戰術組合。</p>
 
-      <h2>普通獎勵</h2>
-      <ul>
-        <li><code>超加速</code>：速度，效果為 <code>+3</code> 速度。</li>
-        <li><code>節奏預判</code>：超車 QTE，最後 1 顆圓圈變慢，Perfect 區增加。</li>
-        <li><code>穩定底盤</code>：防守 QTE，綠區變寬、紅區變窄。</li>
-      </ul>
+      <h3>第五關獎勵牌池</h3>
+      <p>每次成功超車後從以下牌池中抽 3 張(1 指令 + 1 車隊 + 1 隨機)讓你選 1 張永久加入牌庫。</p>
+      <h4 style="color:#ffb070;">指令牌 <span class="tag cmd">CMD</span></h4>
+      <table>
+        <thead><tr><th>卡名</th><th>cost</th><th>效果</th></tr></thead>
+        <tbody>
+          <tr><td>渦輪增壓</td><td>1</td><td>速度 +3</td></tr>
+          <tr><td>完美過彎</td><td>2</td><td>速度 +5，並換到任意道</td></tr>
+          <tr><td>風阻減免</td><td>0</td><td>速度 +1</td></tr>
+          <tr><td>順風</td><td>1</td><td>速度 +2，下一張牌 cost -1</td></tr>
+          <tr><td>孤注一擲</td><td>1</td><td>速度 +6，下回合手牌 -1</td></tr>
+        </tbody>
+      </table>
 
-      <h2>稀有獎勵</h2>
-      <ul>
-        <li><code>踩下油門</code>：強化，本回合所有加速牌 <code>+1</code> 速度。</li>
-        <li><code>爆發踩點</code>：超車 QTE，每次 Perfect 額外推進超車目標。</li>
-        <li><code>精準轉向</code>：防守 QTE，防守指標晃動幅度降低。</li>
-        <li><code>專注模式</code>：通用 QTE，本回合所有 QTE 節奏變慢 15%。</li>
-        <li><code>壓力反應</code>：通用 QTE，若上一拍 Miss，下一拍判定區大幅放寬。</li>
-      </ul>
+      <h4 style="color:#7be0a0;">車隊牌 <span class="tag team">TEAM</span></h4>
+      <table>
+        <thead><tr><th>卡名</th><th>cost</th><th>持續效果</th><th>棄牌時機</th></tr></thead>
+        <tbody>
+          <tr><td>工程師調校</td><td>2</td><td>動力上限 +1</td><td>永久</td></tr>
+          <tr><td>維持胎溫</td><td>1</td><td>結算後保留 +1 速度（不歸零）</td><td>名次上升時棄</td></tr>
+          <tr><td>大數據預測</td><td>1</td><td>顯示對手下回合動作</td><td>永久</td></tr>
+          <tr><td>後援車隊</td><td>2</td><td>防守失敗時保住名次（一次）</td><td>觸發後棄</td></tr>
+          <tr><td>冷靜!</td><td>1</td><td>QTE 容錯範圍 +20%</td><td>永久</td></tr>
+        </tbody>
+      </table>
 
-      <h2>教學頁規則</h2>
-      <p>目前教學總數為 5 頁：</p>
-      <ol>
-        <li>打出加速牌</li>
-        <li>穩定性區域</li>
-        <li>失誤牌</li>
-        <li>超車 QTE</li>
-        <li>阻擋 QTE</li>
-      </ol>
-
-      <p class="note"><code>超車準備</code> 使用教學彈窗的視覺樣式，但不列入教學總數，也不顯示頁碼。</p>
+      <p class="note warn">
+        <strong>注意：</strong>v0.5 仍處於骨架階段，部分視覺效果（如 cost 沙塵遮蔽、大數據預測 UI、Boss cut-in 多圖層動畫）尚未完整實作，將在後續版本補上。
+      </p>
     </article>
   </main>
 </body>
