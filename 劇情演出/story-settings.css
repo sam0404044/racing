@@ -1,0 +1,118 @@
+:root {
+  color: #f3f0ea;
+  background: #101316;
+  font-family: "Microsoft JhengHei", "Microsoft YaHei", "PingFang TC", "Noto Sans TC", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 14% 12%, rgba(93, 125, 138, 0.24), transparent 28%),
+    linear-gradient(135deg, #11161a 0%, #171413 100%);
+}
+
+.settings-page {
+  width: min(1120px, calc(100% - 72px));
+  margin: 0 auto;
+  padding: 56px 0;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 36px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 38px;
+  letter-spacing: 0;
+}
+
+.back-link {
+  color: #f3f0ea;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 8px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.setting-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(360px, 46%);
+  gap: 48px;
+  align-items: center;
+  padding: 30px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.setting-row:last-child {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.setting-row h2 {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.setting-row p {
+  margin-top: 10px;
+  color: rgba(243, 240, 234, 0.68);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.range-control {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+
+.range-control span {
+  font-size: 30px;
+  font-weight: 900;
+  text-align: right;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: #d8c7a4;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  min-height: 58px;
+  border: 0;
+  color: #f3f0ea;
+  background: rgba(255, 255, 255, 0.08);
+  font: inherit;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.segmented button.active {
+  color: #151515;
+  background: #d8c7a4;
+  font-weight: 900;
+}

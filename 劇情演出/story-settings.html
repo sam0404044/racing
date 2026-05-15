@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>劇情設定</title>
+  <link rel="stylesheet" href="story-settings.css">
+</head>
+<body>
+  <main class="settings-page">
+    <header class="settings-header">
+      <a class="back-link" href="劇情演出階段.html">返回劇情</a>
+      <h1>劇情設定</h1>
+    </header>
+
+    <section class="setting-row">
+      <div>
+        <h2>文本顯示速度</h2>
+        <p>數值越高，文字出現越快。</p>
+      </div>
+      <label class="range-control">
+        <span id="textSpeedValue">10</span>
+        <input id="textSpeed" type="range" min="1" max="10" step="1">
+      </label>
+    </section>
+
+    <section class="setting-row">
+      <div>
+        <h2>自動播放間隔時間</h2>
+        <p>文字顯示完成後，等待幾秒進入下一句。0 代表關閉。</p>
+      </div>
+      <label class="range-control">
+        <span id="autoIntervalValue">0</span>
+        <input id="autoInterval" type="range" min="0" max="12" step="1">
+      </label>
+    </section>
+
+    <section class="setting-row">
+      <div>
+        <h2>文本跳過模式</h2>
+        <p>控制快速跳過時是否允許跳過未讀內容。</p>
+      </div>
+      <div class="segmented" role="group" aria-label="文本跳過模式">
+        <button type="button" data-skip-mode="all">全部</button>
+        <button type="button" data-skip-mode="read">僅已讀</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="story-settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>劇情演出</title>
+  <link rel="stylesheet" href="story-stage.css">
+</head>
+<body>
+  <main class="story-shell">
+    <a class="settings-link" href="story-settings.html" aria-label="設定">⚙</a>
+    <canvas id="storyCanvas" aria-label="劇情演出畫面"></canvas>
+    <iframe
+      id="archiveFrame"
+      class="archive-frame"
+      title="角色圖鑑表"
+      src="about:blank"
+      hidden
+    ></iframe>
+  </main>
+  <script src="story-stage.js"></script>
+</body>
+</html>
