@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>最後車手 / Final Driver 遊戲規則</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06101d;
+      --panel: rgba(8, 18, 32, 0.92);
+      --text: #e8f0ff;
+      --muted: #b7c8dd;
+      --line: rgba(105, 164, 224, 0.35);
+      --accent: #ffd94f;
+      --green: #57e585;
+      --red: #ff6b7a;
+      --orange: #ff9a6a;
+      --sand: #f5c96c;
+      --neon: #ff5cf2;
+      --code-bg: rgba(255, 217, 79, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(80, 140, 220, 0.18), transparent 36rem),
+        linear-gradient(180deg, #06101d 0%, #101b2c 54%, #05090d 100%);
+      color: var(--text);
+      font-family: system-ui, "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+      line-height: 1.75;
+    }
+
+    main {
+      width: min(920px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    article {
+      padding: clamp(24px, 4vw, 44px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+    }
+
+    h1, h2, h3 { line-height: 1.25; }
+
+    h1 {
+      margin: 0 0 24px;
+      color: var(--accent);
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      letter-spacing: 0.03em;
+    }
+
+    .version-tag {
+      display: inline-block;
+      margin-left: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(255, 92, 242, 0.18);
+      color: var(--neon);
+      font-size: 0.9rem;
+      vertical-align: middle;
+      border: 1px solid rgba(255, 92, 242, 0.4);
+    }
+
+    .companion-link {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: rgba(105, 164, 224, 0.12);
+      color: #b7c8dd;
+      text-decoration: none;
+      font-size: 0.95rem;
+      border: 1px solid rgba(105, 164, 224, 0.3);
+    }
+
+    .companion-link:hover { background: rgba(105, 164, 224, 0.2); }
+
+    h2 {
+      margin: 40px 0 14px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      color: #dfeeff;
+      font-size: 1.55rem;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      color: var(--green);
+      font-size: 1.15rem;
+    }
+
+    h3.neon { color: var(--neon); }
+
+    p { margin: 0 0 14px; color: var(--text); }
+
+    ul, ol { margin: 0 0 16px; padding-left: 1.35rem; }
+    li { margin: 0.22rem 0; color: var(--muted); }
+    li::marker { color: var(--accent); font-weight: 800; }
+
+    code {
+      padding: 0.12em 0.35em;
+      border: 1px solid rgba(255, 217, 79, 0.18);
+      border-radius: 0.45em;
+      background: var(--code-bg);
+      color: #ffe89a;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    .lead {
+      color: #f4f8ff;
+      font-size: 1.08rem;
+      font-weight: 700;
+    }
+
+    .note {
+      margin-top: 28px;
+      padding: 16px 18px;
+      border-left: 4px solid var(--accent);
+      border-radius: 12px;
+      background: rgba(255, 217, 79, 0.08);
+      color: #f8e8ad;
+    }
+
+    .note.warn {
+      border-left-color: var(--red);
+      background: rgba(255, 107, 122, 0.08);
+      color: #ffb8c0;
+    }
+
+    .note.neon {
+      border-left-color: var(--neon);
+      background: rgba(255, 92, 242, 0.08);
+      color: #ffb8f5;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 24px;
+      font-size: 0.96rem;
+    }
+
+    table th, table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    table th {
+      color: var(--accent);
+      font-weight: 700;
+      background: rgba(255, 217, 79, 0.05);
+    }
+
+    table td { color: var(--muted); }
+    table td strong { color: var(--text); font-weight: 700; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75em;
+      font-weight: 700;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+
+    .tag.cmd  { background: rgba(200, 100, 40, 0.25); color: #ffb070; border: 1px solid rgba(200, 100, 40, 0.5); }
+    .tag.team { background: rgba(80, 160, 120, 0.25); color: #7be0a0; border: 1px solid rgba(80, 160, 120, 0.5); }
+    .tag.new  { background: rgba(255, 92, 242, 0.25); color: var(--neon); border: 1px solid rgba(255, 92, 242, 0.5); }
+
+    .pillar-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 16px 0 24px;
+    }
+
+    .pillar-card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .pillar-card .icon { font-size: 1.6rem; }
+    .pillar-card .name { color: var(--accent); font-weight: 800; margin: 6px 0; }
+    .pillar-card .desc { color: var(--muted); font-size: 0.9rem; }
+
+    a { color: #8ec5ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>最後車手 / Final Driver 遊戲規則<span class="version-tag">v0.6 — 霓虹多線街區</span></h1>
+
+      <p class="lead">這一版的核心設計從「<strong>被限制的速度取得、計算超車門檻</strong>」轉向「<strong>加速容易、反而要規劃降速</strong>」。玩家不再卡在「速度不夠 → 超不過 → 下回合歸零」的挫敗迴圈，而是全程在「踩 vs 收」之間做決策。</p>
+
+      <p>
+        <a class="companion-link" href="GAME_MECHANICS.html">→ 機制細節（GAME_MECHANICS）</a>
+        <a class="companion-link" href="TRACK_DESIGN.html">→ 賽道設計（TRACK_DESIGN）</a>
+        <a class="companion-link" href="OPPONENT_DESIGN.html">→ 對手設計（OPPONENT_DESIGN）</a>
+        <a class="companion-link" href="CARD_DESIGN.html">→ 卡牌設計（CARD_DESIGN）</a>
+      </p>
+      <p style="margin-top: -8px; color: var(--muted); font-size: 0.9rem;">想看精確數值、公式、卡牌池請看 MECHANICS；對手與 AI 細節見 OPPONENT_DESIGN、卡牌細節見 CARD_DESIGN、新賽段提案見 TRACK_DESIGN。</p>
+
+      <p class="note neon"><strong>關卡架構：</strong>此版本暫停教學關卡 1–4 的迭代，新增單一沙盒關卡「<strong>霓虹多線街區</strong>」作為新核心機制的測試場。每張牌都會觸發事件，完全沒有「無事發生」的回合。</p>
+
+      <h2>遊戲目標</h2>
+      <p>賽道共有 4 位車手，玩家從最後一名（第 4 名）開始。透過打牌指揮車手累積速度、操作三種 QTE，逐步超越對手取得第 1 名。</p>
+
+      <h2>三大核心機制</h2>
+      <div class="pillar-grid">
+        <div class="pillar-card">
+          <div class="icon">🏁</div>
+          <div class="name">多道超車</div>
+          <div class="desc">所有超車都要 QTE；對手有專注值，要多次磨光才甩開</div>
+        </div>
+        <div class="pillar-card">
+          <div class="icon">⚡</div>
+          <div class="name">三種 QTE</div>
+          <div class="desc">超車（節奏點擊）／ 彎道（WASD 串）／ 防守(追游標)</div>
+        </div>
+        <div class="pillar-card">
+          <div class="icon">🛞</div>
+          <div class="name">輪胎資源</div>
+          <div class="desc">5 層胎 = 血量，主動衝速與 QTE 失敗都會扣胎</div>
+        </div>
+      </div>
+
+      <h2>行動與回合</h2>
+      <ul>
+        <li><strong>一個行動</strong>：玩家打一張牌或換道，就算一個行動。每個行動會走完五步驟流程（含對手回合、賽道結算、切段）。</li>
+        <li><strong>一回合</strong>：從發手牌開始，直到玩家按超車 / Pass 為止，叫一回合。每回合通常包含多個行動。</li>
+      </ul>
+      <p class="note">這兩個層次很重要：<strong>切賽段、賽道結算</strong>是每行動一次；<strong>速度重置、尾流可用</strong>是每回合一次。</p>
+
+      <h2>核心循環</h2>
+      <ol>
+        <li>每回合速度<strong>重置為起始值</strong>（依車隊牌 tireWarm 等加成、預設 10）、發手牌。</li>
+        <li>每個玩家動作（拖牌、按超車、按 PASS）執行<strong>五步驟流程</strong>：玩家行動 → 對手行動 → 檢查尾流 → 賽道結算 → 切下個賽段。</li>
+        <li>跟對手<strong>同道時 +30 速</strong>（每回合一次、超車/PASS 進新回合重置）。</li>
+        <li>想超車：<strong>不同道</strong> + 速度 &gt; 對手 → 按「超車」鈕 → 超車 QTE → <strong>成功 = 扣對手 1 專注，專注 = 0 時下次成功才名次 +1</strong>。</li>
+        <li>進到「彎道」類賽段且<strong>玩家</strong>速度 &gt; 限速 → 觸發彎道 QTE。</li>
+        <li>不想衝就按 <strong>Pass</strong> → 直接進防守 QTE。</li>
+        <li>結算名次後進入下一回合（speed/手牌重置、賽段保留接續）。</li>
+      </ol>
+      <p class="note"><strong>核心規則：</strong>速度必須<strong>嚴格大於</strong>對手才能挑戰超車——平手不算。<strong>同道不能超車</strong>——要先換到不同道、再追上速度。</p>
+
+      <h2>名次規則</h2>
+      <ul>
+        <li>初始名次：<code>4 / 4</code>（共 4 位車手，從最後一名開始）。</li>
+        <li><strong>成功超車 + 對手專注 = 0</strong>：名次前進 1 名（詳見下節）。</li>
+        <li><strong>防守 QTE 失敗</strong>：名次後退 1 名（最低為第 4 名）。</li>
+        <li>到達第 1 名 = 遊戲勝利。</li>
+      </ul>
+      <p class="note">第 4 名後方沒有追車，<strong>Pass 後不會觸發防守</strong>，也不會繼續下掉。</p>
+
+      <h2>對手專注值 <span class="tag new">NEW</span></h2>
+      <p>每個對手都有「<strong>專注值</strong>」（類似耐性 / HP）。<strong>成功的超車 QTE 並不等於名次前進</strong>——你必須先磨光對手的專注，才能真正甩開他。</p>
+      <ul>
+        <li>對手的專注值通常是 <strong>1 或 2 點</strong>（依對手強度設定）。</li>
+        <li><strong>每次成功超車 QTE（≥ 60%）→ 扣 1 專注</strong>（除非有特殊效果）。</li>
+        <li>專注 &gt; 0 時：超車 QTE 成功只是「壓制」，名次不變。</li>
+        <li>專注 = 0 後：<strong>下一次成功超車 QTE = 名次前進 1 名</strong>。</li>
+        <li><strong>超車失敗</strong>（&lt; 60%）：扣胎、收失誤牌，但<strong>不影響專注</strong>。</li>
+      </ul>
+      <p class="note"><strong>實際遊玩：</strong>1 專注的對手要 <strong>2 次</strong>成功超車 QTE 才會被甩開；2 專注的對手要 <strong>3 次</strong>。這讓對手變成「卡位戰」對象，玩家在這幾回合內會持續同道、換道、超車。</p>
+
+      <h2>輪胎系統 <span class="tag new">NEW</span></h2>
+      <p>取代舊版的「動力」，輪胎是這版的核心資源。</p>
+      <ul>
+        <li><strong>起始 5 層胎</strong>，扣到 0 = 輸。</li>
+        <li>每張卡牌的代價已內建（速度、失誤、QTE 風險），<strong>打牌不直接扣胎</strong>。</li>
+        <li>扣胎來源：超加速（主動）、超車 QTE 失敗、彎道 QTE 失敗（被動）。</li>
+        <li>防守 QTE 失敗<strong>不扣胎</strong>（已有掉名次的懲罰）。</li>
+      </ul>
+      <p class="note">補胎機制（Pit Stop）規劃中，先不實作。精確扣胎數值請見 <a href="GAME_MECHANICS.html">機制細節</a>。</p>
+
+      <h2>速度系統</h2>
+      <ul>
+        <li>每回合速度<strong>重置為起始值</strong>（預設 10、車隊牌可加成）。</li>
+        <li>普通牌 = 加速度（無代價）：加速 +20、超加速 +40、渦輪 +30。</li>
+        <li><strong>超加速</strong> = 強力加速但 -1 胎。</li>
+        <li>速度結算分兩步：步驟 1 行動效果立即生效（cardValue、laneCost）；步驟 4 賽道結算才套順風加成 / 彎道加乘 / 速限。</li>
+        <li><strong>賽道加成與災害的雙重規則</strong>（v0.8 起）：
+          <ul>
+            <li><strong>加成</strong>（順風 / 逆風 / 彎道 mult / speedLimit）：只影響玩家、對手免疫。玩家用 <code>(speed + add) × mult</code> 結算、超速限觸發彎道 QTE。</li>
+            <li><strong>災害</strong>（c6 油污 50% 滑開 / c7 坑洞速度減半）：雙方都會中招、不偏袒對手。</li>
+          </ul>
+          設計意圖：賽道對對手是「中立風險」——不會幫忙、但也會懲罰。詳見 <a href="OPPONENT_DESIGN.html">對手設計</a>。
+        </li>
+      </ul>
+
+      <h2>同道尾流 <span class="tag new">NEW</span></h2>
+      <p>玩家跟對手同道時 +30 速，作為「卡位」的獎勵。</p>
+      <ul>
+        <li>觸發時機：<strong>步驟 3 檢查時</strong>（對手行動完成後）、玩家當前道 == 對手當前道 → +30 速。</li>
+        <li><strong>一回合只觸發一次</strong>——超車/PASS 進新回合才重置。</li>
+        <li><strong>對手能躲開尾流</strong>：玩家動作後若同道、對手在步驟 2 可能切走，玩家就吃不到 +30。</li>
+        <li>玩家想吃尾流但對手躲開時 → 出現<strong>對手嘲諷文字</strong>（依對手個性不同）。</li>
+      </ul>
+      <p class="note"><strong>例：</strong>玩家換道貼上對手（步驟 1）→ 對手立刻切走（步驟 2）→ 步驟 3 不同道、沒尾流 → 顯示嘲諷「對手讀出你的尾流意圖」。</p>
+
+      <h2>換道規則</h2>
+      <ul>
+        <li>棄一張手牌 + <strong>依跨道數扣速</strong>：跨 1 道 -10，跨 2 道 -15，跨 3 道 -20 （公式 <code>10 + 5 × (跨道數 - 1)</code>）。</li>
+        <li>laneCost 在步驟 1 立即扣 playerSpeed。</li>
+        <li><strong>速度 0 時不能換道</strong>。</li>
+        <li>換道本身不消耗任何 QTE，但仍會走完五步驟流程（含對手回合、賽道結算、切段）。</li>
+      </ul>
+
+      <h2>賽段切換 <span class="tag new">NEW</span></h2>
+      <p>每打一張牌（或換道），自動切換到下一個賽段。UI 會顯示「當前賽段」與「下一段預告」，方便提前規劃。</p>
+      <p>賽段的核心概念：</p>
+      <ul>
+        <li><strong>賽段 = 結構 + 多條賽道</strong>。結構決定有幾條道、能不能換；賽道則各自有加成（速度 +N / -N / ×N）與事件（如彎道限速）。</li>
+        <li><strong>車子在哪條賽道，就吃那條賽道的加成</strong>——加成是車子的持續狀態，玩家跟對手都吃。</li>
+        <li>顯示速度 = 累積速度 + 當前賽道加成。所有「限速」、「對手速度」、「超車條件」的比較，都用加成後的顯示速度。</li>
+      </ul>
+      <p class="note"><strong>選道本身就是博弈：</strong>同樣是 60 vs 60，若玩家在順風道、對手在逆風道 → 玩家 70 vs 對手 50 → 可以超車；反之則被甩開。完整的賽道類型、賽段定義與數值請見 <a href="GAME_MECHANICS.html">機制細節</a>。</p>
+
+      <h2>超車規則 <span class="tag new">NEW</span></h2>
+      <p><strong>對手一定會擋你，所以所有超車都要 QTE。</strong></p>
+      <ul>
+        <li><strong>同道不能超車</strong>——必須先換道。</li>
+        <li>觸發方式：<strong>玩家手動按「超車」按鈕</strong>。</li>
+        <li>按鈕啟用條件：不同道 + 速度 &gt; 對手。</li>
+        <li>不自動觸發——玩家保留「現在拚還是再積一張？」的決策權。</li>
+      </ul>
+
+      <h2>三種 QTE</h2>
+
+      <h3>超車 QTE（節奏點擊）</h3>
+      <ul>
+        <li>機制：5–8 個節奏圓圈（依速度檔位），玩家在圈收縮接近拍點時點擊。</li>
+        <li>判定：<code>Perfect</code>（2 分）/ <code>Good</code>（1 分）/ <code>Miss</code>（0 分）。</li>
+        <li><strong>60% 為過關門檻</strong>；&lt; 60% 為超車失敗。</li>
+      </ul>
+
+      <h4>結果分階</h4>
+      <table>
+        <thead><tr><th>分數</th><th>失誤牌</th><th>結果</th><th>扣胎</th></tr></thead>
+        <tbody>
+          <tr><td>100%</td><td><strong>-1 張</strong>（移除）</td><td>完美超車</td><td>否</td></tr>
+          <tr><td>70–99%</td><td>0 張</td><td>順利超車</td><td>否</td></tr>
+          <tr><td>60–69%</td><td>1 張</td><td>勉強過關</td><td>否</td></tr>
+          <tr><td>50–59%</td><td>1 張</td><td>輕度失敗</td><td><strong>是</strong></td></tr>
+          <tr><td>&lt; 50%</td><td>2 張</td><td>嚴重失敗</td><td><strong>是</strong></td></tr>
+        </tbody>
+      </table>
+      <p class="note"><strong>失誤牌進牌庫頂</strong>，下回合必抽到。完美超車不只零代價，還能從牌庫或棄牌堆中<strong>移除一張失誤牌</strong>（若無失誤牌可移除則無效果），玩家會主動拚 100% 清牌組。</p>
+
+      <h3 class="neon">彎道 QTE（WASD 箭頭串） <span class="tag new">NEW</span></h3>
+      <ul>
+        <li>機制：仿 Helldivers stratagem 風格——螢幕顯示一串箭頭（↑ ↓ ← →，對應 <code>W</code> <code>S</code> <code>A</code> <code>D</code>），玩家依序按出。</li>
+        <li>難度隨速度提升：速度越快，箭頭越多、計時越短。</li>
+        <li>觸發條件：<strong>只在「彎道」類賽段檢查限速</strong>，速度 &gt; 該段限速才觸發。</li>
+        <li>失敗 = -1 胎 + 1 張失誤牌（進牌庫頂）。</li>
+      </ul>
+      <p class="note neon">直線段不檢查限速——玩家可以放心衝速，QTE 變成玩家自己選的，不是被強加的。</p>
+
+      <h3>防守 QTE（追游標）</h3>
+      <ul>
+        <li>機制：玩家移動滑鼠，讓黃色游標追住綠色安全區。</li>
+        <li>游標在安全區內 → 進度增加；在完美區（綠區中央）→ 增加更快；在紅區 → 進度下降。</li>
+        <li>撐到時間結束或進度推滿 = 防守成功。</li>
+        <li>觸發：<strong>玩家按 Pass 後直接觸發</strong>（不再判斷後車速度）。</li>
+        <li>失敗 = 掉名次（不扣胎）。</li>
+      </ul>
+
+      <h2>Pass 規則</h2>
+      <ul>
+        <li>Pass 後<strong>直接進防守 QTE</strong>。</li>
+        <li>拿掉舊版「後車速度 &gt; 玩家速度才防守」的判斷——Pass 一定觸發防守 QTE。</li>
+        <li>失敗掉名次。</li>
+        <li><strong>後車追擊的驚嘆號 UI 保留</strong>，作為壓力氛圍（純視覺）。</li>
+      </ul>
+
+      <h2>卡牌規則</h2>
+
+      <h3>卡牌類別</h3>
+      <table>
+        <thead><tr><th>類別</th><th>定位</th><th>消失時機</th></tr></thead>
+        <tbody>
+          <tr><td><strong>指令牌</strong> <span class="tag cmd">CMD</span></td><td>立即指揮車子的行動（加速、過彎等）</td><td>打出後進棄牌堆</td></tr>
+          <tr><td><strong>車隊牌</strong> <span class="tag team">TEAM</span></td><td>影響狀態或駕駛特性，留場持續生效</td><td>依牌面所述</td></tr>
+          <tr><td><strong>失誤牌</strong></td><td>無效果，污染牌庫</td><td>打出後進棄牌堆</td></tr>
+        </tbody>
+      </table>
+
+      <h3>手牌與牌庫運作</h3>
+      <ul>
+        <li>每回合手牌上限 <strong>5 張</strong>。</li>
+        <li><strong>回合結束時不清空手牌</strong>，只從牌庫補到 5 張——沒打完的牌可以留到下回合用。</li>
+        <li>採用<strong>真實牌堆機制</strong>：打出的牌進棄牌堆，抽完才把棄牌堆洗回牌堆。</li>
+        <li>失誤牌進<strong>牌庫頂</strong>，下回合必抽到。每抽到一張失誤牌就少一張可用牌。</li>
+      </ul>
+      <p class="note">完整起始牌庫、所有指令牌與車隊牌的列表請見 <a href="GAME_MECHANICS.html">機制細節</a>。</p>
+
+      <h2>霓虹多線街區（沙盒測試版）</h2>
+      <p>單一關卡，無教學引導，整合上述所有機制。設計重點：</p>
+      <ul>
+        <li><strong>多賽道</strong>：強制玩家在「同道吃尾流」與「不同道準備超車」之間切換。</li>
+        <li><strong>賽段循環</strong>：直線 / 彎道 / 其他類型輪替（具體節奏迭代中）。</li>
+        <li><strong>對手會反應</strong>：依照 cooldown 動態切道，名條面板顯示移動意圖 icon：⛔（阻擋你）／💨（遠離你）／❓（策略不確定）／❗（賽道干擾結果偏離），玩家可預判並換道閃過。</li>
+        <li><strong>對手會嘲諷</strong>：玩家想吃尾流但對手切走時，依對手個性顯示不同嘲諷文字（破風者技術派 / 清道夫陰沈 / 禿鷹得意）。</li>
+      </ul>
+      <p class="note warn"><strong>注意：</strong>此版本以核心機制驗證為目標。視覺、UI、平衡數值都還在迭代中，目標是禮拜五前收斂出大方向。</p>
+
+      <h2>已暫停的內容</h2>
+      <p>以下舊版內容暫不維護，待核心機制定型後再回頭調整：</p>
+      <ul>
+        <li><strong>教學關卡 1–4</strong>：保持現狀，先不動。</li>
+        <li><strong>第五關「沙暴登頂」</strong>：含 Boss 戰、三選一卡牌成長、賽道沙暴系統。整合到新核心後再重啟。</li>
+      </ul>
+
+      <p class="note warn">
+        <strong>版本說明：</strong>v0.6 是 v0.5（沙暴登頂版）之後的設計轉向。核心張力從「累積速度的稀缺」改為「速度便宜後的節制」，機制做了大幅重構。
+      </p>
+    </article>
+  </main>
+</body>
+</html>

@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>最後車手 / Final Driver 卡牌設計</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06101d;
+      --panel: rgba(8, 18, 32, 0.92);
+      --text: #e8f0ff;
+      --muted: #b7c8dd;
+      --line: rgba(105, 164, 224, 0.35);
+      --accent: #ffd94f;
+      --green: #57e585;
+      --red: #ff6b7a;
+      --orange: #ff9a6a;
+      --sand: #f5c96c;
+      --neon: #ff5cf2;
+      --blue: #6cc1ff;
+      --code-bg: rgba(245, 201, 108, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(108, 193, 255, 0.15), transparent 36rem),
+        linear-gradient(180deg, #06101d 0%, #101b2c 54%, #05090d 100%);
+      color: var(--text);
+      font-family: system-ui, "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+      line-height: 1.75;
+    }
+
+    main {
+      width: min(980px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    article {
+      padding: clamp(24px, 4vw, 44px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+    }
+
+    h1, h2, h3, h4 { line-height: 1.25; }
+
+    h1 {
+      margin: 0 0 24px;
+      color: var(--blue);
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      letter-spacing: 0.03em;
+    }
+
+    .version-tag {
+      display: inline-block;
+      margin-left: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(108, 193, 255, 0.18);
+      color: #b0d5ff;
+      font-size: 0.9rem;
+      vertical-align: middle;
+      border: 1px solid rgba(108, 193, 255, 0.4);
+    }
+
+    .companion-link {
+      display: inline-block;
+      margin-top: 12px;
+      margin-right: 8px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: rgba(245, 201, 108, 0.10);
+      color: var(--sand);
+      text-decoration: none;
+      font-size: 0.95rem;
+      border: 1px solid rgba(245, 201, 108, 0.3);
+    }
+
+    .companion-link:hover { background: rgba(245, 201, 108, 0.2); }
+
+    h2 {
+      margin: 40px 0 14px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      color: var(--sand);
+      font-size: 1.55rem;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      color: var(--green);
+      font-size: 1.15rem;
+    }
+
+    h4 {
+      margin: 18px 0 6px;
+      color: var(--orange);
+      font-size: 1.02rem;
+    }
+
+    p, li { color: var(--text); }
+    p { margin: 10px 0; }
+
+    ul, ol { margin: 8px 0 16px; padding-left: 22px; }
+    li { margin: 4px 0; }
+
+    code {
+      background: var(--code-bg);
+      color: var(--sand);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: rgba(6, 12, 22, 0.85);
+      border: 1px solid rgba(105, 164, 224, 0.25);
+      border-radius: 10px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      color: #d6e2f3;
+      font-size: 0.92rem;
+    }
+
+    pre code { background: transparent; color: inherit; padding: 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 22px;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: rgba(105, 164, 224, 0.15);
+      color: var(--sand);
+      font-weight: 700;
+    }
+
+    .lead {
+      font-size: 1.08rem;
+      color: var(--muted);
+    }
+
+    .note {
+      padding: 12px 14px;
+      border-left: 3px solid var(--sand);
+      background: rgba(245, 201, 108, 0.06);
+      border-radius: 8px;
+      margin: 14px 0;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .note.warn {
+      border-left-color: var(--red);
+      background: rgba(255, 107, 122, 0.08);
+    }
+
+    .note.green {
+      border-left-color: var(--green);
+      background: rgba(87, 229, 133, 0.08);
+    }
+
+    .note.neon {
+      border-left-color: var(--neon);
+      background: rgba(255, 92, 242, 0.08);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .tag.new {
+      background: rgba(87, 229, 133, 0.2);
+      color: var(--green);
+      border: 1px solid rgba(87, 229, 133, 0.45);
+    }
+
+    .tag.future {
+      background: rgba(255, 92, 242, 0.18);
+      color: var(--neon);
+      border: 1px solid rgba(255, 92, 242, 0.4);
+    }
+
+    .tag.action {
+      background: rgba(108, 193, 255, 0.18);
+      color: var(--blue);
+      border: 1px solid rgba(108, 193, 255, 0.4);
+    }
+
+    .tag.team {
+      background: rgba(255, 154, 106, 0.18);
+      color: var(--orange);
+      border: 1px solid rgba(255, 154, 106, 0.4);
+    }
+
+    blockquote {
+      margin: 14px 0;
+      padding: 6px 16px;
+      padding-left: 12px;
+      border-left: 3px solid var(--sand);
+      color: var(--accent);
+      font-style: italic;
+    }
+
+    a { color: var(--sand); }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>卡牌設計：指令牌 &amp; 車隊牌<span class="version-tag">v0.7</span></h1>
+
+      <p class="lead">沙盒目前共有 5 張指令牌（每回合洗牌發手牌的速度牌）+ 4 張車隊牌（永久 / 持續效果的修飾牌、roguelite 獎勵）。本文是設計依據、調整理由、未來擴張方向的完整參考。</p>
+
+      <p>
+        <a class="companion-link" href="GAME_RULES.html">→ 遊戲規則</a>
+        <a class="companion-link" href="GAME_MECHANICS.html">→ 機制細節</a>
+        <a class="companion-link" href="TRACK_DESIGN.html">→ 賽道設計</a>
+        <a class="companion-link" href="OPPONENT_DESIGN.html">→ 對手設計</a>
+      </p>
+
+      <h2>§ 1&nbsp;&nbsp;卡牌類別</h2>
+
+      <p>卡牌分兩大類，由 <code>cardClass</code> 欄位區分：</p>
+      <table>
+        <thead>
+          <tr><th>類別</th><th>cardClass</th><th>使用方式</th><th>持續性</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>指令牌</td><td><code>"action"</code></td><td>每回合發進手牌、拖到道上即發動</td><td>單次（用過進棄牌堆）</td></tr>
+          <tr><td>車隊牌</td><td><code>"team"</code></td><td>roguelite 獎勵選取、進場後常駐生效</td><td>permanent / oneShot / untilRankUp</td></tr>
+        </tbody>
+      </table>
+
+      <p>玩家的牌組起始只有 5 張指令牌。每超車成功、可在獎勵階段三選一新卡（可能是新指令牌、也可能是車隊牌）加進永久牌組。</p>
+
+      <h2>§ 2&nbsp;&nbsp;指令牌 <span class="tag action">action</span> <span class="tag" style="background:rgba(255,107,122,0.18); color:#ff6b7a; border:1px solid rgba(255,107,122,0.4); padding:2px 8px; border-radius:999px; font-size:0.8rem; margin-left:6px;">v0.9 重設計</span></h2>
+
+      <p>指令牌的核心數值是 <code>speedValue</code>——拖到自己道上就 +speedValue（算一個行動）。所有指令牌都會在打出後進棄牌堆、回合末重洗。</p>
+
+      <p><strong>牌面 UI（v0.9 更新）</strong>：中央用大字顯示速度數值（如 <code>+30</code>），底部敘述只寫「速度以外的效果」（胎耗、可換道、條件等）。純數值牌（如 turbo）的敘述列空白。這個設計讓玩家「一眼看速度、細看才讀條件」。</p>
+
+      <table>
+        <thead>
+          <tr><th>id</th><th>名稱</th><th>速度</th><th>胎耗</th><th>特殊</th><th>說明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>tailwind</code></td><td>加速</td><td>+20</td><td>—</td><td>—</td><td>基準牌：無條件、最常用</td></tr>
+          <tr><td><code>turbo</code></td><td>渦輪增壓</td><td>+30</td><td>—</td><td>—</td><td>主力爆發牌</td></tr>
+          <tr><td><code>drag</code></td><td>風阻減免</td><td>+15</td><td>—</td><td>—</td><td>填洞牌、比加速貴一點點但有時剛剛好</td></tr>
+          <tr><td><code>laneRhythm</code></td><td>換道節奏</td><td>+15</td><td>1</td><td>可換道</td><td>付胎換道、彎道前的位置調整</td></tr>
+          <tr><td><code>nitro</code></td><td>氮氣噴射</td><td>+60</td><td>1</td><td>—</td><td>超大爆發、付 1 胎</td></tr>
+          <tr><td><code>reignite</code></td><td>重燃引擎</td><td>+25</td><td>—</td><td>下回合手牌 +1</td><td>反 allIn 設計、這回合中等、下回合超強</td></tr>
+          <tr><td><code>drift</code></td><td>甩尾過彎</td><td>+0</td><td>—</td><td>僅彎道、必觸 QTE</td><td>彎道專用、QTE 結果調整賽道加成（成功 +60 / Good +30 / Miss -10）</td></tr>
+          <tr><td><code>chill</code></td><td>冷靜應對</td><td>+10</td><td>—</td><td>本動 QTE 容錯 +50%</td><td>油污 / 彎道安全網</td></tr>
+          <tr><td><code>smoothOp</code></td><td>賽車節奏</td><td>+20</td><td>—</td><td>連發 +20</td><td>若前一動作也是指令牌 → +40（致敬 Carlos Sainz）</td></tr>
+        </tbody>
+      </table>
+
+      <h3>數值梯度（v0.9）</h3>
+      <p>速度光譜更密：0 / 10 / 15 / 20 / 25 / 30 / 60。並非每張牌都用「純速度」競爭——drift / chill / smoothOp 用「條件 / QTE 來源 / 連擊」拉開差異化。</p>
+      <ul>
+        <li><strong>+0–10（drift / chill）</strong>：靠機制、不靠數值。drift 賭 QTE、chill 換安全</li>
+        <li><strong>+15（drag / laneRhythm）</strong>：填洞或換位、不是主力。laneRhythm 付 1 胎當代價、避免「免費換道 +15」太強</li>
+        <li><strong>+20–30（tailwind / turbo / smoothOp / reignite）</strong>：主力區、依條件 / 後續優勢分高下</li>
+        <li><strong>+60（nitro）</strong>：唯一極速、但付胎</li>
+      </ul>
+
+      <h3>失誤牌 <code>mistake</code></h3>
+      <p>失誤牌不是常規卡池的一員、而是<strong>懲罰機制</strong>——QTE 失敗會把失誤牌洗進你的牌組。<code>speedValue: 0</code>、無效果。失誤牌會永久污染牌組。</p>
+      <pre><code>mistake: { type:"mistake", cardClass:"action", name:"失誤", speedValue:0, note:"無效果" }</code></pre>
+      <p><strong>玩家對策</strong>：減少 QTE 失敗（chill 或彎道熟練）、或主動打掉失誤牌（會浪費一動但清牌組）。</p>
+
+      <h2>§ 3&nbsp;&nbsp;車隊牌 <span class="tag team">team</span> <span class="tag" style="background:rgba(255,107,122,0.18); color:#ff6b7a; border:1px solid rgba(255,107,122,0.4); padding:2px 8px; border-radius:999px; font-size:0.8rem; margin-left:6px;">v0.9 重設計</span></h2>
+
+      <p>車隊牌代表「領隊透過無線電給車手的指令 / 賽前裝備」。v0.9 採用<strong>兩個獨立維度</strong>描述車隊牌行為：</p>
+
+      <table>
+        <thead>
+          <tr><th>維度</th><th>欄位</th><th>可能值</th><th>意義</th></tr>
+        </thead>
+        <tbody>
+          <tr><td rowspan="2"><strong>何時觸發?</strong></td><td rowspan="2"><code>trigger</code></td><td><code>equip</code></td><td>獎勵階段選了立即生效、不進牌庫、不會出現在手牌</td></tr>
+          <tr><td><code>play</code></td><td>進牌庫、洗到手牌、拖出來才生效</td></tr>
+          <tr><td rowspan="4"><strong>何時消失?</strong></td><td rowspan="4"><code>persistence</code></td><td><code>permanent</code></td><td>永久（直到遊戲結束）</td></tr>
+          <tr><td><code>oneShot</code></td><td>條件達成觸發一次後消失（如 backup、patch）</td></tr>
+          <tr><td><code>untilRankUp</code></td><td>名次上升時消失</td></tr>
+          <tr><td><code>thisRound</code></td><td>回合結束時消失</td></tr>
+        </tbody>
+      </table>
+
+      <p>兩個維度<strong>獨立組合</strong>。例如未來可以做 <code>trigger:"play"</code> + <code>persistence:"permanent"</code> 的卡——進牌庫、需要打出、但打出後永久生效（一張一次性消費的「永久升級牌」）。或是 <code>trigger:"equip"</code> + <code>persistence:"thisRound"</code>——獎勵階段選了立刻生效、但只持續本回合（彈性更高的戰術選項）。</p>
+
+      <h3>當前車隊牌：trigger = equip（裝備類）</h3>
+      <p>獎勵階段選到 → 馬上進 <code>teamCardsActive</code>、效果立即生效。<strong>不會出現在手牌</strong>。</p>
+      <table>
+        <thead>
+          <tr><th>id</th><th>名稱</th><th>效果</th><th>persistence</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>newTireWarm</code></td><td>暖胎電熱絲</td><td>啟動時 -1 輪胎；之後每回合結算後保留 +10 速度</td><td>permanent</td></tr>
+          <tr><td><code>bigData</code></td><td>大數據預測</td><td>對手預告升級到 full mode（顯示具體招式）</td><td>permanent</td></tr>
+          <tr><td><code>backup</code></td><td>後援車隊</td><td>防守失敗時不掉名次（一次）</td><td>oneShot</td></tr>
+          <tr><td><code>patch</code></td><td>補丁</td><td>撞坑時不扣胎、不降速（一次）</td><td>oneShot</td></tr>
+          <tr><td><code>tirePreservation</code></td><td>保胎策略</td><td>所有指令牌 -10 速度；無視每回合第 1 次輪胎消耗</td><td>permanent</td></tr>
+        </tbody>
+      </table>
+
+      <h3>當前車隊牌：trigger = play（打出類）</h3>
+      <p>獎勵階段選到 → <strong>進牌庫</strong>、之後會洗到手牌、需要打出來才發動。</p>
+      <table>
+        <thead>
+          <tr><th>id</th><th>名稱</th><th>效果</th><th>persistence</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>fuelMaster</code></td><td>燃料管理大師</td><td>本回合內所有指令牌 +5 速度</td><td>thisRound</td></tr>
+          <tr><td><code>rhythmCoach</code></td><td>節奏教練</td><td>本回合內、連續同名指令牌：第 2 張 +10、第 3 張 +20</td><td>thisRound</td></tr>
+        </tbody>
+      </table>
+
+
+      <h3>「車隊牌不算行動」規則（v0.8 + v0.9）</h3>
+      <p>不論哪一類車隊牌、打出時都<strong>不算行動</strong>：</p>
+      <ul>
+        <li>不增加 <code>actionsThisRound</code></li>
+        <li>不觸發對手回合、不切換賽段</li>
+        <li>拖到任何道都生效（不限定當前道、不換道）</li>
+        <li>速度預覽 UI 對車隊牌不反應（避免誤導）</li>
+        <li>打完繼續等玩家動作</li>
+      </ul>
+      <p>立即發動類在獎勵階段選了就生效、根本沒「打出」這個動作。戰術消耗類雖然有「拖出來」的動作、但也不算行動——是「免費的回合內裝備」。</p>
+
+      <h3>連擊判定（節奏教練 / 賽車節奏）</h3>
+      <p>兩張牌都依賴「<strong>連續同名 / 連續指令牌</strong>」判定：</p>
+      <ul>
+        <li><strong>節奏教練</strong>：要求 type 完全相同。turbo + turbo = +10、turbo + turbo + turbo = +20。turbo + drag = streak 歸 1</li>
+        <li><strong>賽車節奏 smoothOp</strong>：只要前一動作是指令牌就 +20（不分種類）</li>
+        <li><strong>打斷因素</strong>：換道、Pass、超車都打斷連擊鏈</li>
+        <li><strong>不打斷</strong>：車隊牌打出（不算行動的精神延伸）——可以「打 turbo → 裝備節奏教練 → 打 turbo」拿連擊</li>
+        <li>第 2 張同名 +10、第 3 張同名 +20、第 4 張以後仍是 +20（不無限疊）</li>
+      </ul>
+
+      <h2>§ 4&nbsp;&nbsp;Roguelite 獎勵</h2>
+
+      <p>每次成功超車後、玩家會進入<strong>獎勵階段</strong>，三選一新卡。獎勵池：</p>
+      <ul>
+        <li>所有指令牌（不重複，避免複數同卡牌組失衡）</li>
+        <li>所有車隊牌（不重複，避免複數同效果疊加）</li>
+      </ul>
+
+      <p>獎勵階段也允許 <strong>skip</strong>（跳過、不選任何牌）——這在玩家牌組已經很穩定、不想稀釋的時候有用。</p>
+
+      <h3>初始牌組（v0.9）</h3>
+      <p>玩家從<strong>固定 8 張指令牌</strong>開始（每回合手牌補滿到 5 張）：</p>
+      <ul>
+        <li>2 × turbo（+30、渦輪增壓）</li>
+        <li>3 × tailwind（+20、加速）</li>
+        <li>2 × drag（+15、風阻減免）</li>
+        <li>1 × laneRhythm（+15、可換道、-1 胎）</li>
+      </ul>
+      <p>數值平均 ~19 速度／張，比 5 張結構更耐打。所有特色牌（nitro / drift / reignite / smoothOp / chill 等）都要透過獎勵階段才能取得。</p>
+
+      <h2>§ 5&nbsp;&nbsp;卡牌互動 &amp; 進階組合</h2>
+
+      <h3>perfectCorner + 彎道段</h3>
+      <p>彎道段（c2 / c4）的 mult 加乘對「換道後的速度」有放大效果。perfectCorner 可換道，意味著你可以「打牌 → 換到內彎道 → 一動內吃 mult 加成」。沒有它、你需要兩動才能做到（先換道、下一動再加速）。</p>
+
+      <h3>allIn + 高速彎道</h3>
+      <p>allIn 的 +60 配上 c4 的 ×1.3 加乘是 78 速、但需要先到內彎道。最佳組合：上一回合 perfectCorner 換到內彎、下一回合 allIn 爆速。代價：下下回合手牌 -1。</p>
+
+      <h3>tireWarm + drag</h3>
+      <p>tireWarm 結算後保留 +10、drag +10。連續兩動 + tireWarm = 30 速進新回合。讓本來最弱的 drag 變成「累積牌」。</p>
+
+      <h3>cool + 油污 (c6) 強制 QTE</h3>
+      <p>油污中央道強制觸發彎道 QTE、難度 +1 級。cool 的 QTE 容錯 +20% 讓你敢主動進油污道吃 +10。沒 cool 的話、油污中央就是「絕對不能踩」。</p>
+
+      <h2>§ 6&nbsp;&nbsp;未來擴張方向 <span class="tag future">v0.9+</span></h2>
+
+      <h3>新指令牌候補</h3>
+      <ul>
+        <li><strong>超加速</strong>：+40、消耗 1 胎——填補 +30 跟 +50 之間的數值空缺、給胎耗作為代價</li>
+        <li><strong>切道牌</strong>：+0、僅換道、可跳過 lane cost——讓「純位移」更靈活</li>
+        <li><strong>反應牌</strong>：+20、若打在「彎道將至」（下個賽段預告是彎道）→ +50——獎勵讀預告的玩家</li>
+        <li><strong>連擊牌</strong>：+10、若上一張打的也是連擊牌 → +30——獎勵連續同質牌</li>
+      </ul>
+
+      <h3>新車隊牌候補</h3>
+      <ul>
+        <li><strong>策略家</strong>：超車獎勵階段四選一（permanent）</li>
+        <li><strong>耐力車隊</strong>：起始輪胎 +1（permanent、影響全局）</li>
+        <li><strong>反應車隊</strong>：QTE 圈圈出現速度 -20%（permanent、降難度）</li>
+        <li><strong>學徒</strong>：失誤牌不會被洗進牌組、改成直接棄掉（permanent）</li>
+        <li><strong>禁忌</strong>：每次超車 +30 速 1 回合，但結算時 -1 胎（untilRankUp）</li>
+      </ul>
+
+      <h3>卡牌稀有度系統</h3>
+      <p>目前所有獎勵卡權重相等。未來可加入<strong>稀有度（common / rare / legendary）</strong>，影響獎勵階段抽到的機率。配合 roguelite 進度（已超車幾次）漸進解鎖稀有牌。</p>
+
+      <h3>負面卡 / 詛咒系統</h3>
+      <p>除了正面獎勵、可選擇「強力卡 + 缺點」組合（如「+100 速、但賽段結束發 1 張失誤」）。讓玩家自願承擔風險換爆發力。</p>
+
+      <h2>§ 7&nbsp;&nbsp;Playtest 觀察項</h2>
+
+      <ol>
+        <li><strong>卡牌使用頻率分布</strong>：是否所有指令牌都有人用、或某張變成「永遠不選」</li>
+        <li><strong>車隊牌 pick rate</strong>：4 張車隊牌的選取率是否平衡、或某張統治</li>
+        <li><strong>初始牌組是否太單薄</strong>：5 張是否夠玩家在第一段賽道有變化、還是太重複</li>
+        <li><strong>失誤牌的痛感</strong>：玩家是否覺得失誤牌污染牌組是合理懲罰、或過度痛苦</li>
+        <li><strong>allIn 的「下回合手牌 -1」是否真的會被執行</strong>：玩家是否在用前算過後果、或常常後悔</li>
+      </ol>
+
+      <h2>§ A&nbsp;&nbsp;附錄：完整實作對應</h2>
+
+      <h3>指令牌池 <code>STAGE5_COMMAND_CARDS</code>（v0.9）</h3>
+      <pre><code>const STAGE5_COMMAND_CARDS = {
+  turbo:       { type:"turbo",       cardClass:"action", name:"渦輪增壓",
+                 speedValue:30, note:"" },
+  tailwind:    { type:"tailwind",    cardClass:"action", name:"加速",
+                 speedValue:20, note:"" },
+  drag:        { type:"drag",        cardClass:"action", name:"風阻減免",
+                 speedValue:15, note:"" },
+  laneRhythm:  { type:"laneRhythm",  cardClass:"action", name:"換道節奏",
+                 speedValue:15, tireCost:1, canChangeLane:true,
+                 note:"可換道、消耗 1 胎" },
+  nitro:       { type:"nitro",       cardClass:"action", name:"氮氣噴射",
+                 speedValue:60, tireCost:1,
+                 note:"消耗 1 胎" },
+  reignite:    { type:"reignite",    cardClass:"action", name:"重燃引擎",
+                 speedValue:25, drawNextHand:1,
+                 note:"下回合手牌 +1" },
+  drift:       { type:"drift",       cardClass:"action", name:"甩尾過彎",
+                 speedValue:0, driftQte:true, requireBend:true,
+                 note:"僅彎道、必觸 QTE，依結果調整賽道加成" },
+  chill:       { type:"chill",       cardClass:"action", name:"冷靜應對",
+                 speedValue:10, qteForgive:0.5,
+                 note:"本動 QTE 容錯 +50%" },
+  smoothOp:    { type:"smoothOp",    cardClass:"action", name:"賽車節奏",
+                 speedValue:20, smoothOperator:true,
+                 note:"前一動作也是指令牌 → +40" },
+};</code></pre>
+
+      <h3>車隊牌池 <code>STAGE5_TEAM_CARDS</code>（v0.9）</h3>
+      <pre><code>const STAGE5_TEAM_CARDS = {
+  // === trigger: "equip" 裝備類（不進牌庫、立即生效）===
+  newTireWarm:      { type:"newTireWarm", cardClass:"team", name:"暖胎電熱絲",
+                      note:"啟動時 -1 輪胎；之後每回合結算後保留 +10 速度",
+                      effect:"keepSpeed", value:10, costOnEquip:{ tire:1 },
+                      trigger:"equip", persistence:"permanent", persistenceLabel:"永久" },
+  bigData:          { type:"bigData", cardClass:"team", name:"大數據預測",
+                      note:"預告升級：顯示對手下一招的具體內容",
+                      effect:"showOpponent", value:1,
+                      trigger:"equip", persistence:"permanent", persistenceLabel:"永久" },
+  backup:           { type:"backup", cardClass:"team", name:"後援車隊",
+                      note:"防守失敗時不掉名次（一次）",
+                      effect:"saveOnDefeat", value:1,
+                      trigger:"equip", persistence:"oneShot", persistenceLabel:"觸發後棄" },
+  patch:            { type:"patch", cardClass:"team", name:"補丁",
+                      note:"撞坑時不扣胎、不降速（一次）",
+                      effect:"savePothole", value:1,
+                      trigger:"equip", persistence:"oneShot", persistenceLabel:"觸發後棄" },
+  tirePreservation: { type:"tirePreservation", cardClass:"team", name:"保胎策略",
+                      note:"所有指令牌 -10 速度；無視每回合第 1 次輪胎消耗",
+                      effect:"tirePreserve", value:1,
+                      trigger:"equip", persistence:"permanent", persistenceLabel:"永久" },
+  // === trigger: "play" 打出類（進牌庫、需要打出才生效）===
+  fuelMaster:       { type:"fuelMaster", cardClass:"team", name:"燃料管理大師",
+                      note:"本回合內所有指令牌 +5 速度",
+                      effect:"cardBonusThisRound", value:5,
+                      trigger:"play", persistence:"thisRound", persistenceLabel:"本回合" },
+  rhythmCoach:      { type:"rhythmCoach", cardClass:"team", name:"節奏教練",
+                      note:"連續同名指令牌：第 2 張 +10、第 3 張 +20",
+                      effect:"comboBonusThisRound", value:10,
+                      trigger:"play", persistence:"thisRound", persistenceLabel:"本回合" },
+};</code></pre>
+
+      <blockquote>卡牌系統的核心是「平淡的牌 + 偶爾的爆發」之間的張力。一手都 +60 不有趣、一手都 +10 也不有趣。配合對手節奏、賽段預告、剩餘輪胎，每張牌的「該不該現在打」要是個明確的決策。</blockquote>
+    </article>
+  </main>
+</body>
+</html>

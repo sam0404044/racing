@@ -217,7 +217,7 @@
       <ul>
         <li>每張牌有 <code>cost</code>，從動力扣除。</li>
         <li>拖曳到自己的道 → 結算效果（指令牌加速 / 車隊牌進場）。</li>
-        <li>拖曳到其他道 → 換道（一律消耗 1 動力，不論卡牌 cost）。</li>
+        <li>拖曳到其他道 → 換道（只棄掉那張牌，不消耗動力）。</li>
         <li>動力每回合刷新。</li>
       </ul>
 
@@ -258,24 +258,24 @@
           <div class="icon">🛣</div>
           <div class="name">1. 正常 3 道</div>
           <div class="desc">標準起始賽道</div>
-          <div class="sand">▮▯▯▯ 沙暴微弱</div>
+          <div class="sand">▯▯▯▯ 無沙暴</div>
         </div>
         <div class="circuit-card">
           <div class="icon">▮</div>
           <div class="name">2. 狹窄 1 道</div>
-          <div class="desc">強制 QTE 超車</div>
+          <div class="desc">強制 QTE 超車｜手牌 <strong>1 張</strong>盲牌</div>
           <div class="sand">▮▯▯▯ 沙暴微弱</div>
         </div>
         <div class="circuit-card">
           <div class="icon">↪</div>
           <div class="name">3. 彎道 2 道</div>
-          <div class="desc">內彎 ×1.25 / 外彎 ×0.9</div>
+          <div class="desc">內彎 ×1.25 / 外彎 ×0.9｜手牌 <strong>50%</strong> 盲牌</div>
           <div class="sand">▮▮▯▯ 沙暴中等</div>
         </div>
         <div class="circuit-card">
           <div class="icon">🛣</div>
           <div class="name">4. 正常 3 道</div>
-          <div class="desc">沙暴猛烈：cost 被遮蔽</div>
+          <div class="desc">沙暴猛烈｜手牌 <strong>70%</strong> 盲牌</div>
           <div class="sand">▮▮▮▯ 沙暴強</div>
         </div>
         <div class="circuit-card" style="border-color: rgba(255,154,106,0.5);">
@@ -297,10 +297,10 @@
       <table>
         <thead><tr><th>強度</th><th>效果</th></tr></thead>
         <tbody>
-          <tr><td>▮▯▯▯ 微弱(c1)</td><td>純視覺氛圍,不影響玩法</td></tr>
-          <tr><td>▮▮▯▯ 中等(c2)</td><td>每回合固定遮 <strong>1 張</strong>手牌的 cost</td></tr>
-          <tr><td>▮▮▮▯ 強(c3)</td><td>每回合遮<strong>手牌的 50%</strong>(無條件捨去,如 5 張 → 2 張)</td></tr>
-          <tr><td>▮▮▮▯ 強(c4)</td><td>每回合遮<strong>手牌的 70%</strong>(無條件捨去,如 5 張 → 3 張)</td></tr>
+          <tr><td>▯▯▯▯ 無(c1)</td><td>純視覺氛圍,不影響玩法</td></tr>
+          <tr><td>▮▯▯▯ 微弱(c2)</td><td>每回合固定 <strong>1 張</strong>手牌變盲牌</td></tr>
+          <tr><td>▮▮▯▯ 中等(c3)</td><td>每回合<strong>手牌 50%</strong> 變盲牌(無條件捨去,如 5 張 → 2 張)</td></tr>
+          <tr><td>▮▮▮▯ 強(c4)</td><td>每回合<strong>手牌 70%</strong> 變盲牌(無條件捨去,如 5 張 → 3 張)</td></tr>
           <tr><td>▮▮▮▮ 滿(Boss)</td><td><strong>全手牌盲牌</strong>,打完前 2 張後其他牌才顯示</td></tr>
         </tbody>
       </table>
@@ -343,7 +343,7 @@
       <h3>起始牌庫與抽牌</h3>
       <p>第五關玩家起始牌庫跟前 4 關一致,只有基礎卡牌:</p>
       <ul>
-        <li><code>加速</code> × 6 (cost 1,速度 +2)</li>
+        <li><code>加速</code> × 6 (cost 0,速度 +2)</li>
         <li><code>超加速</code> × 2 (cost 2,速度 +6)</li>
         <li><code>失誤</code> × 2 (cost 0,無效果)</li>
       </ul>
@@ -368,11 +368,11 @@
       <table>
         <thead><tr><th>卡名</th><th>cost</th><th>持續效果</th><th>棄牌時機</th></tr></thead>
         <tbody>
-          <tr><td>工程師調校</td><td>2</td><td>動力上限 +1</td><td>永久</td></tr>
+          <tr><td>工程師調校</td><td>—</td><td>動力上限 +1</td><td>永久（選後直接進場）</td></tr>
           <tr><td>維持胎溫</td><td>1</td><td>結算後保留 +1 速度（不歸零）</td><td>名次上升時棄</td></tr>
-          <tr><td>大數據預測</td><td>1</td><td>顯示對手下回合動作</td><td>永久</td></tr>
+          <tr><td>大數據預測</td><td>—</td><td>顯示對手下回合動作</td><td>永久（選後直接進場）</td></tr>
           <tr><td>後援車隊</td><td>2</td><td>防守失敗時保住名次（一次）</td><td>觸發後棄</td></tr>
-          <tr><td>冷靜!</td><td>1</td><td>QTE 容錯範圍 +20%</td><td>永久</td></tr>
+          <tr><td>冷靜!</td><td>—</td><td>QTE 容錯範圍 +20%</td><td>永久（選後直接進場）</td></tr>
         </tbody>
       </table>
 
