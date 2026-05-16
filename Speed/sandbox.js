@@ -845,6 +845,25 @@ const CanvasQteTest = (() => {
     //  / driftQte / requireBend / drawNextHand 等都會自動跟著、不會再漏）
     return { ...def, id: `s5-${type}-${_stage5CardSeq}` };
   }
+
+  // 算「車隊牌全域修飾後的指令牌速度」+ 是否被修飾
+  //   只算「對所有指令牌都有影響」的修飾、不算「連擊型」（rhythmCoach 連擊不顯示在牌面）
+  //   也不算 smoothOperator（這是牌自己的條件、不是車隊牌修飾）
+  // 回傳：{ value: 結算後的速度, modified: 是否被車隊牌動過, delta: 變化量 }
+  function getCardEffectiveSpeed(card) {
+    const base = card.speedValue || 0;
+    if (!isStage5() || card.cardClass !== "action") return { value: base, modified: false, delta: 0 };
+    const s5 = app.stage5;
+    if (!s5 || !s5.teamCardsActive) return { value: base, modified: false, delta: 0 };
+    let delta = 0;
+    for (const c of s5.teamCardsActive) {
+      // fuelMaster：所有指令牌 +5
+      if (c.effect === "cardBonusThisRound") delta += (c.value || 0);
+      // tirePreservation：所有指令牌 -10
+      if (c.effect === "tirePreserve") delta -= 10;
+    }
+    return { value: base + delta, modified: delta !== 0, delta };
+  }
   // 沙盒起始牌庫：加速 + 再加速（無失誤牌；失誤牌只從 QTE 懲罰取得）
   function makeStage5InitialDeck() {
     const deck = [];
@@ -951,6 +970,13 @@ const CanvasQteTest = (() => {
   }
   function applyCircuit(circ) {
     initLanes(circ.lanes);
+    // 夾住玩家 / 對手的 lane 到新賽段範圍內、避免「賽段 3 道 → 2 道」時對手在 lane 2 跑到賽道外
+    const maxLane = circ.lanes - 1;
+    if (app.playerLane > maxLane) app.playerLane = maxLane;
+    if (app.opponentLane > maxLane) app.opponentLane = maxLane;
+    // visual lane 也夾、避免動畫滑出去
+    if (app.playerLaneVisual > maxLane) app.playerLaneVisual = maxLane;
+    if (app.opponentLaneVisual > maxLane) app.opponentLaneVisual = maxLane;
     app.bendCurve = circ.bendCurve;
     app.roadWidthScale = circ.roadWidthScale;
     // 動態 laneBonuses：若有 laneBonusDistribution 則每進此段都重抽
@@ -1195,7 +1221,10 @@ const CanvasQteTest = (() => {
     // 前方候選（沙盒：已無 BOSS）
     const candidates = s5.ahead.filter(id => id !== "BOSS");
     if (candidates.length === 0) return null;  // 全部超過 = 通關
-    return candidates[Math.floor(Math.random()*candidates.length)];
+    // v0.9：固定取「玩家前一個名次」的對手 = ahead 列表的最後一個
+    //   ahead 的排列是「第 1 名、第 2 名、...、玩家前一名」
+    //   所以最後一個 = 離玩家最近的對手 = 應該面對的對手
+    return candidates[candidates.length - 1];
   }
   // 取得當前後車（追車）
   function currentChaser() {
@@ -2132,13 +2161,16 @@ const CanvasQteTest = (() => {
   function stage5BeginRewardPick() {
     const s5 = app.stage5;
     if (!s5) return;
-    // 牌池：1 指令 + 1 車隊 + 1 隨機
+    // 牌池：1 指令 + 1 車隊 + 1 隨機（三張之間互不重複）
     const cmdKeys = Object.keys(STAGE5_COMMAND_CARDS);
     const teamKeys = Object.keys(STAGE5_TEAM_CARDS);
-    const cmdPick = cmdKeys[Math.floor(Math.random()*cmdKeys.length)];
-    const teamPick = teamKeys[Math.floor(Math.random()*teamKeys.length)];
+    const cmdPick = cmdKeys[Math.floor(Math.random() * cmdKeys.length)];
+    // teamPick：跟 cmdPick 不會重複（不同池）、所以直接抽
+    const teamPick = teamKeys[Math.floor(Math.random() * teamKeys.length)];
+    // randomPick：從所有牌中排除已選的兩張、再隨機抽
     const allKeys = [...cmdKeys, ...teamKeys];
-    const randomPick = allKeys[Math.floor(Math.random()*allKeys.length)];
+    const remaining = allKeys.filter(k => k !== cmdPick && k !== teamPick);
+    const randomPick = remaining[Math.floor(Math.random() * remaining.length)];
     const picks = [cmdPick, teamPick, randomPick];
     s5.rewardOptions = picks.map(t => makeStage5Card(t));
     s5.rewardSlotHover = -1;
@@ -2195,6 +2227,8 @@ const CanvasQteTest = (() => {
   function stage5StartNewRound() {
     const s5 = app.stage5;
     if (!s5) return;
+    // 清掉上回合可能殘留的超車動畫（避免新回合對手車卡在畫面外）
+    app.overtakePassAnim = null;
     // 沙盒：所有對手都超過 → 通關
     if (s5.ahead.length === 0) {
       stage5OnGameWin();
@@ -2225,9 +2259,10 @@ const CanvasQteTest = (() => {
     } else {
       // 但若 chaserId 已被指定（剛超過你的人）就保留
       if (!s5.chaserId) {
+        // v0.9：後車可以隨機抽（玩家後方的名次順序不重要、混亂感反而合理）
         const behindCandidates = s5.passed.slice();
         if (behindCandidates.length > 0) {
-          s5.chaserId = behindCandidates[Math.floor(Math.random()*behindCandidates.length)];
+          s5.chaserId = behindCandidates[Math.floor(Math.random() * behindCandidates.length)];
         }
       }
     }
@@ -2281,6 +2316,17 @@ const CanvasQteTest = (() => {
       s5.ahead = s5.ahead.filter(id => id !== oppId);
       s5.passed.push(oppId);
       app.rank = Math.max(1, app.rank - 1);
+      // v0.9：觸發「對手被超」動畫——從 QTE 結束的「當下位置」滑出畫面
+      //   起始位置 = QTE 期間最後一幀對手車真實渲染位置（cache 在 drawLanes 每 frame 更新）
+      //   這樣不會跳到某個 base 位置才開始動畫
+      app.overtakePassAnim = {
+        startTime: performance.now(),
+        duration: 1400,
+        oppId: oppId,
+        startX: app._lastOpponentRenderX ?? null,
+        startY: app._lastOpponentRenderY ?? null,
+        startW: app._lastOpponentRenderW ?? 82,
+      };
     }
     s5.currentOpponentId = null;
     app.opponentSpeed = 0;
@@ -2291,6 +2337,8 @@ const CanvasQteTest = (() => {
   function stage5OnOvertakeFail() {
     const s5 = app.stage5;
     if (!s5) return;
+    // v0.9：玩家沒掉名次、面對的對手不變（ahead 最後一個保留）
+    //   但其他前方對手 + 所有後方對手的名次可以重新洗
     shuffleStage5Ranks();
     app.message = "超車失敗";
     app.mode = "stage5-overtake-result";  // 統一用 overtake-result 顯示分數
@@ -2305,6 +2353,7 @@ const CanvasQteTest = (() => {
     // 清除上次 QTE 分數，避免防守結算畫面顯示舊資料
     app.qteScore = null; app.qteScoreMax = null; app.qteScorePass = null;
     if (s5) s5.lastMistakeCount = 0;
+    // v0.9：玩家沒掉名次、面對的對手不變、但其他名次可以重新洗
     shuffleStage5Ranks();
     // 最後一名：無後車、不防守、直接下一回合
     if (app.rank === app.rankTotal) {
@@ -2316,19 +2365,30 @@ const CanvasQteTest = (() => {
     app._stage5DefenseInProgress = true;
     beginDefenseSequence();
   }
-  // 排名洗牌：前方非 Boss 對手洗 + 後方對手洗（Boss 不動）
+  // 排名洗牌：前方非 Boss 對手洗（玩家「前一名」固定不動）+ 後方對手洗
   function shuffleStage5Ranks() {
     const s5 = app.stage5;
     if (!s5) return;
-    // 前方：Boss 固定在 index 0，非 boss 部分洗牌
+    // 前方：Boss 固定在 index 0、ahead 最後一個（玩家前一名）固定不動、中間部分洗牌
+    //   ahead 結構：[BOSS?, ..., 玩家前一名]
+    //   要洗的範圍：除了 BOSS 跟最後一個之外的中間部分
     const boss = s5.ahead.filter(id => id === "BOSS");
     const aheadNonBoss = s5.ahead.filter(id => id !== "BOSS");
-    for (let i = aheadNonBoss.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [aheadNonBoss[i], aheadNonBoss[j]] = [aheadNonBoss[j], aheadNonBoss[i]];
+    if (aheadNonBoss.length >= 2) {
+      // 把最後一個（玩家前一名）取出
+      const fixedFront = aheadNonBoss[aheadNonBoss.length - 1];
+      const shufflePool = aheadNonBoss.slice(0, aheadNonBoss.length - 1);
+      // 洗中間（遠方的名次可以亂跳）
+      for (let i = shufflePool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shufflePool[i], shufflePool[j]] = [shufflePool[j], shufflePool[i]];
+      }
+      s5.ahead = [...boss, ...shufflePool, fixedFront];
+    } else {
+      // 只剩 1 個或 0 個前方對手、不需洗
+      s5.ahead = [...boss, ...aheadNonBoss];
     }
-    s5.ahead = [...boss, ...aheadNonBoss];
-    // 後方對手洗牌
+    // 後方對手洗牌（後方名次混亂可接受）
     for (let i = s5.passed.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [s5.passed[i], s5.passed[j]] = [s5.passed[j], s5.passed[i]];
@@ -2363,12 +2423,15 @@ const CanvasQteTest = (() => {
       return;
     }
     // 真的掉名次（不會超過 rankTotal-1，因為最後一名不會進防守）
-    const chaserId = s5.chaserId;
-    if (chaserId) {
-      if (!s5.ahead.includes(chaserId)) s5.ahead.push(chaserId);
-      s5.passed = s5.passed.filter(id => id !== chaserId);
-      s5.pinnedNextOpponentId = chaserId;
-      s5.chaserId = null;
+    // v0.9 規則：chaser（顯示）可以隨機、但實際超車的必須是 passed 最後一個（玩家後一名）
+    //   passed 最後 = 最近被超過 = 真正排玩家後一名的對手
+    //   不用 s5.chaserId（那是顯示用、可能是更後面的對手）
+    const realChaserId = s5.passed[s5.passed.length - 1];
+    if (realChaserId) {
+      if (!s5.ahead.includes(realChaserId)) s5.ahead.push(realChaserId);
+      s5.passed = s5.passed.filter(id => id !== realChaserId);
+      s5.pinnedNextOpponentId = realChaserId;
+      s5.chaserId = null;  // 清空顯示用 chaser、下回合會在 startNewRound 重抽
     }
     app.rank = Math.min(app.rankTotal, app.rank + 1);
     app.message = "防守失敗 — 掉 1 名次";
@@ -3699,8 +3762,8 @@ const CanvasQteTest = (() => {
     // 對手車（紅）：速度越靠近門檻，對手車越靠近玩家車
     const opponentProgress = Math.min(1, app.playerSpeed / Math.max(1, app.opponentSpeed));
     // progress 0 → 對手在 0.62h（遠處）；progress 1 → 對手在 0.72h（快追到了）
-    const opponentY = h * (0.62 + opponentProgress * 0.10);
-    const redW = 82, redH = 40;
+    let opponentY = h * (0.62 + opponentProgress * 0.10);
+    let redW = 82, redH = 40;
     let redX = laneCarX(app.opponentLaneVisual, app.laneCount, opponentY);
     // 超車 / 防守 QTE：對手車覆蓋為全賽道擺動（無視 lane）、像在搶位
     //   彎道 QTE 維持 lane 位置 + 小幅 sway（在後面玩家車那段一起處理）
@@ -3715,6 +3778,30 @@ const CanvasQteTest = (() => {
         const _half = (_maxX - _minX) / 2;
         redX = _center + Math.sin(carSwingPhase(carMotion.red, time)) * _half;
       }
+    }
+    // 每 frame 記下當下對手車的真實位置（給超車成功動畫當起點用）
+    app._lastOpponentRenderX = redX;
+    app._lastOpponentRenderY = opponentY;
+    app._lastOpponentRenderW = redW;
+    // v0.9：超車成功動畫 — 對手車從「QTE 結束當下位置」滑出畫面、放大、指數加速
+    //   - startX/Y/W 在 stage5OnOvertakeSuccess 觸發時就用 cache 填好了
+    //   - 指數加速（t²）：起初慢、最後爆衝
+    //   - X 保持在起始位置（不拉回 lane 中心、避免「順移」感）
+    if (app.overtakePassAnim && app.overtakePassAnim.startX != null) {
+      const anim = app.overtakePassAnim;
+      const elapsed = performance.now() - anim.startTime;
+      const t = Math.min(1, elapsed / anim.duration);
+      // 指數加速（先慢後快）
+      const ease = t * t;
+      // Y：從當下位置 → 畫面外
+      const endY = h + 120;
+      opponentY = anim.startY + (endY - anim.startY) * ease;
+      // X：保持在起始位置（QTE 擺動的最後一幀位置）
+      redX = anim.startX;
+      // 放大：起點 → 終點 480px（更劇烈、更明顯）
+      const endW = 480;
+      redW = anim.startW + (endW - anim.startW) * ease;
+      redH = redW * 40 / 82;
     }
     // ─── 加速頻閃光暈 ──────────────────────────────────────────────────
     if (app.opponentBoostFlash) {
@@ -4995,16 +5082,37 @@ const CanvasQteTest = (() => {
     }
 
     // 中央大字：速度數值（v0.9 UI 改動 — 取代圖示）
-    //   - 指令牌且 speedValue != 0：顯示 +30、-10 等
+    //   - 指令牌：顯示車隊牌結算後的有效速度（被修飾時顏色變、字旁畫小箭頭）
     //   - speedValue=0 或車隊牌：顯示圖示（空間讓給 note）
-    const hasNonZeroSpeed = (typeof card.speedValue === "number" && card.speedValue !== 0);
-    if (hasNonZeroSpeed) {
-      const sv = card.speedValue;
+    const _eff = getCardEffectiveSpeed(card);
+    const hasNonZeroSpeed = (typeof card.speedValue === "number" && _eff.value !== 0);
+    if (hasNonZeroSpeed && card.cardClass === "action") {
+      const sv = _eff.value;
       const speedStr = sv > 0 ? `+${sv}` : `${sv}`;
-      const speedColor = sv > 0 ? "rgba(140,255,160,0.95)" : "rgba(255,140,140,0.95)";
+      // 顏色規則（簡化版）：
+      //   沒修飾（原本）→ 黃
+      //   被 buff 提升  → 綠
+      //   被 debuff 降低 → 淡紅
+      let speedColor;
+      if (!_eff.modified) {
+        speedColor = "rgba(255,220,90,0.98)";   // 黃（原本）
+      } else if (_eff.delta > 0) {
+        speedColor = "rgba(140,255,160,0.95)";  // 綠（提升）
+      } else {
+        speedColor = "rgba(255,170,170,0.95)";  // 淡紅（降低）
+      }
       text(speedStr, x+w/2, y+h*0.58, 44, speedColor, "1000", "center");
+      // 被修飾時、在數字右側畫小三角當「被動過」的提示
+      if (_eff.modified) {
+        const arrow = _eff.delta > 0 ? "▲" : "▼";
+        const arrowCol = _eff.delta > 0 ? "rgba(140,255,160,0.85)" : "rgba(255,170,170,0.85)";
+        text(arrow, x+w*0.86, y+h*0.46, 12, arrowCol, "900", "center");
+      }
+    } else if (typeof card.speedValue === "number" && card.cardClass === "action") {
+      // speedValue=0（如 drift）：用較小的圖示、留空間給長 note
+      drawCardCenterIcon(card, x+w/2, y+h*0.42, 32);
     } else {
-      // speedValue=0（如 drift）或車隊牌：用較小的圖示、留空間給長 note
+      // 車隊牌：用圖示
       drawCardCenterIcon(card, x+w/2, y+h*0.42, 32);
     }
 
