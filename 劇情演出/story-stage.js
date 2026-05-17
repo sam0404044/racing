@@ -1132,14 +1132,14 @@ window.addEventListener("keydown", (event) => {
   if (event.key === " " || event.key === "Enter") {
     event.preventDefault();
     advanceLine();
-  } else if (event.key.toLowerCase() === "s") {
+  } else if (event.key === "Control" || event.ctrlKey) {
     event.preventDefault();
     skipHeld = true;
     skipForward();
   }
 });
 window.addEventListener("keyup", (event) => {
-  if (event.key.toLowerCase() === "s") {
+  if (event.key === "Control") {
     skipHeld = false;
     resetAutoAdvanceTimer();
   }
