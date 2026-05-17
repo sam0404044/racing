@@ -196,6 +196,7 @@ export const STAGE5_COMMAND_CARDS = {
   drift:         { type:"drift",         cardClass:"action", name:"甩尾過彎", speedValue:0,  note:"僅彎道：必觸 QTE，依結果調整賽道加成（成功 +60 / Good +30 / Miss -10）", driftQte:true, requireBend:true },
   chill:         { type:"chill",         cardClass:"action", name:"冷靜應對", speedValue:10, note:"本動 QTE 容錯 +50%", qteForgive:0.5 },
   smoothOp:      { type:"smoothOp",      cardClass:"action", name:"賽車節奏", speedValue:20, note:"前一動作也是指令牌 → +40", smoothOperator:true },
+  mistake:       { type:"mistake",       cardClass:"action", name:"失誤",     speedValue:0,  note:"無效果" },
 };
 
 

@@ -520,7 +520,8 @@ function advanceCircuitOnCard() {
   // 若 checkBendSpeedLimit 觸發了 QTE → 延後切段
   // 等 QTE 結束（endBendQte 1.5 秒後）才切下一段
   // 這保證 endBendQte 內 getLaneBonusFor(playerLane) 拿到的是當前段（c6 lane 1）、不是下一段
-  if (app.mode === "bend-qte") {
+  // 注意：splash-bend 也算「QTE 已觸發」狀態（玩家還沒按確認鍵）
+  if (app.mode === "bend-qte" || app.mode === "splash-bend") {
     app.stage5.pendingCircuitAdvance = true;
     return;
   }
@@ -620,12 +621,15 @@ function triggerBendQTE() {
   const step = speedTierStep(app.playerSpeed);
   const baseSecs = 6;
   const secs = Math.max(2, baseSecs * Math.pow(0.90, step));
-  app.mode = "bend-qte";
-  app.bendQteArrows   = generateBendArrows(step);
-  app.bendQteInput    = [];
-  app.bendQteFailed   = false;
-  app.bendQteDeadline = performance.now() + secs * 1000;
-  app.bendQteTotalSecs = secs;
+  // 先進 splash 顯示難度，等玩家按確認鍵才真正開始
+  app.mode = "splash-bend";
+  app.message = "緊急過彎！";
+  app.qteStart = performance.now();
+  // 預先生成箭頭與參數（按確認鍵時不需重算）
+  app._pendingBendQte = {
+    arrows: generateBendArrows(step),
+    secs,
+  };
 }
 function generateBendArrows(step) {
   const dirs  = ["↑","↓","←","→"];
@@ -1500,10 +1504,7 @@ function doOvertakeQTE() {
   app.message = "極限超車 QTE";
   app.qteStart = performance.now();
   carMotion = createCarMotion();  // 每次 QTE 都重生擺動參數、不可預測
-  setTimeout(() => {
-    app.mode = "rhythm-formal";
-    resetRhythmState();
-  }, 1500);
+  // 等玩家按「開始 QTE」確認鍵才進 rhythm-formal（按鈕在 drawSplash 顯示）
 }
 
 function doPass() {
@@ -1627,6 +1628,12 @@ function stage5StartNewRound() {
   }
   // 每一輪都切下一段賽道（Pass / 超車 / 防守失敗，都會走到這裡）
   advanceCircuit();
+  // 進新賽段時隨機放玩家到任一道（QTE / Pass 結束後不延續上段位置）
+  // 注意：要在 applyOpponentToApp() 之前做，因為對手位置會依玩家位置決定
+  if (app.laneCount > 0) {
+    app.playerLane = Math.floor(Math.random() * app.laneCount);
+    app.playerLaneVisual = app.playerLane;
+  }
   // 一般回合
   // 1. 抽當前對手
   s5.currentOpponentId = pickNextOpponent();
@@ -1836,15 +1843,7 @@ function beginDefenseSequence() {
   // 防守時間：基準 10 秒，每速度檔位 -10%，最低 3 秒
   const step = speedTierStep(app.playerSpeed);
   app.defenseTotalMs = Math.max(3000, 10000 * Math.pow(0.90, step));
-  setTimeout(() => {
-    app.mode = "defense";
-    app.defenseStart = performance.now();
-    app.defenseProgress = 0;
-    app.defenseSucceeded = false;
-    app.safeCenter = 50;
-    app.safeTarget = 50;
-    app.nextSafeShift = performance.now() + 300;
-  }, 1500);
+  // 等玩家按「開始 QTE」確認鍵才進 defense（按鈕在 drawSplash 顯示）
 }
 
 function updateDefense(time) {
@@ -1903,7 +1902,7 @@ function resetRhythmState() {
   app.qteScore = null;
   app.qteScoreMax = null;
   app.qteScorePass = null;
-  app.qteScatterPos = (app.stageIndex > 0) ? generateScatterPositions() : null;
+  app.qteScatterPos = generateRowScatterPositions();
   // 按鍵分配（QWER，避免連續重複）
   const keys = ['q','w','e','r'];
   const assigned = [];
@@ -2077,6 +2076,33 @@ function hitCircle(p) {
 }
 
 // ─── 散佈位置生成（沿用 Sam）──────────────────────────────────────────────
+// 一排亂序：圓圈水平等距排成一排，但「時間順序」到「空間位置」是隨機洗牌。
+// 例如時間上第 1、2、3、4 個出現的圓，可能空間上是第 3、1、4、2 個 slot。
+// y 軸再加上輕微的上下抖動，讓玩家視線必須跳動、不能光靠肌肉記憶往右滑。
+function generateRowScatterPositions() {
+  const n = app.qteCircleCount || 5;
+  // x slot：跟舊 fallback 一樣的等距排法
+  const gap = Math.min(110, app.w * 0.075);
+  const startX = app.w / 2 - gap * Math.floor(n / 2);
+  const slots = Array.from({ length: n }, (_, k) => ({
+    x: startX + k * gap,
+    y: app.h * 0.44,
+  }));
+  // y 抖動：±60px 內隨機（不可離原線太遠、避免被 HUD 或鍵盤提示遮到）
+  const Y_JITTER = 60;
+  for (const s of slots) {
+    s.y += (Math.random() * 2 - 1) * Y_JITTER;
+  }
+  // 隨機排列：第 i 個時間順序的圓圈分配到 perm[i] 號空間 slot
+  const perm = Array.from({ length: n }, (_, i) => i);
+  for (let i = perm.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [perm[i], perm[j]] = [perm[j], perm[i]];
+  }
+  // 輸出：pts[i] = 第 i 個時間順序的圓圈位置
+  return perm.map(slotIdx => slots[slotIdx]);
+}
+
 function generateScatterPositions() {
   const n = app.qteCircleCount || 5;
   const r = RHYTHM_OUTER_R;
@@ -2312,6 +2338,33 @@ function handleButton(id) {
   if (id === "prompt-pass" && app.mode === "prompt-overtake-or-pass") {
     app.mode = "playing";
     pressPass();
+    return;
+  }
+  // QTE 確認鍵：玩家看完難度面板按下、開始 QTE
+  if (id === "qte-confirm-overtake" && app.mode === "splash-overtake") {
+    app.mode = "rhythm-formal";
+    resetRhythmState();
+    return;
+  }
+  if (id === "qte-confirm-defense" && app.mode === "splash-defense") {
+    app.mode = "defense";
+    app.defenseStart = performance.now();
+    app.defenseProgress = 0;
+    app.defenseSucceeded = false;
+    app.safeCenter = 50;
+    app.safeTarget = 50;
+    app.nextSafeShift = performance.now() + 300;
+    return;
+  }
+  if (id === "qte-confirm-bend" && app.mode === "splash-bend") {
+    const pending = app._pendingBendQte || { arrows: [], secs: 6 };
+    app.mode = "bend-qte";
+    app.bendQteArrows   = pending.arrows;
+    app.bendQteInput    = [];
+    app.bendQteFailed   = false;
+    app.bendQteDeadline = performance.now() + pending.secs * 1000;
+    app.bendQteTotalSecs = pending.secs;
+    app._pendingBendQte = null;
     return;
   }
   // 重新來過
@@ -3179,9 +3232,19 @@ function drawHud(time) {
   const spdColor = canOvertakeNow ? "rgba(140,255,180,0.95)" : "rgba(255,150,150,0.95)";
   text(`${oppSpd}`, s.x+s.w-20, s.y+164, 26, spdColor, "900", "right");
   // 下動預測（小字、在大字下方）
+  // 計算流程：
+  //   1. 套用「同道」的賽道加成（applyOpponentBonus）→ lane delta
+  //   2. 若對手下一招會觸發（remaining === 1）、加上 boostAmount
+  //   3. 顯示總和為「下動 → N（+delta）」
   if (opp) {
-    const nextOppSpd = applyOpponentBonus(oppSpd, app.opponentLane, app.opponentAuraBypassed);
+    const hint = computeOpponentNextActionHint("compact");
+    const willBoost = hint && hint.boostAmount > 0 && hint.remaining === 1;
+    const boost = willBoost ? hint.boostAmount : 0;
+
+    const laneResolved = applyOpponentBonus(oppSpd, app.opponentLane, app.opponentAuraBypassed);
+    const nextOppSpd = laneResolved + boost;
     const delta = nextOppSpd - oppSpd;
+
     const arrowColor = delta > 0 ? "rgba(255,150,140,0.95)"
                      : delta < 0 ? "rgba(140,230,170,0.95)"
                      :             "rgba(180,200,220,0.6)";
@@ -3505,32 +3568,25 @@ function drawOpponentInfoPanel(redX, opponentY, redW, redH, time) {
                       : hint.intent === "disrupted" ? "rgba(255,180,100,0.95)"
                       :                               "rgba(220,220,220,0.85)";
 
-    // 計算內容寬度（剩餘動數 + 「動後 」+ icons）
-    ctx.save();
-    ctx.font = "900 18px system-ui, sans-serif";
-    const remainW = ctx.measureText(`${hint.remaining}`).width;
-    ctx.font = "700 10px system-ui, sans-serif";
-    const dongW = ctx.measureText("動後 ").width;
-    ctx.font = "900 20px system-ui, sans-serif";
-    const iconW = 24;  // 每個 icon 間距
-    const iconsW = icons.length * iconW;
-    ctx.restore();
-    const gap = 4;
-    const totalW = remainW + 4 + dongW + iconsW;
-
-    // 從中心算起點
-    const cx = plateX + plateW / 2;
-    let cursorX = cx - totalW / 2;
+    // ─── 左半：剩餘動數 + 「動後」+ icons + (label if bigData) ───
+    let cursorX = plateX + 12;
+    const iconW = 24;
 
     // 剩餘動數
     text(`${hint.remaining}`, cursorX, hintY + 20, 18,
       isStrong2 ? "rgba(255,200,200,0.95)" : "rgba(255,220,140,0.95)", "900", "left");
-    cursorX += remainW + 4;
+    ctx.save();
+    ctx.font = "900 18px system-ui, sans-serif";
+    cursorX += ctx.measureText(`${hint.remaining}`).width + 4;
+    ctx.restore();
 
-    // 「動後 」
+    // 「動後」
     text("動後", cursorX, hintY + 22, 10,
       "rgba(220,240,255,0.7)", "700", "left");
-    cursorX += dongW;
+    ctx.save();
+    ctx.font = "700 10px system-ui, sans-serif";
+    cursorX += ctx.measureText("動後").width + 4;
+    ctx.restore();
 
     // icons + 記錄 rect 用於 tooltip hit-test
     const iconRects = [];
@@ -3538,7 +3594,6 @@ function drawOpponentInfoPanel(redX, opponentY, redW, redH, time) {
       const isIntentIcon = (ic === "⛔" || ic === "💨" || ic === "❓" || ic === "❗");
       const col = isIntentIcon ? intentColor : "#ffffff";
       text(ic, cursorX, hintY + 24, 20, col, "900", "left");
-      // hit-test rect（含一點 padding）
       iconRects.push({
         x: cursorX - 2, y: hintY + 6,
         w: iconW, h: 24,
@@ -3547,13 +3602,19 @@ function drawOpponentInfoPanel(redX, opponentY, redW, redH, time) {
       });
       cursorX += iconW;
     }
-    // 儲存 iconRects 給 tooltip 偵測用
     app._opponentHintIconRects = iconRects;
 
-    // bigData（大數據預測）：full mode 下顯示具體招式描述
-    // label 由 computeOpponentNextActionHint(full) 產生（如「切到你道+加速」）
+    // bigData label
     if (hint.label) {
       text(hint.label, cursorX + 4, hintY + 22, 10, "rgba(180,230,255,0.95)", "700", "left");
+    }
+
+    // ─── 最右：+加速量（只在 boostAmount > 0 時顯示）───
+    if (hint.boostAmount > 0) {
+      const boostStr = `+${hint.boostAmount}`;
+      const boostColor = isStrong2 ? "rgba(255,180,100,0.98)" : "rgba(255,210,120,0.95)";
+      const rightX = plateX + plateW - 10;
+      text(boostStr, rightX, hintY + 22, 14, boostColor, "900", "right");
     }
 
     // 兩區之間的分隔線
@@ -3854,7 +3915,18 @@ function computeOpponentNextActionHint(mode = "compact") {
       label = `加速 +${nextAct.amount || 1}`;
     }
   }
-  return { remaining, weight: nextWeight, action: nextAct.action, icons, label, hasMove, hasSpecial, intent };
+  return {
+    remaining,
+    weight: nextWeight,
+    action: nextAct.action,
+    icons,
+    label,
+    hasMove,
+    hasSpecial,
+    intent,
+    // 對手下一招會加多少速度（boostAfter 或 boost.amount）；0 = 不加速
+    boostAmount: nextAct.boostAfter ?? (nextAct.action === "boost" ? (nextAct.amount || 0) : 0),
+  };
 }
 
 // ─── 對手行動倒數圖示 ──────────────────────────────────────────────────────
@@ -5067,7 +5139,127 @@ function drawRulesModal(time) {
 function drawSplash() {
   const ctx = app.ctx;
   ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0,0,app.w,app.h);
-  text(app.message, app.w/2, app.h*0.42, 38, "#ffd94f", "1000", "center");
+  text(app.message, app.w/2, app.h*0.26, 38, "#ffd94f", "1000", "center");
+
+  // 三種 QTE splash 都顯示難度面板 + 確認鍵
+  const isOvertake = app.mode === "splash-overtake";
+  const isDefense  = app.mode === "splash-defense";
+  const isBend     = app.mode === "splash-bend";
+  if (!isOvertake && !isDefense && !isBend) return;
+
+  const qteType = isOvertake ? "overtake" : isDefense ? "defense" : "bend";
+  drawQteDifficultyPanel(qteType);
+
+  // 確認鍵
+  const btnId = isOvertake ? "qte-confirm-overtake"
+              : isDefense  ? "qte-confirm-defense"
+              :              "qte-confirm-bend";
+  const btnW = 200;
+  const btnH = 48;
+  const btnX = (app.w - btnW) / 2;
+  const btnY = app.h * 0.42 + 240;
+  button(btnId, "開始 QTE", btnX, btnY, btnW, btnH, false, "start");
+}
+
+// 三種 QTE 共用的難度面板（splash 階段顯示）
+//   - overtake: 圓圈數、間隔
+//   - defense:  總時長、難度級別
+//   - bend:     箭頭數、時限
+function drawQteDifficultyPanel(qteType) {
+  const ctx = app.ctx;
+  const speed = app.playerSpeed;
+  const speedComponent = Math.max(0, Math.floor((speed - 10) / 30));
+  const laneBonus = getLaneBonusFor(app.playerLane);
+  const offset = (laneBonus && typeof laneBonus.qteDifficultyOffset === "number")
+    ? laneBonus.qteDifficultyOffset : 0;
+  const step = Math.max(0, speedComponent + offset);
+
+  // 各 QTE 的副標
+  let subline = "";
+  if (qteType === "overtake") {
+    const circleCount = Math.min(10, Math.round(5 * Math.pow(1.10, step)));
+    const qteDiff = currentLaneQteDiff();
+    const intervalScale = qteDiff === "easy" ? 1.25 : qteDiff === "hard" ? 0.75 : 1.0;
+    const interval = Math.round(620 * intervalScale);
+    subline = `圓圈 ${circleCount} 顆　間隔 ${interval}ms`;
+  } else if (qteType === "defense") {
+    const totalSecs = Math.max(3, 10 * Math.pow(0.90, step));
+    subline = `防守時長 ${totalSecs.toFixed(1)} 秒`;
+  } else { // bend
+    const totalSecs = Math.max(2, 6 * Math.pow(0.90, step));
+    const arrowCount = Math.min(12, 2 + step * 2);
+    subline = `箭頭 ${arrowCount} 個　時限 ${totalSecs.toFixed(1)} 秒`;
+  }
+
+  // 道路節奏只在超車 QTE 顯示（其他兩種不吃 qteDiff）
+  const showQteDiff = (qteType === "overtake");
+  const qteDiff = showQteDiff ? currentLaneQteDiff() : null;
+
+  const panelW = 460;
+  const panelH = showQteDiff ? 220 : 194;
+  const panelX = (app.w - panelW) / 2;
+  const panelY = app.h * 0.42;
+  roundPanel(panelX, panelY, panelW, panelH, 12,
+    "rgba(12,18,30,0.92)", "rgba(255,217,79,0.5)", 2);
+
+  // 標題
+  text("QTE 難度", panelX + panelW / 2, panelY + 28, 14,
+    "rgba(255,217,79,0.7)", "700", "center");
+
+  // 大數字
+  text(`${step}`, panelX + panelW / 2, panelY + 78, 44,
+    "#ffd94f", "1000", "center");
+  text(subline, panelX + panelW / 2, panelY + 102, 12,
+    "rgba(220,230,245,0.7)", "700", "center");
+
+  // 分隔線
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,217,79,0.25)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(panelX + 30, panelY + 122);
+  ctx.lineTo(panelX + panelW - 30, panelY + 122);
+  ctx.stroke();
+  ctx.restore();
+
+  const rowY1 = panelY + 144;
+  const rowY2 = panelY + 168;
+  const rowY3 = panelY + 192;
+  const labelX = panelX + 40;
+  const valueX = panelX + panelW - 40;
+
+  // 第 1 列：速度
+  text(`速度 ${speed}`, labelX, rowY1, 12,
+    "rgba(200,215,235,0.85)", "700", "left");
+  text(`${speedComponent}`, valueX, rowY1, 14,
+    "#dfeeff", "900", "right");
+
+  // 第 2 列：道路加成
+  if (offset !== 0) {
+    const offsetColor = offset > 0 ? "rgba(255,150,140,0.95)" : "rgba(140,230,170,0.95)";
+    const offsetSign = offset > 0 ? "+" : "";
+    text(`道路加成　${laneBonus.label || ""}`, labelX, rowY2, 12,
+      "rgba(200,215,235,0.85)", "700", "left");
+    text(`${offsetSign}${offset}`, valueX, rowY2, 14,
+      offsetColor, "900", "right");
+  } else {
+    text(`道路加成　無`, labelX, rowY2, 12,
+      "rgba(160,175,195,0.6)", "700", "left");
+    text(`0`, valueX, rowY2, 14,
+      "rgba(160,175,195,0.6)", "900", "right");
+  }
+
+  // 第 3 列：道路節奏（只有超車 QTE 顯示）
+  if (showQteDiff) {
+    const diffLabel = qteDiff === "easy" ? "易（圓圈間距 ×1.25）"
+                    : qteDiff === "hard" ? "難（圓圈間距 ×0.75 + 抖動）"
+                    : "一般";
+    const diffColor = qteDiff === "easy" ? "rgba(140,230,170,0.95)"
+                    : qteDiff === "hard" ? "rgba(255,150,140,0.95)"
+                    : "rgba(200,215,235,0.85)";
+    text(`道路節奏　${diffLabel}`, labelX, rowY3, 12,
+      diffColor, "700", "left");
+  }
 }
 
 function drawOvertakeAnim(time) {
