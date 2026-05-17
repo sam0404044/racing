@@ -78,7 +78,7 @@ function openArchiveFrame() {
     } catch {
       /* ignore */
     }
-    window.location.href = "角色圖鑑表.html";
+    window.location.href = "character-archive.html";
     return;
   }
   const reveal = () => {
@@ -87,7 +87,7 @@ function openArchiveFrame() {
   };
   if (!frame.dataset.archiveLoaded) {
     frame.addEventListener("load", reveal, { once: true });
-    frame.src = "角色圖鑑表.html";
+    frame.src = "character-archive.html";
     frame.dataset.archiveLoaded = "1";
   } else {
     reveal();

@@ -736,7 +736,7 @@ canvas.addEventListener("click", (event) => {
         /* ignore */
       }
     } else {
-      window.location.href = "劇情演出階段.html";
+      window.location.href = "story-stage.html";
     }
     return;
   }
