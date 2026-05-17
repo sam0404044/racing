@@ -28,6 +28,12 @@ import {
 } from './config.js';
 import { app } from './state.js';
 
+// ─── 全局 UI 倍率 ────────────────────────────────────────────────────────
+// 一次調整所有文字大小與 modal 框框尺寸
+// 1.0 = 原始大小；1.2 = 放大 20%
+const FONT_SCALE = 1.2;
+const UI_SCALE = FONT_SCALE;
+
 // ─── 音樂 ────────────────────────────────────────────────────────────────
 const NORMAL_STAGE_BGM_SRC = "../assets/BGM/001.mp3";
 const normalBgm = new Audio(NORMAL_STAGE_BGM_SRC);
@@ -2193,13 +2199,18 @@ function setupInput() {
   app.canvas.addEventListener("mouseup", e => {
     if (!app.drag) return;
     const p = point(e);
-    let dropped = false;
-    for (let i = 0; i < app.laneCount; i++) {
-      const zone = app.zones.lanes && app.zones.lanes[i];
-      if (zone && zone.droppable && inRect(p, zone)) {
-        playCardToLane(app.drag.from, i);
-        dropped = true;
-        break;
+    // 取消區優先：拖回手牌列附近不算打出
+    const handTop = app.h - 190 - 60;
+    const handBottom = app.h - 190 + 164 + 30;
+    if (p.y >= handTop && p.y <= handBottom) {
+      app.drag = null;
+      return;
+    }
+    const laneIdx = laneAtPoint(p);
+    if (laneIdx >= 0) {
+      const zone = app.zones.lanes && app.zones.lanes[laneIdx];
+      if (zone && zone.droppable) {
+        playCardToLane(app.drag.from, laneIdx);
       }
     }
     app.drag = null;
@@ -2209,13 +2220,17 @@ function setupInput() {
     if (!app.drag) return;
     const t = e.changedTouches[0];
     const p = { x: t.clientX - app.canvas.getBoundingClientRect().left, y: t.clientY - app.canvas.getBoundingClientRect().top };
-    let dropped = false;
-    for (let i = 0; i < app.laneCount; i++) {
-      const zone = app.zones.lanes && app.zones.lanes[i];
-      if (zone && zone.droppable && inRect(p, zone)) {
-        playCardToLane(app.drag.from, i);
-        dropped = true;
-        break;
+    const handTop = app.h - 190 - 60;
+    const handBottom = app.h - 190 + 164 + 30;
+    if (p.y >= handTop && p.y <= handBottom) {
+      app.drag = null;
+      return;
+    }
+    const laneIdx = laneAtPoint(p);
+    if (laneIdx >= 0) {
+      const zone = app.zones.lanes && app.zones.lanes[laneIdx];
+      if (zone && zone.droppable) {
+        playCardToLane(app.drag.from, laneIdx);
       }
     }
     app.drag = null;
@@ -2526,16 +2541,20 @@ function draw(time) {
       const handY2 = app.h - 190;
       const baseY3 = handY2 - laneH2 - 30;
 
-      // 收集懸停道的 previewLines（重算一次，因為已在 drawLanes 裡算過）
+      // 收集懸停道的 previewLines（依牌位置決定哪一道）
       // 車隊牌不參與預覽（直接結算、不影響速度）
+      // 拖回手牌列（取消區）時也不顯示算式
       const isDragTeamCard = app.drag.card?.cardClass === "team";
+      const handTop3 = app.h - 190 - 60;
+      const handBottom3 = app.h - 190 + 164 + 30;
+      const isOverCancelZone = dragCy >= handTop3 && dragCy <= handBottom3;
       let hoverLines = [];
       let hoverLane = -1;
-      if (!isDragTeamCard) {
-        for (let li = 0; li < laneCount2; li++) {
-        const lx = baseX2 + li * (laneW2 + gap2);
-        if (inRect({ x: dragCx, y: dragCy }, { x: lx, y: baseY3, w: laneW2, h: laneH2 })) {
-          hoverLane = li;
+      if (!isDragTeamCard && !isOverCancelZone) {
+        // 用整條賽道判定（laneAtPoint）、不再依舊道格 rect
+        hoverLane = laneAtPoint({ x: dragCx, y: dragCy });
+        if (hoverLane >= 0) {
+          const li = hoverLane;
           const b = getLaneBonusFor(li);
           const add = b?.add ?? 0; const mult = b?.mult ?? 1;
           if (li === app.playerLane) {
@@ -2545,14 +2564,12 @@ function draw(time) {
             if (cardSpd !== 0) hoverLines.push({ left: `+${cardSpd} 行動（${app.drag.card.name}）`, color: "rgba(140,255,160,0.95)" });
             if (add !== 0) hoverLines.push({ left: `${add > 0 ? "+" : ""}${add} 道路（${b?.label?.replace(/ [+-]?\d.*$/, "") ?? "道路加成"}）`, color: add > 0 ? "rgba(255,210,60,0.95)" : "rgba(140,200,220,0.95)" });
             if (mult !== 1) hoverLines.push({ left: `×${mult} 道路（${b?.label?.split(" ")[0] ?? "彎道"}）`, color: "rgba(255,180,80,0.95)" });
-            // 清道夫光環：在他所在道上、加成被抹除 → 給玩家警告
             if (b?._auraSuppressed) {
               hoverLines.push({ left: "⚠ 清道夫光環：加成失效", color: "rgba(255,140,200,0.95)" });
             }
             if (b?.speedLimit != null && previewSpd > b.speedLimit) {
               hoverLines.push({ left: `⚠ 超速！限速 ${b.speedLimit}`, color: "rgba(255,80,80,0.98)" });
             }
-            // c7 坑洞警告
             if (app.stage5?.potholeLanes?.includes(li)) {
               const auraSafe = isOpponentAuraActive() && app.opponentLane === li;
               if (auraSafe) {
@@ -2561,7 +2578,6 @@ function draw(time) {
                 hoverLines.push({ left: "⚠ 撞坑！-1 輪胎", color: "rgba(255,80,80,0.98)" });
               }
             }
-            // c6 油污警告
             if (b?.forceCornerQte) {
               hoverLines.push({ left: "⚠ 油污：強制 QTE", color: "rgba(255,180,100,0.95)" });
               hoverLines.push({ left: "（失敗 -1 胎、滑開）", color: "rgba(220,160,80,0.85)" });
@@ -2597,15 +2613,14 @@ function draw(time) {
               hoverLines.push({ left: "（失敗 -1 胎、滑開）", color: "rgba(220,160,80,0.85)" });
             }
           }
-          break;
-        }
-      }
+        }  // end if (hoverLane >= 0)
       }  // end if (!isDragTeamCard)
 
       if (hoverLines.length > 0) {
         const tipCx = app.drag.x + app.drag.w/2;
         const lineH  = 20;
-        const tipH   = hoverLines.length * lineH + 16;
+        const tipPadY = 12;  // 上下內距
+        const tipH   = hoverLines.length * lineH + tipPadY * 2 - (lineH - 14);  // 視覺更平衡
         const tipW   = 210;
         const tipX   = tipCx - tipW/2;
         const tipY   = app.drag.y - tipH - 8;
@@ -2618,8 +2633,11 @@ function draw(time) {
         ctx.roundRect(tipX, tipY, tipW, tipH, 8);
         ctx.fill(); ctx.stroke();
         ctx.restore();
+        // 文字以 box 中心為基準對稱排列
+        const totalTextH = hoverLines.length * lineH;
+        const startY = tipY + (tipH - totalTextH) / 2 + lineH / 2 + 4;
         hoverLines.forEach((line, idx) => {
-          const y2 = tipY + 14 + idx * lineH;
+          const y2 = startY + idx * lineH;
           const label = line.left ?? line.label ?? "";
           text(label, tipCx, y2, 12, line.color, "800", "center");
         });
@@ -2711,6 +2729,24 @@ function carSwingPhase(motion, time) {
   const modPart2 = motion.speed * motion.modAmp2 / motion.modSpeed2
                  * (Math.cos(motion.modPhase2) - Math.cos(motion.modSpeed2 * time + motion.modPhase2));
   return motion.phase + linearPart + modPart1 + modPart2;
+}
+
+/**
+ * 判定一個點屬於哪一道（用賽道梯形範圍）
+ * 從 horizon（地平線）到 canvas 底部都算「賽道區」。
+ * 落在賽道左/右邊界外（路邊）→ 回 -1
+ * 落在 horizon 上方（天空）→ 回 -1
+ * 否則回該點 y 那條水平線上、x 落入哪一道的索引（0-base）
+ */
+function laneAtPoint(p) {
+  const horizon = app.h * 0.38;
+  if (p.y < horizon) return -1;
+  const bounds = roadLaneBoundsAt(p.y);
+  if (p.x < bounds.left || p.x > bounds.right) return -1;
+  const laneCount = app.laneCount || 1;
+  const laneW = (bounds.right - bounds.left) / laneCount;
+  const idx = Math.floor((p.x - bounds.left) / laneW);
+  return Math.max(0, Math.min(laneCount - 1, idx));
 }
 
 function roadLaneBoundsAt(y) {
@@ -3149,12 +3185,172 @@ function drawRace(time) {
       : "rgba(220,200,160,0.85)";
     text(`後車 ${app.chaserSpeed}`, cx, cy - 32, 12, labelColor, "900", "center");
   }
+
+  // ─── 拖曳中：整條賽道閃亮邊框 + 提示文字 ─────────────────────────────
+  if (app.drag && app.mode === "playing") {
+    drawDragHighlight(time, h, horizon);
+  }
+}
+
+// 拖曳中沿賽道梯形邊框打上閃亮效果 + 在路面中央打提示文字
+function drawDragHighlight(time, h, horizon) {
+  const ctx = app.ctx;
+  // 重建賽道邊界 (drawRace 內 const 變數無法跨函式共用、所以重算)
+  const SEGMENTS = 24;
+  const ys = [];
+  for (let i = 0; i <= SEGMENTS; i++) {
+    ys.push(horizon + (h - horizon) * (i / SEGMENTS));
+  }
+  const bounds = ys.map(yy => roadLaneBoundsAt(yy));
+
+  // 牌懸停在哪一道？
+  const dragCx = app.drag.x + app.drag.w/2;
+  const dragCy = app.drag.y + app.drag.h/2;
+  const hoverLane = laneAtPoint({ x: dragCx, y: dragCy });
+  const isHoveringRoad = hoverLane >= 0;
+
+  // 取消區：手牌列 y 範圍附近（牌拖回就取消）
+  // 手牌頂端 y = app.h - 190、底端 = h - 190 + 164 = app.h - 26
+  // 給 ±60px 緩衝
+  const handTop = app.h - 190 - 60;
+  const handBottom = app.h - 190 + 164 + 30;
+  const isOverCancelZone = dragCy >= handTop && dragCy <= handBottom;
+
+  // 脈動：拖曳時的呼吸效果
+  const pulse = 0.55 + Math.sin(time * 0.005) * 0.25;
+
+  // 取消區優先：拖回手牌列、整個賽道淡掉、顯示取消提示
+  if (isOverCancelZone) {
+    // 淡紅邊框 + 取消提示在牌附近
+    ctx.save();
+    ctx.shadowColor = `rgba(255, 120, 120, ${pulse})`;
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = `rgba(255, 120, 120, ${pulse * 0.8})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(bounds[0].left, ys[0]);
+    for (let i = 1; i < bounds.length; i++) ctx.lineTo(bounds[i].left, ys[i]);
+    ctx.lineTo(bounds[bounds.length-1].right, ys[ys.length-1]);
+    for (let i = bounds.length - 2; i >= 0; i--) ctx.lineTo(bounds[i].right, ys[i]);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+
+    // 取消提示 — 在牌的上方
+    text("✕ 放回手牌 ‧ 取消打出",
+      dragCx, app.drag.y - 18, 18, `rgba(255, 180, 180, ${pulse})`, "900", "center");
+    return;
+  }
+
+  // 每道分別描邊：當前 hover 那條道亮綠、其他道淡黃（提示也可放）
+  const laneCount = app.laneCount || 2;
+  ctx.save();
+  for (let li = 0; li < laneCount; li++) {
+    const isHover = (li === hoverLane);
+    const color = isHover
+      ? `rgba(120, 255, 160, ${pulse})`
+      : `rgba(255, 200, 80, ${pulse * 0.45})`;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = isHover ? 20 : 8;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = isHover ? 4 : 2;
+    ctx.beginPath();
+    for (let i = 0; i < bounds.length; i++) {
+      const bd = bounds[i];
+      const laneWide = (bd.right - bd.left) / laneCount;
+      const lx = bd.left + laneWide * li;
+      if (i === 0) ctx.moveTo(lx, ys[i]);
+      else ctx.lineTo(lx, ys[i]);
+    }
+    {
+      const bd = bounds[bounds.length - 1];
+      const laneWide = (bd.right - bd.left) / laneCount;
+      ctx.lineTo(bd.left + laneWide * (li + 1), ys[ys.length - 1]);
+    }
+    for (let i = bounds.length - 2; i >= 0; i--) {
+      const bd = bounds[i];
+      const laneWide = (bd.right - bd.left) / laneCount;
+      const rx = bd.left + laneWide * (li + 1);
+      ctx.lineTo(rx, ys[i]);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 車隊牌：只顯示「裝備」單行提示在中央
+  const isDragTeamCard = app.drag.card?.cardClass === "team";
+  if (isDragTeamCard) {
+    const cy = horizon + (h - horizon) * 0.55;
+    text("拖到任意處 ‧ 裝備車隊牌",
+      app.w / 2, cy, 18, `rgba(140, 255, 200, ${pulse})`, "900", "center");
+    return;
+  }
+
+  // 每道路面常駐文字提示：道名 + 動作（hover 那道高亮白色、其他道灰色）
+  //
+  // 配置：
+  //   所有道的提示文字統一在同一個 y（玩家車前方）
+  //   速度大字（drawCurrentSpeedSign）放在更前面（y 更靠近 horizon）
+  const circ = currentCircuit();
+  const ty = horizon + (h - horizon) * 0.30;  // 接在速度數字 (t≈0.12~0.26) 下方
+  const tBounds = roadLaneBoundsAt(ty);
+  const laneWide = (tBounds.right - tBounds.left) / laneCount;
+
+  for (let li = 0; li < laneCount; li++) {
+    const isOwnLane = li === app.playerLane;
+    const isHover = (li === hoverLane);
+    const tx = tBounds.left + laneWide * (li + 0.5);
+
+    // 道名：優先用 circuit 自訂的 laneNames（c8 紅黃綠道），否則用通用名
+    let laneName;
+    if (circ?.laneNames && circ.laneNames[li]) {
+      laneName = circ.laneNames[li];
+    } else if (laneCount === 2) {
+      laneName = ["內彎", "外彎"][li] ?? `道 ${li + 1}`;
+    } else if (laneCount === 3) {
+      laneName = ["左道", "中道", "右道"][li] ?? `道 ${li + 1}`;
+    } else {
+      laneName = `道 ${li + 1}`;
+    }
+
+    const actionLabel = isOwnLane ? "打牌" : "換道";
+    const fullLabel = `${laneName} ‧ ${actionLabel}`;
+
+    // hover 那道 → 白色 + pulse；其他 → 淡灰常駐
+    const labelColor = isHover
+      ? `rgba(255, 255, 255, ${pulse})`
+      : "rgba(160, 170, 185, 0.5)";
+    const labelSize = isHover ? 18 : 14;
+    text(fullLabel, tx, ty, labelSize, labelColor, "900", "center");
+
+    // 只有 hover 道顯示詳細資訊（賽道加成 / 強制 QTE / 撞坑）
+    // 但 c8 紅綠燈未揭曉的道不要洩漏 label（揭曉後才顯示）
+    if (isHover) {
+      const subTips = [];
+      const isC8Hidden = circ?.hideLaneBonusUntilVisited
+        && !(app.stage5?.revealedC8Lanes?.has(li));
+      if (!isC8Hidden) {
+        const b = getLaneBonusFor(li);
+        if (b?.label) subTips.push(b.label);
+        if (b?.forceCornerQte) subTips.push("⚡ 強制彎道 QTE");
+      } else {
+        subTips.push("? 未揭曉");
+      }
+      if (app.stage5?.potholeLanes?.includes(li)) subTips.push("⚠ 此道有坑");
+      subTips.forEach((tip, idx) => {
+        text(tip, tx, ty + 24 + idx * 18, 12,
+          `rgba(220, 230, 240, ${pulse * 0.85})`, "700", "center");
+      });
+    }
+  }
 }
 
 
 // ─── HUD ───────────────────────────────────────────────────────────────────
 function statusHudRect() {
-  return { x: app.w - 300, y: app.h - 196 - 24, w: 276, h: 196 };
+  // 高度從 196 → 250、給每行更多呼吸空間
+  return { x: app.w - 300, y: app.h - 250 - 24, w: 276, h: 250 };
 }
 
 function drawHud(time) {
@@ -3166,36 +3362,35 @@ function drawHud(time) {
     ctx.beginPath(); ctx.moveTo(s.x+16,y); ctx.lineTo(s.x+s.w-16,y); ctx.stroke(); ctx.restore();
   };
 
-  // 名次
-  text("名次", s.x+20, s.y+32, 13, "rgba(160,190,230,0.65)", "700");
-  text(`${app.rank} / ${app.rankTotal}`, s.x+s.w-20, s.y+32, 15, "rgba(214,228,255,0.95)", "900", "right");
-  hr(s.y+46);
+  // ── 名次 ── (y 30-58)
+  text("名次", s.x+20, s.y+34, 13, "rgba(160,190,230,0.65)", "700");
+  text(`${app.rank} / ${app.rankTotal}`, s.x+s.w-20, s.y+34, 15, "rgba(214,228,255,0.95)", "900", "right");
+  hr(s.y+54);
 
-  // 輪胎（血量）顯示
-  text("輪胎", s.x+20, s.y+72, 13, "rgba(200,230,255,0.65)", "700");
+  // ── 輪胎 ── (y 64-100)
+  text("輪胎", s.x+20, s.y+82, 13, "rgba(200,230,255,0.65)", "700");
   for (let i=0; i<app.tiresMax; i++) {
     const alive = i < app.tires;
-    roundPanel(s.x+76+i*26, s.y+57, 22, 22, 4,
+    roundPanel(s.x+76+i*26, s.y+67, 22, 22, 4,
       alive ? "rgba(255,100,80,0.85)" : "rgba(30,40,60,0.5)",
       alive ? "rgba(255,150,120,0.6)" : "rgba(80,100,130,0.25)", 1.5);
-    if (alive) text("●", s.x+76+i*26+11, s.y+72, 12, "rgba(255,220,210,0.95)", "900", "center");
+    if (alive) text("●", s.x+76+i*26+11, s.y+82, 12, "rgba(255,220,210,0.95)", "900", "center");
   }
-  hr(s.y+92);
+  hr(s.y+110);
 
-  // 玩家速度 — 顯示「當前道顯示速度」
+  // ── 玩家速度 ── (y 122-160)
   const laneSpd = currentLaneSpeed();
   const laneBonus = getLaneBonusFor(app.playerLane);
-  text("速度", s.x+20, s.y+116, 13, "rgba(100,200,255,0.7)", "700");
+  text("速度", s.x+20, s.y+138, 13, "rgba(100,200,255,0.7)", "700");
   if (laneBonus) {
-    text(laneBonus.label || "", s.x+20, s.y+125, 9, "rgba(100,200,255,0.55)", "600");
+    text(laneBonus.label || "", s.x+20, s.y+152, 9, "rgba(100,200,255,0.55)", "600");
   }
-  text(`${laneSpd}`, s.x+s.w-20, s.y+120, 28, "rgba(120,220,255,0.95)", "900", "right");
-  hr(s.y+140);
+  text(`${laneSpd}`, s.x+s.w-20, s.y+144, 28, "rgba(120,220,255,0.95)", "900", "right");
+  hr(s.y+170);
 
-  // 對手區（對手名 + 專注度 + 速度 + 下動預測）
+  // ── 對手區 ── (y 182-238)
   const oppSpd = opponentDisplaySpeed();
   const opp = isStage5() ? currentOpponent() : null;
-  // 「現在真的可超車」= 不同道 + 自己速度高於對手 + 專注度=0
   const s5 = app.stage5;
   const focusMax = opp ? (opp.focus ?? 0) : 0;
   const focusCur = (opp && s5) ? (s5.opponentFocusMap?.[opp.id] ?? 0) : 0;
@@ -3203,14 +3398,12 @@ function drawHud(time) {
   const speedEnough = opp && (laneSpd > oppSpd);
   const differentLane = opp && (app.playerLane !== app.opponentLane);
   const canOvertakeNow = focusBroken && speedEnough && differentLane;
-  // 左上：對手名（沒對手時顯示通用「對手速度」）
   const nameStr = opp?.name || "對手速度";
   const nameColor = canOvertakeNow ? "rgba(120,255,160,0.95)" : "rgba(255,160,160,0.85)";
-  text(nameStr, s.x+20, s.y+160, 13, nameColor, "800");
-  // 對手名右側：專注度點點（緊貼名字後）
+  text(nameStr, s.x+20, s.y+192, 13, nameColor, "800");
   if (opp) {
     ctx.save();
-    ctx.font = "800 13px system-ui, sans-serif";
+    ctx.font = `800 ${13 * FONT_SCALE}px system-ui, sans-serif`;
     const nameW = ctx.measureText(nameStr).width;
     ctx.restore();
     if (focusMax > 0) {
@@ -3219,23 +3412,16 @@ function drawHud(time) {
         const dotX = s.x+20 + nameW + 8 + i * 12;
         ctx.fillStyle = alive ? "rgba(255,170,70,0.95)" : "rgba(80,60,40,0.5)";
         ctx.beginPath();
-        ctx.arc(dotX, s.y+156, 4, 0, Math.PI*2);
+        ctx.arc(dotX, s.y+188, 4, 0, Math.PI*2);
         ctx.fill();
       }
     }
-    // 真正可超車（含速度條件）：用「!」當小驚嘆
     if (canOvertakeNow) {
-      text("!", s.x+20 + nameW + 8, s.y+160, 14, "rgba(120,255,160,0.95)", "900");
+      text("!", s.x+20 + nameW + 8, s.y+192, 14, "rgba(120,255,160,0.95)", "900");
     }
   }
-  // 右側大字速度
   const spdColor = canOvertakeNow ? "rgba(140,255,180,0.95)" : "rgba(255,150,150,0.95)";
-  text(`${oppSpd}`, s.x+s.w-20, s.y+164, 26, spdColor, "900", "right");
-  // 下動預測（小字、在大字下方）
-  // 計算流程：
-  //   1. 套用「同道」的賽道加成（applyOpponentBonus）→ lane delta
-  //   2. 若對手下一招會觸發（remaining === 1）、加上 boostAmount
-  //   3. 顯示總和為「下動 → N（+delta）」
+  text(`${oppSpd}`, s.x+s.w-20, s.y+200, 26, spdColor, "900", "right");
   if (opp) {
     const hint = computeOpponentNextActionHint("compact");
     const willBoost = hint && hint.boostAmount > 0 && hint.remaining === 1;
@@ -3251,7 +3437,7 @@ function drawHud(time) {
     const deltaStr = delta > 0 ? `+${delta}` : `${delta}`;
     const predictStr = delta === 0 ? `下動 → ${nextOppSpd}`
                                    : `下動 → ${nextOppSpd}（${deltaStr}）`;
-    text(predictStr, s.x+s.w-20, s.y+184, 11, arrowColor, "800", "right");
+    text(predictStr, s.x+s.w-20, s.y+228, 11, arrowColor, "800", "right");
   }
 }
 
@@ -3273,217 +3459,75 @@ function drawLanes(time) {
     const x = baseX + i*(laneW+gap);
     const y = baseY;
     const droppable = canDropToLane(i);
-    // zone 永遠存在（供 overlay spotlight 用），droppable 決定是否接受拖牌
+    // zone 永遠存在（供 overlay spotlight + 拖曳預覽用）
     app.zones.lanes[i] = { x, y, w: laneW, h: laneH, droppable };
 
-    const isPlayer   = i === app.playerLane;
-    const isOpponent = i === app.opponentLane;
-    const isBoth     = isPlayer && isOpponent;
-    const bonusData  = getLaneBonusFor(i);
-    const hasBonus   = !!bonusData;
+    // 道格視覺完全拿掉。判定區改成「整條賽道」（用 laneAtPoint 在 mouseup 處理）。
+    // 只保留：
+    //   - 拖曳中、牌懸停在這道的「速度預覽 + 警告」（地面 AR 顯示已包含、但若有彎道警告也補在這裡）
+    //   - 道格邊框與背景全不畫
+    if (!app.drag) continue;
 
-    // c8 紅綠燈干擾：未揭曉狀態判斷
-    const curCirc = currentCircuit();
-    const c8HideMode = !!(curCirc && curCirc.hideLaneBonusUntilVisited);
-    const c8LaneColor = c8HideMode && curCirc.laneColors ? curCirc.laneColors[i] : null;
-    const c8Revealed  = c8HideMode && app.stage5 && app.stage5.revealedC8Lanes && app.stage5.revealedC8Lanes.has(i);
-    const c8Hidden    = c8HideMode && !c8Revealed;
+    // 預覽計算（為地面 AR 速度標誌服務 + 彎道警告）
+    const isDragTeamCard = app.drag.card?.cardClass === "team";
+    if (isDragTeamCard) continue;
 
-    let borderColor = "rgba(60,80,110,0.35)";
-    if (isBoth)          borderColor = "rgba(255,80,80,0.95)";
-    else if (isPlayer)   borderColor = "rgba(100,200,255,0.9)";
-    else if (isOpponent) borderColor = "rgba(255,100,100,0.55)";
-    if (hasBonus && !c8Hidden) {
-      const isPos = (bonusData.add ?? 0) > 0 || (bonusData.mult ?? 1) > 1;
-      borderColor = isPos ? "rgba(255,210,60,0.9)" : "rgba(140,180,200,0.7)";
-    }
-    // c8：揭曉前用紅黃綠道主題色（玩家/對手在的道仍優先顯示原來邊框，避免失去資訊）
-    if (c8HideMode && c8LaneColor && !isPlayer && !isOpponent) {
-      borderColor = c8LaneColor;
-    }
+    const curCirc2 = currentCircuit();
+    const c8HideMode2 = !!(curCirc2 && curCirc2.hideLaneBonusUntilVisited);
+    const c8Hidden2 = c8HideMode2 && app.stage5 && app.stage5.revealedC8Lanes && !app.stage5.revealedC8Lanes.has(i);
 
-    const ctx = app.ctx;
-    ctx.save();
+    const bonusData2 = getLaneBonusFor(i);
+    const speedLimit = bonusData2?.speedLimit ?? null;
 
-    let bgColor = "rgba(10,18,32,0.72)";
-    if (isPlayer) bgColor = "rgba(12,28,52,0.88)";
-    if (hasBonus && !c8Hidden && ((bonusData.add ?? 0) > 0 || (bonusData.mult ?? 1) > 1)) bgColor = "rgba(28,22,8,0.88)";
-    panel(x, y, laneW, laneH, bgColor, borderColor, !isPlayer);
+    // 牌在這道上方？
+    const dragCx = app.drag.x + app.drag.w/2;
+    const dragCy = app.drag.y + app.drag.h/2;
+    // 用整個賽道判定（laneAtPoint）而不是道格 rect
+    const hoverLane = laneAtPoint({ x: dragCx, y: dragCy });
+    const hovering = (hoverLane === i);
 
-    // c7 坑洞段 / c6 油污段的 sprite 已移到 drawRace 內畫在賽道路面上
-    // （這裡道格只有 label、不畫 sprite）
+    if (!hovering) continue;
 
-    // 加成標籤：顯示在格子上方（格子外），字放大
-    {
-      const bd = bonusData;
-      let bonusStr, bonusCol;
-      if (c8Hidden) {
-        // c8 未揭曉：顯示道名 + "?"
-        const laneName = (curCirc.laneNames && curCirc.laneNames[i]) || `道 ${i}`;
-        bonusStr = `${laneName} ?`;
-        bonusCol = c8LaneColor || "rgba(255,255,255,0.85)";
-      } else if (bd) {
-        // label 已含所有資訊（如「內彎 ×1.25｜限速 5」），直接用
-        bonusStr = bd.label ?? "道路加成";
-        const isPos = (bd.add ?? 0) > 0 || (bd.mult ?? 1) > 1;
-        bonusCol = isPos ? "rgba(255,210,60,0.95)" : "rgba(140,200,220,0.9)";
-        // c8 揭曉後也用紅黃綠道顏色（保留 add 數字、但用道色強化視覺）
-        if (c8HideMode && c8LaneColor) bonusCol = c8LaneColor;
-        // 光環抵消：加上刪除線視覺 + 警告色
-        if (bd._auraSuppressed) {
-          bonusCol = "rgba(255,140,200,0.85)";
-        }
-      } else {
-        bonusStr = "無加成";
-        bonusCol = "rgba(120,130,150,0.55)";
-      }
-      text("★ " + bonusStr, x + laneW/2, y - 10, 13, bonusCol, "800", "center");
-      // 警告堆疊：從 y - 26 往上每行 -16
-      let warnY = y - 26;
-      // 光環抵消
-      if (bd?._auraSuppressed) {
-        text("⚠ 光環抵消", x + laneW/2, warnY, 11, "rgba(255,140,200,0.95)", "800", "center");
-        warnY -= 16;
-      }
-      // c6 油污：當道 QTE 難度提升
-      const qteOffset = (bd && typeof bd.qteDifficultyOffset === "number") ? bd.qteDifficultyOffset : 0;
-      if (qteOffset > 0) {
-        text(`⚠ QTE 難度 +${qteOffset} 級`, x + laneW/2, warnY, 11, "rgba(255,180,120,0.95)", "800", "center");
-        warnY -= 16;
-      }
-      // c7 坑洞警告
-      if (app.stage5?.potholeLanes?.includes(i)) {
-        const auraSafe = isOpponentAuraActive() && app.opponentLane === i;
-        if (auraSafe) {
-          text("🛡️ 坑洞：光環抵消", x + laneW/2, warnY, 11, "rgba(180,255,200,0.95)", "800", "center");
-        } else {
-          text("⚠ 撞坑！-1 輪胎", x + laneW/2, warnY, 11, "rgba(255,100,80,0.95)", "800", "center");
-        }
-        warnY -= 16;
-      }
-      // c6 油污警告
-      if (bd?.forceCornerQte) {
-        text("⚠ 油污：強制 QTE", x + laneW/2, warnY, 11, "rgba(255,160,100,0.95)", "800", "center");
-        warnY -= 16;
-      }
-    }
-
-    // 道名 + 對手標記（頂部一行）
-    const laneNames3 = ["左道", "中道", "右道"];
-    const laneNames2 = ["內彎", "外彎"];
-    let label = (laneCount === 2 ? laneNames2[i] : laneNames3[i]) ?? `道 ${i+1}`;
-    if (isBoth)          label = "⚡ 對撞！";
-    else if (isPlayer)   label += " 【你】";
-    else if (isOpponent) label += " 【對手】";
-    const labelColor = isPlayer ? "rgba(120,210,255,0.95)"
-                     : isOpponent ? "rgba(255,130,130,0.85)"
-                     : "rgba(150,160,180,0.7)";
-    text(label, x+laneW/2, y+22, 14, labelColor, "800", "center");
-    // 格子內不再重複顯示加成小字
-
-    // ── 速度顯示 ──────────────────────────────────────────────────────────
-    // 靜態：所有道都顯示當前 playerSpeed（加成在行動時才結算，不是持續狀態）
-    // 拖牌懸停時：
-    //   拖到當前道 → 預覽「打牌」= playerSpeed + cardSpeed + 當前道加成
-    //   拖到其他道 → 預覽「換道」= playerSpeed - 1（換道）+ 尾流（若同道）+ 新道加成
-    //                             （牌被棄掉，cardSpeed 不計入）
+    // 計算 preview speed（跟原邏輯一致、供彎道警告判斷）
+    const b = getLaneBonusFor(i);
+    const add = c8Hidden2 ? 0 : (b?.add ?? 0);
+    const mult = c8Hidden2 ? 1 : (b?.mult ?? 1);
     let previewSpeed = app.playerSpeed;
-    let isPreview = false;
-    let previewLines = [];  // 分項列表，每項 { label, color }
-
-    if (app.drag) {
-      // 車隊牌不參與速度預覽（拖到任何道都直接結算、不影響本動速度）
-      const isDragTeamCard = app.drag.card?.cardClass === "team";
-      const dragCx = app.drag.x + app.drag.w/2;
-      const dragCy = app.drag.y + app.drag.h/2;
-      const hovering = !isDragTeamCard && inRect({ x: dragCx, y: dragCy }, { x, y, w: laneW, h: laneH });
-      if (hovering) {
-        isPreview = true;
-        const b = getLaneBonusFor(i);
-        // c8 未揭曉道：預覽時不洩漏 add（玩家還不知道這道的加成）
-        const add = c8Hidden ? 0 : (b?.add ?? 0);
-        const mult = c8Hidden ? 1 : (b?.mult ?? 1);
-        if (i === app.playerLane) {
-          // 打牌
-          const cardSpd = app.drag.card.speedValue ?? 0;
-          // 尾流（如果玩家當前道 == 對手當前道、且本回合未用過）
-          const slipBonus = canGetSlipstreamAtLane(i) ? 30 : 0;
-          previewSpeed = Math.floor((app.playerSpeed + cardSpd + slipBonus + add) * mult);
-          if (cardSpd !== 0) previewLines.push({ label: `${app.drag.card.name} +${cardSpd}`, color: "rgba(140,255,160,0.9)" });
-          if (slipBonus) previewLines.push({ label: "+30 尾流", color: "rgba(100,255,200,0.95)" });
-          if (c8Hidden) {
-            previewLines.push({ label: "紅綠燈干擾 ?", color: c8LaneColor || "rgba(255,200,255,0.9)" });
-          } else {
-            if (add !== 0) previewLines.push({ label: `${b?.label ?? (add > 0 ? "+" : "") + add + " 道路加成"}`, color: add > 0 ? "rgba(255,210,60,0.9)" : "rgba(140,200,220,0.9)" });
-            if (mult !== 1) previewLines.push({ label: `×${mult} 彎道加乘`, color: mult > 1 ? "rgba(255,210,60,0.9)" : "rgba(140,200,220,0.9)" });
-            if (b?._auraSuppressed) previewLines.push({ label: "⚠ 光環抵消", color: "rgba(255,140,200,0.95)" });
-          }
-          if (b?.forceCornerQte) previewLines.push({ label: "⚠ 強制彎道 QTE", color: "rgba(255,150,100,0.95)" });
-        } else if (droppable && app.playerSpeed > 0) {
-          // 換道（依跨道數扣速）
-          const slipBonus = canGetSlipstreamAtLane(i) ? 30 : 0;
-          const lanesCrossed = Math.abs(i - app.playerLane);
-          const laneCost = laneChangeCost(lanesCrossed);
-          previewSpeed = Math.floor((app.playerSpeed - laneCost + slipBonus + add) * mult);
-          previewLines.push({ label: `-${laneCost} 換道(${lanesCrossed} 道)`, color: "rgba(255,180,100,0.9)" });
-          if (slipBonus) previewLines.push({ label: "+30 尾流", color: "rgba(100,255,200,0.95)" });
-          if (c8Hidden) {
-            previewLines.push({ label: "紅綠燈干擾 ?", color: c8LaneColor || "rgba(255,200,255,0.9)" });
-          } else {
-            if (add !== 0) previewLines.push({ label: `${b?.label ?? (add > 0 ? "+" : "") + add + " 道路加成"}`, color: add > 0 ? "rgba(255,210,60,0.9)" : "rgba(140,200,220,0.9)" });
-            if (mult !== 1) previewLines.push({ label: `×${mult} 彎道加乘`, color: mult > 1 ? "rgba(255,210,60,0.9)" : "rgba(140,200,220,0.9)" });
-            if (b?._auraSuppressed) previewLines.push({ label: "⚠ 光環抵消", color: "rgba(255,140,200,0.95)" });
-          }
-          if (b?.forceCornerQte) previewLines.push({ label: "⚠ 切進強制彎道 QTE", color: "rgba(255,150,100,0.95)" });
-        } else {
-          isPreview = false;
-        }
-      }
+    if (i === app.playerLane) {
+      const cardSpd = app.drag.card.speedValue ?? 0;
+      const slipBonus = canGetSlipstreamAtLane(i) ? 30 : 0;
+      previewSpeed = Math.floor((app.playerSpeed + cardSpd + slipBonus + add) * mult);
+    } else if (droppable && app.playerSpeed > 0) {
+      const slipBonus = canGetSlipstreamAtLane(i) ? 30 : 0;
+      const lanesCrossed = Math.abs(i - app.playerLane);
+      const laneCost = laneChangeCost(lanesCrossed);
+      previewSpeed = Math.floor((app.playerSpeed - laneCost + slipBonus + add) * mult);
     }
+    const overLimit = speedLimit !== null && previewSpeed > speedLimit;
 
-    const displaySpeed = previewSpeed;
-    const bonusData2  = getLaneBonusFor(i);
-    const speedLimit  = bonusData2?.speedLimit ?? null;
-    const overLimit   = speedLimit !== null && displaySpeed > speedLimit;
-    const numberY = y + 68;
-    const labelY  = numberY + 26;
-
-    const baseNumColor = isBoth   ? "rgba(255,140,140,0.95)"
-                      : isPlayer  ? (overLimit ? "rgba(255,100,80,0.95)" : "rgba(255,230,100,0.95)")
-                      :             "rgba(150,165,190,0.55)";
-    const numColor = isPreview
-      ? (overLimit ? "rgba(255,140,100,0.98)"
-                   : (i === app.playerLane ? "rgba(140,255,160,0.98)" : "rgba(255,220,100,0.98)"))
-      : baseNumColor;
-    const subColor = isPlayer ? "rgba(220,200,140,0.78)" : "rgba(140,150,170,0.5)";
-
-    text(`${displaySpeed}`, x+laneW/2, numberY, 36, numColor, "900", "center");
-
-    const speedLabel = isPreview
-      ? (overLimit ? `⚠ 彎道 QTE！限 ${speedLimit}` : "行動預覽")
-      : overLimit ? `速度 ⚠限${speedLimit}` : "速度";
-    text(speedLabel, x+laneW/2, labelY, 11,
-      isPreview ? numColor : overLimit ? "rgba(255,150,80,0.85)" : subColor, "700", "center");
-
-    // 換道提示：懸停在非當前道時，只加亮格子邊框，文字跟著牌走（在牌上方顯示）
-    if (app.drag && i !== app.playerLane && droppable) {
-      const dragCx = app.drag.x + app.drag.w/2;
-      const dragCy = app.drag.y + app.drag.h/2;
-      const hovering = inRect({ x: dragCx, y: dragCy }, { x, y, w: laneW, h: laneH });
-      if (hovering) {
-        panel(x, y, laneW, laneH, "rgba(255,200,80,0.15)", "rgba(255,200,80,0.9)", true);
-      } else {
-        text("拖到此處 ‧ 換道", x+laneW/2, y+laneH-18, 11, "rgba(180,170,130,0.62)", "700", "center");
-      }
+    // 彎道警告（用 AR 風格、印在牌上方）
+    if (overLimit) {
+      text(`⚠ 彎道 QTE！限 ${speedLimit}`,
+        app.drag.x + app.drag.w/2, app.drag.y - 14, 13,
+        "rgba(255,140,100,0.98)", "800", "center");
     }
-
-    ctx.restore();
   }
 
-  // 超車按鈕 + Pass 按鈕：放在右側並排
-  const btnY = baseY;
+  // 超車按鈕 + Pass 按鈕：放在玩家車右側（畫面中下、HUD 之前）
+  // 玩家車大約在 app.w/2、右下 HUD 起點約 app.w - 300
+  // 兩個按鈕排在這段間距、貼著畫面下緣稍高一點
+  const overtakeW = 180;   // 超車鈕加大（原 130）
+  const passW     = 110;
+  const btnH      = 52;    // 高度也加大（原 40）
+  const btnGap    = 10;
+  const totalBtnW = overtakeW + btnGap + passW;
+  const btnX0     = app.w/2 + 140;  // 玩家車右側起算（車寬 ~120，車右緣約 +60、再外推 80）
+  const btnY      = app.h - 260;  // 比手牌頂端 (app.h - 190) 高 70px
+  // 若按鈕區會撞到右下 HUD，整體往左收
+  const maxRight  = app.w - 320;  // HUD 起點再留 20px 邊距
+  const actualBtnX0 = Math.min(btnX0, maxRight - totalBtnW);
 
-  // 自由打牌階段：超車按鈕跟 Pass 按鈕都永遠顯示（讓玩家看到選項）
+  // 自由打牌階段：超車按鈕跟 Pass 按鈕都永遠顯示
   const isFreePlayPhase = app.mode === "playing" || app.mode === "prompt-overtake-or-pass";
 
   if (isFreePlayPhase) {
@@ -3492,11 +3536,11 @@ function drawLanes(time) {
     const lbl = sameLane ? "先換道才能超車"
               : canDirectOvertake() ? "✓ 超車 QTE"
               : `超車（差 ${app.opponentSpeed - laneSpd}）`;
-    button("btn-overtake", lbl, app.w - 300, btnY, 130, 40,
+    button("btn-overtake", lbl, actualBtnX0, btnY, overtakeW, btnH,
       !canDirectOvertake(),
       canDirectOvertake() ? "start" : "primary");
 
-    button("btn-pass", "Pass →", app.w - 160, btnY, 120, 40, false, "gray");
+    button("btn-pass", "Pass →", actualBtnX0 + overtakeW + btnGap, btnY, passW, btnH, false, "gray");
   }
 
   // 對手行動倒數圖示
@@ -3576,7 +3620,7 @@ function drawOpponentInfoPanel(redX, opponentY, redW, redH, time) {
     text(`${hint.remaining}`, cursorX, hintY + 20, 18,
       isStrong2 ? "rgba(255,200,200,0.95)" : "rgba(255,220,140,0.95)", "900", "left");
     ctx.save();
-    ctx.font = "900 18px system-ui, sans-serif";
+    ctx.font = `900 ${18 * FONT_SCALE}px system-ui, sans-serif`;
     cursorX += ctx.measureText(`${hint.remaining}`).width + 4;
     ctx.restore();
 
@@ -3584,7 +3628,7 @@ function drawOpponentInfoPanel(redX, opponentY, redW, redH, time) {
     text("動後", cursorX, hintY + 22, 10,
       "rgba(220,240,255,0.7)", "700", "left");
     ctx.save();
-    ctx.font = "700 10px system-ui, sans-serif";
+    ctx.font = `700 ${10 * FONT_SCALE}px system-ui, sans-serif`;
     cursorX += ctx.measureText("動後").width + 4;
     ctx.restore();
 
@@ -3715,9 +3759,9 @@ function drawOpponentIconTooltip(rect, plateX, plateY) {
   // tooltip 尺寸：依文字寬度自動縮放
   const padX = 12;  // 左右內距
   ctx.save();
-  ctx.font = "900 13px system-ui, sans-serif";
+  ctx.font = `900 ${13 * FONT_SCALE}px system-ui, sans-serif`;
   const titleW = ctx.measureText(title).width;
-  ctx.font = "600 11px system-ui, sans-serif";
+  ctx.font = `600 ${11 * FONT_SCALE}px system-ui, sans-serif`;
   const descW = ctx.measureText(desc).width;
   ctx.restore();
   const tipW = Math.max(titleW, descW) + padX * 2;
@@ -4051,14 +4095,105 @@ function drawOpponentActionCounter(x, y, time) {
 
 // ─── 手牌 ──────────────────────────────────────────────────────────────────
 function drawHand(time) {
-  const cardW=122, cardH=164, gap=10;
-  const total = app.hand.length*cardW + Math.max(0,app.hand.length-1)*gap;
-  const x = app.w/2 - total/2;
+  // 手牌縮疊配置：
+  //   平時：縮疊重疊在一起（玩家看得到輪廓）
+  //   滑鼠掠過：依距離放大（Apple Dock 風格）
+  //   拖曳中：完全展開、不縮疊（避免抖動）
+  const cardW = 122;
+  const cardH = 164;
+  const collapseGap = 88;        // 平時兩張中心距 88（縮小牌 ~80 寬 + 8 空隙）
+  const expandGap = 18;          // 全展開時的基礎間距（鄰張之間都有空隙）
+  const hoverPushExtra = 36;     // 滑鼠掠過那張左右鄰居會被多推開的距離
+  const isDragging = !!app.drag;
+  const handLen = app.hand.length;
+  if (handLen === 0) { app.zones.cards = []; return; }
+
+  const mouseY = app.mouse?.y ?? -9999;
   const y = app.h - 190;
+  const cardBottom = y + cardH;
+  // 滑鼠在手牌區附近（包含拖曳時、牌掠過手牌列也算）
+  const draggedCardX = app.drag ? (app.drag.x + app.drag.w / 2) : null;
+  const draggedCardY = app.drag ? (app.drag.y + app.drag.h / 2) : null;
+  const hoverX = isDragging ? draggedCardX : (app.mouse?.x ?? null);
+  const hoverY = isDragging ? draggedCardY : (app.mouse?.y ?? -9999);
+  const isInHandArea = hoverY > y - 30 && hoverY < cardBottom + 30;
+
+  // 算每張牌的「目標展開程度」(0=完全縮疊、1=完全展開)
+  //   滑鼠 / 拖曳牌 在手牌區附近 → dock 效果（依距離擴張）
+  //   其他情況 → 全縮攏
+  const handCenterX = app.w / 2;
+  const targetE = new Array(handLen).fill(0);
+
+  if (isInHandArea && hoverX != null) {
+    // 用 collapse 排版算每張的中心 x、依距離計算 expand
+    const collapsedTotalW = (handLen - 1) * collapseGap + cardW;
+    const collapsedLeft = handCenterX - collapsedTotalW / 2;
+    const FALLOFF = 140;
+    for (let i = 0; i < handLen; i++) {
+      const cardCenterCollapsed = collapsedLeft + collapseGap * i + cardW / 2;
+      const dist = Math.abs(hoverX - cardCenterCollapsed);
+      const e = Math.max(0, 1 - dist / FALLOFF);
+      targetE[i] = e * e * (3 - 2 * e);
+    }
+  }
+
+  // 平滑過渡：app.handExpandness 持久存、用 lerp 漸近目標
+  if (!app.handExpandness) app.handExpandness = [];
+  // 長度變化（抽牌 / 打牌）時調整陣列長度、保留現有狀態
+  while (app.handExpandness.length < handLen) app.handExpandness.push(0);
+  while (app.handExpandness.length > handLen) app.handExpandness.pop();
+  const lerpRate = 0.22;  // 越大越快、越小越緩
+  const expandness = app.handExpandness;
+  for (let i = 0; i < handLen; i++) {
+    expandness[i] += (targetE[i] - expandness[i]) * lerpRate;
+    if (Math.abs(expandness[i] - targetE[i]) < 0.001) expandness[i] = targetE[i];
+  }
+
+  // 計算每張牌的位置
+  // 排除被拖那張、其他牌索引重新編號（讓剩下的牌真的「併攏填補」）
+  const visibleIdxs = [];
+  for (let i = 0; i < handLen; i++) {
+    if (app.drag && app.drag.card.id === app.hand[i].id) continue;
+    visibleIdxs.push(i);
+  }
+  const visibleLen = visibleIdxs.length;
+
+  function spacingBetween(vi, vj) {
+    const ai = visibleIdxs[vi];
+    const aj = visibleIdxs[vj];
+    const neighborE = Math.max(expandness[ai], expandness[aj]);
+    const baseSpacing = collapseGap + (cardW + expandGap - collapseGap) * neighborE;
+    const pushExtra = neighborE * hoverPushExtra;
+    return baseSpacing + pushExtra;
+  }
+
+  const positions = new Array(handLen);  // 對應原 hand 索引
+  if (visibleLen > 0) {
+    // 算總寬度先（用於置中）
+    let totalW = cardW;
+    for (let i = 1; i < visibleLen; i++) {
+      totalW += spacingBetween(i - 1, i);
+    }
+    let cur = handCenterX - totalW / 2;
+    for (let i = 0; i < visibleLen; i++) {
+      positions[visibleIdxs[i]] = cur;
+      if (i < visibleLen - 1) {
+        cur += spacingBetween(i, i + 1);
+      }
+    }
+  }
+
+  // 牌大小也依 expandness 變化（平時 95%、最大 110%）
   app.zones.cards = [];
   app.hand.forEach((card, i) => {
     if (app.drag && app.drag.card.id === card.id) return;
-    const rect = { x: x+i*(cardW+gap), y, w: cardW, h: cardH };
+    const e = expandness[i];
+    const scale = 0.95 + e * 0.15;  // 0.95 ~ 1.10
+    const w = cardW * scale;
+    const h = cardH * scale;
+    // 牌往上抬一點點當 hover 視覺
+    const liftY = e * 12;
+    const rect = { x: positions[i] + (cardW - w) / 2, y: y - liftY, w, h };
     app.zones.cards.push({ card, index: i, rect });
     drawCard(card, rect.x, rect.y, rect.w, rect.h, false);
   });
@@ -4099,7 +4234,7 @@ function drawCard(card, x, y, w, h, dragging) {
   const typeColor = isTactic ? "rgba(255,180,60,0.8)"
                   : isTeam   ? "rgba(120,220,160,0.85)"
                   :            "rgba(100,180,255,0.7)";
-  text(typeLabel, x+w/2, y+16, 10, typeColor, "700", "center");
+  textRaw(typeLabel, x+w/2, y+16, 10, typeColor, "700", "center");
 
   // 車隊牌：持續性標籤放右上角（避免跟 note 打架）
   if (isTeam && card.persistenceLabel) {
@@ -4112,16 +4247,16 @@ function drawCard(card, x, y, w, h, dragging) {
     ctx2.restore();
     roundPanel(x + w - tagW - 4, y + 4, tagW, 16, 4,
       "rgba(60,120,90,0.65)", "rgba(140,220,180,0.6)", 1);
-    text(tagText, x + w - tagW/2 - 4, y + 15, tagFs, "rgba(220,255,235,0.95)", "800", "center");
+    textRaw(tagText, x + w - tagW/2 - 4, y + 15, tagFs, "rgba(220,255,235,0.95)", "800", "center");
   }
 
   // 卡名
-  text(card.name, x+w/2, y+42, 15, "#e8f0ff", "900", "center");
+  textRaw(card.name, x+w/2, y+42, 15, "#e8f0ff", "900", "center");
 
   // 輪胎消耗標記（只有超加速有 tireCost）
   if (card.tireCost) {
     roundPanel(x+w-26, y+4, 22, 22, 5, "rgba(60,10,10,0.9)", "rgba(255,80,60,0.7)", 1.5);
-    text("🔴", x+w-15, y+19, 11, "#ff8060", "900", "center");
+    textRaw("🔴", x+w-15, y+19, 11, "#ff8060", "900", "center");
   }
 
   // 中央大字：速度數值（v0.9 UI 改動 — 取代圖示）
@@ -4144,12 +4279,12 @@ function drawCard(card, x, y, w, h, dragging) {
     } else {
       speedColor = "rgba(255,170,170,0.95)";  // 淡紅（降低）
     }
-    text(speedStr, x+w/2, y+h*0.58, 44, speedColor, "1000", "center");
+    textRaw(speedStr, x+w/2, y+h*0.58, 44, speedColor, "1000", "center");
     // 被修飾時、在數字右側畫小三角當「被動過」的提示
     if (_eff.modified) {
       const arrow = _eff.delta > 0 ? "▲" : "▼";
       const arrowCol = _eff.delta > 0 ? "rgba(140,255,160,0.85)" : "rgba(255,170,170,0.85)";
-      text(arrow, x+w*0.86, y+h*0.46, 12, arrowCol, "900", "center");
+      textRaw(arrow, x+w*0.86, y+h*0.46, 12, arrowCol, "900", "center");
     }
   } else if (typeof card.speedValue === "number" && card.cardClass === "action") {
     // speedValue=0（如 drift）：用較小的圖示、留空間給長 note
@@ -4160,14 +4295,15 @@ function drawCard(card, x, y, w, h, dragging) {
   }
 
   // 效果描述（v0.9：只寫速度以外的效果、若 note 為空就略過、文字太多自動換行+縮字）
+  // note 是「敘述」、使用者要求字體放大、所以這裡用較大的基礎大小（13/11）並走 text() 套 FONT_SCALE
   if (card.note) {
-    let noteFontSize = 11;
-    let lineH = 14;
-    // 先用 11px 試排，行數多就縮到 9px / 10px、確保不會撞到中央大字
+    let noteFontSize = 13;
+    let lineH = 16;
+    // 先用 13px 試排，行數多就縮到 11px、確保不會撞到中央大字
     let noteLines = wrapTextLines(card.note, w - 16, noteFontSize);
     if (noteLines.length >= 3) {
-      noteFontSize = 9;
-      lineH = 12;
+      noteFontSize = 11;
+      lineH = 14;
       noteLines = wrapTextLines(card.note, w - 14, noteFontSize);
     }
     // 從底部往上排
@@ -4247,7 +4383,9 @@ function drawModalBackdrop(time) {
 }
 
 function getCenteredModalBox(w, h) {
-  return { x: app.w/2-w/2, y: app.h/2-h/2, w, h };
+  const sw = w * UI_SCALE;
+  const sh = h * UI_SCALE;
+  return { x: app.w/2-sw/2, y: app.h/2-sh/2, w: sw, h: sh };
 }
 
 function drawModalPanel(box, accent) {
@@ -4259,16 +4397,16 @@ function drawStartModal() {
   const box = getCenteredModalBox(460, 388);
   drawModalPanel(box);
   const cx = box.x+box.w/2;
-  text("最後車手", cx, box.y+62, 36, "#dfeeff", "900", "center");
-  text("Final Driver — 機制驗證場", cx, box.y+88, 12, "rgba(150,180,220,0.55)", "700", "center");
+  text("最後車手", cx, box.y+62*UI_SCALE, 36, "#dfeeff", "900", "center");
+  text("Final Driver — 機制驗證場", cx, box.y+88*UI_SCALE, 12, "rgba(150,180,220,0.55)", "700", "center");
   const ctx = app.ctx;
   ctx.save(); ctx.strokeStyle="rgba(120,170,220,0.3)"; ctx.lineWidth=1; ctx.setLineDash([5,5]);
-  ctx.beginPath(); ctx.moveTo(box.x+40,box.y+102); ctx.lineTo(box.x+box.w-40,box.y+102); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(box.x+40*UI_SCALE,box.y+102*UI_SCALE); ctx.lineTo(box.x+box.w-40*UI_SCALE,box.y+102*UI_SCALE); ctx.stroke();
   ctx.setLineDash([]); ctx.restore();
-  text("你是車隊領隊，透過打牌以指揮車手", cx, box.y+140, 16, "#e8f0ff", "700", "center");
-  text("駕駛賽車超過前車。", cx, box.y+164, 16, "#e8f0ff", "700", "center");
-  button("start-game", "開始遊戲", cx-110, box.y+202, 220, 48, false, "start");
-  button("open-rules", "遊戲規則", cx-110, box.y+260, 220, 38, false, "primary");
+  text("你是車隊領隊，透過打牌以指揮車手", cx, box.y+140*UI_SCALE, 16, "#e8f0ff", "700", "center");
+  text("駕駛賽車超過前車。", cx, box.y+164*UI_SCALE, 16, "#e8f0ff", "700", "center");
+  button("start-game", "開始遊戲", cx-110, box.y+202*UI_SCALE, 220, 48, false, "start");
+  button("open-rules", "遊戲規則", cx-110, box.y+260*UI_SCALE, 220, 38, false, "primary");
 }
 
 function drawPromptModal() {
@@ -4282,9 +4420,9 @@ function drawPromptModal() {
   const box = getCenteredModalBox(380, 120);
   drawModalPanel(box);
   const cx = box.x + box.w/2;
-  text("沒有手牌了！", cx, box.y + 46, 20, "#dfeeff", "900", "center");
+  text("沒有手牌了！", cx, box.y+46*UI_SCALE, 20, "#dfeeff", "900", "center");
   const spd = currentLaneSpeed();
-  text(`速度 ${spd}　對手 ${opponentDisplaySpeed()}`, cx, box.y + 78, 14, "rgba(200,220,255,0.75)", "700", "center");
+  text(`速度 ${spd}　對手 ${opponentDisplaySpeed()}`, cx, box.y+78*UI_SCALE, 14, "rgba(200,220,255,0.75)", "700", "center");
   ctx.restore();
 }
 
@@ -4355,63 +4493,414 @@ function drawAllClear() {
 // ─── 第五關繪製 ────────────────────────────────────────────────────────────
 // AR 地面速限標線：只在彎道賽段、有速限的道顯示
 function drawSpeedLimitAR(time) {
-  const circ = currentCircuit();
-  if (!circ || circ.type !== "bend") return;
-  const laneCount = app.laneCount || 2;
   const ctx = app.ctx;
   const h = app.h;
   const horizon = h * 0.38;
 
+  // ─── 1. 速限標誌：紅圈圈、白底、數字（只有彎道才顯示）─────────────
+  const circ = currentCircuit();
+  if (circ && circ.type === "bend") {
+    const laneCount = app.laneCount || 2;
+    for (let li = 0; li < laneCount; li++) {
+      const b = getLaneBonusFor(li);
+      if (!b || b.speedLimit == null) continue;
+      drawSpeedLimitSign(li, laneCount, b.speedLimit, time);
+    }
+  }
+
+  // ─── 2. 路面 AR 加成標籤（每道顯示 add / mult / 強制 QTE / ?）─────
+  drawLaneBonusLabels(time);
+
+  // ─── 3. 玩家當前速度（地面上、像速限同款投影風格）─────────────
+  // 跟拖曳區一樣會顯示預覽數值
+  const previewSpeed = computePlayerSpeedPreview();
+  drawCurrentSpeedSign(previewSpeed.value, previewSpeed.isPreview, previewSpeed.overLimit, time);
+}
+
+// 路面 AR 加成標籤：每道在道路上方（天空區）顯示 add / mult / 強制 QTE / 隱藏 ?
+// 跟速度同一視覺語言（投影、有 glow），但放在 horizon 上方、像空中告示牌
+function drawLaneBonusLabels(time) {
+  const ctx = app.ctx;
+  const h = app.h;
+  const horizon = h * 0.38;
+  const laneCount = app.laneCount || 2;
+  const circ = currentCircuit();
+  const isC8Hidden = circ && circ.hideLaneBonusUntilVisited;
+  const s5 = app.stage5;
+
+  // 道路頂端的 x 範圍（用 horizon 那條線的路寬均分給各道）
+  const bounds = roadLaneBoundsAt(horizon);
+  const laneW = (bounds.right - bounds.left) / laneCount;
+
+  // 在 horizon 上方一點（天空區、原本速限的位置）
+  const cy = horizon - 40 * UI_SCALE;
+
+  // 第一步：算出每個 lane 要顯示什麼、量出 panel 寬度
+  const items = [];
   for (let li = 0; li < laneCount; li++) {
     const b = getLaneBonusFor(li);
-    if (!b || b.speedLimit == null) continue;
-    const limit = b.speedLimit;
-    const overSpeed = app.playerSpeed > limit && li === app.playerLane;
+    const isHiddenLane = isC8Hidden && s5 && !s5.revealedC8Lanes?.has(li);
+    if (!b && !isHiddenLane) { items.push(null); continue; }
 
-    // 路面更遠處（t=0.38 近端，t=0.22 遠端）
-    const tNear = 0.30;
-    const tFar  = 0.18;
-    const yNear = horizon + (h - horizon) * tNear;
-    const yFar  = horizon + (h - horizon) * tFar;
+    let mainText = "";
+    let subText = "";
+    let color = "rgba(255,255,255,0.85)";
+    let glow = "rgba(255,255,255,0.4)";
 
-    const bNear = roadLaneBoundsAt(yNear);
-    const bFar  = roadLaneBoundsAt(yFar);
-    const laneWNear = (bNear.right - bNear.left) / laneCount;
-    const laneWFar  = (bFar.right  - bFar.left)  / laneCount;
-    const cxNear = bNear.left + laneWNear * (li + 0.5);
-    const cxFar  = bFar.left  + laneWFar  * (li + 0.5);
+    if (isHiddenLane) {
+      mainText = "?";
+      color = "rgba(200,200,210,0.75)";
+      glow = "rgba(200,200,210,0.3)";
+    } else {
+      const add = b.add ?? 0;
+      const mult = b.mult ?? 1;
+      const hasMult = mult !== 1;
+      if (hasMult) {
+        mainText = `×${mult}`;
+        color = mult > 1 ? "rgba(255,200,100,0.95)" : "rgba(150,220,255,0.95)";
+        glow = mult > 1 ? "rgba(255,180,80,0.5)" : "rgba(120,200,255,0.5)";
+      } else if (add > 0) {
+        mainText = `+${add}`;
+        color = "rgba(120,255,160,0.95)";
+        glow = "rgba(80,255,140,0.5)";
+      } else if (add < 0) {
+        mainText = `${add}`;
+        color = "rgba(255,150,150,0.9)";
+        glow = "rgba(255,120,120,0.5)";
+      } else {
+        mainText = "0";
+        color = "rgba(200,210,225,0.85)";
+        glow = "rgba(180,200,220,0.3)";
+      }
+      if (b.forceCornerQte) {
+        subText = "⚡ 強制 QTE";
+        color = "rgba(255,180,80,0.98)";
+        glow = "rgba(255,160,60,0.55)";
+      }
+    }
+    if (!mainText) { items.push(null); continue; }
 
-    // 顏色
-    const baseColor = overSpeed ? "rgba(255,70,70,0.95)"  : "rgba(60,255,140,0.95)";
-    const glowColor = overSpeed ? "rgba(255,60,60,0.6)"   : "rgba(40,255,120,0.6)";
-    const pulseFreq = overSpeed ? 0.008 : 0.0025;
-    const pulse = 0.75 + Math.sin(time * pulseFreq) * 0.25;
+    // 量字寬
+    const fontSize = 28 * UI_SCALE;
+    ctx.save();
+    ctx.font = `900 ${fontSize}px system-ui, "Microsoft JhengHei", sans-serif`;
+    const mainW = ctx.measureText(mainText).width;
+    let subW = 0;
+    if (subText) {
+      ctx.font = `800 ${fontSize * 0.5}px system-ui, "Microsoft JhengHei", sans-serif`;
+      subW = ctx.measureText(subText).width;
+    }
+    ctx.restore();
 
-    // 投影感：用 canvas transform 做梯形透視
-    // 整個字一次畫，用 setTransform 把它壓扁並定位到路面
-    // 近端寬，遠端窄 → xScale = laneWFar/laneWNear（頂部）到 1.0（底部）
-    // 用一個中間值做整體 x 縮放，垂直方向壓縮 (yScale ≈ 0.28)
-    const xScale = (laneWFar / laneWNear) * 0.9;
-    const yScale = 0.28;
-    const fontSize = 180;
-    const textStr = `${limit}`;
+    const panelW = Math.max(mainW, subW) + 24 * UI_SCALE;
+    const panelH = subText ? fontSize * 1.6 : fontSize * 1.1;
+    const targetCx = bounds.left + laneW * (li + 0.5);
 
-    const cx = (cxNear + cxFar) / 2;
-    const cy = (yNear + yFar) / 2;
+    items.push({
+      li, mainText, subText, color, glow, isHiddenLane,
+      panelW, panelH, fontSize,
+      targetCx,
+    });
+  }
+
+  // 第二步：水平推開以避免重疊
+  // 策略：先按 lane 順序排，從中間往外擴張、把外側的 panel 往外推
+  // 所有 panel 都在 row 0、永遠保持水平
+  const validItems = items.filter(x => x);
+  if (validItems.length >= 2) {
+    const minGap = 8;  // 兩個 panel 之間最小間距
+    // 從左到右掃，若 i 跟 i-1 重疊或太近、把 i 往右推
+    for (let i = 1; i < validItems.length; i++) {
+      const prev = validItems[i - 1];
+      const cur  = validItems[i];
+      const prevRight = prev.targetCx + prev.panelW / 2;
+      const curLeft   = cur.targetCx - cur.panelW / 2;
+      const need = prevRight + minGap - curLeft;
+      if (need > 0) {
+        cur.targetCx += need;  // 把當前的往右推、留出間距
+      }
+    }
+    // 反向掃一次：若最右邊推得太遠、整體再往左偏
+    // 用「以原始幾何中心置中」做整體 shift
+    const targetCenterX = bounds.left + (bounds.right - bounds.left) / 2;
+    const actualCenterX = (validItems[0].targetCx + validItems[validItems.length - 1].targetCx) / 2;
+    const shift = targetCenterX - actualCenterX;
+    for (const it of validItems) it.targetCx += shift;
+  }
+  // 所有 item 都在同一個 row（不再使用 row 系統）
+  for (const it of items) {
+    if (!it) continue;
+    it.row = 0;
+  }
+
+  // 繪製：全部在同一個 y（cy）
+  for (const it of items) {
+    if (!it) continue;
+    const itemCy = cy;
+    const panelX = it.targetCx - it.panelW / 2;
+    const panelY = itemCy - it.panelH * (it.subText ? 0.35 : 0.5);
+
+    const bgFill = it.isHiddenLane ? "rgba(40, 40, 50, 0.72)"
+                 : it.subText      ? "rgba(60, 40, 20, 0.80)"
+                 : it.color.includes("120,255,160") ? "rgba(20, 50, 30, 0.72)"
+                 : it.color.includes("255,150,150") ? "rgba(60, 25, 25, 0.72)"
+                 : it.color.includes("255,200,100") ? "rgba(60, 45, 20, 0.72)"
+                 : it.color.includes("150,220,255") ? "rgba(20, 35, 55, 0.72)"
+                 : it.color.includes("200,210,225") ? "rgba(30, 35, 45, 0.72)"
+                 :                                    "rgba(35, 35, 45, 0.72)";
+
+    roundPanel(panelX, panelY, it.panelW, it.panelH, 8 * UI_SCALE, bgFill, it.color, 1.5);
 
     ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.shadowColor = glowColor;
-    ctx.shadowBlur = 28;
-    ctx.fillStyle = baseColor;
-    ctx.font = `900 ${fontSize}px system-ui, "Microsoft JhengHei", sans-serif`;
+    ctx.shadowColor = it.glow;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = it.color;
+    ctx.font = `900 ${it.fontSize}px system-ui, "Microsoft JhengHei", sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    // setTransform(a, b, c, d, e, f): xScale, skewY, skewX, yScale, tx, ty
-    ctx.setTransform(xScale, 0, 0, yScale, cx, cy);
-    ctx.fillText(textStr, 0, 0);
+    ctx.fillText(it.mainText, it.targetCx, itemCy);
     ctx.restore();
+
+    if (it.subText) {
+      ctx.save();
+      ctx.shadowColor = it.glow;
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = it.color;
+      ctx.font = `800 ${it.fontSize * 0.5}px system-ui, "Microsoft JhengHei", sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(it.subText, it.targetCx, itemCy + it.fontSize * 0.7);
+      ctx.restore();
+    }
   }
+}
+
+// 計算「玩家當前速度」（拖曳中時是預覽值、否則是 playerSpeed）
+function computePlayerSpeedPreview() {
+  const baseSpeed = app.playerSpeed;
+  // 沒拖曳：直接回原值
+  if (!app.drag) {
+    const b = getLaneBonusFor(app.playerLane);
+    const limit = b?.speedLimit ?? null;
+    const overLimit = limit != null && baseSpeed > limit;
+    return { value: baseSpeed, isPreview: false, overLimit };
+  }
+  // 車隊牌不影響速度
+  const isDragTeamCard = app.drag.card?.cardClass === "team";
+  if (isDragTeamCard) {
+    const b = getLaneBonusFor(app.playerLane);
+    const limit = b?.speedLimit ?? null;
+    const overLimit = limit != null && baseSpeed > limit;
+    return { value: baseSpeed, isPreview: false, overLimit };
+  }
+  // 看牌在哪一道上方（用整條賽道判定 laneAtPoint、不再依舊道格 rect）
+  const dragCx = app.drag.x + app.drag.w/2;
+  const dragCy = app.drag.y + app.drag.h/2;
+
+  // 拖回手牌列（取消區）→ 不算預覽、顯示原速
+  const handTop = app.h - 190 - 60;
+  const handBottom = app.h - 190 + 164 + 30;
+  if (dragCy >= handTop && dragCy <= handBottom) {
+    const b = getLaneBonusFor(app.playerLane);
+    const limit = b?.speedLimit ?? null;
+    const overLimit = limit != null && baseSpeed > limit;
+    return { value: baseSpeed, isPreview: false, overLimit };
+  }
+
+  const hoverLane = laneAtPoint({ x: dragCx, y: dragCy });
+  if (hoverLane < 0) {
+    const b = getLaneBonusFor(app.playerLane);
+    const limit = b?.speedLimit ?? null;
+    const overLimit = limit != null && baseSpeed > limit;
+    return { value: baseSpeed, isPreview: false, overLimit };
+  }
+  // 套用 drawLanes 同款預覽公式
+  const b = getLaneBonusFor(hoverLane);
+  const add = b?.add ?? 0;
+  const mult = b?.mult ?? 1;
+  let preview;
+  if (hoverLane === app.playerLane) {
+    const cardSpd = app.drag.card.speedValue ?? 0;
+    const slipBonus = canGetSlipstreamAtLane(hoverLane) ? 30 : 0;
+    preview = Math.floor((baseSpeed + cardSpd + slipBonus + add) * mult);
+  } else if (baseSpeed > 0) {
+    const slipBonus = canGetSlipstreamAtLane(hoverLane) ? 30 : 0;
+    const lanesCrossed = Math.abs(hoverLane - app.playerLane);
+    const laneCost = laneChangeCost(lanesCrossed);
+    preview = Math.floor((baseSpeed - laneCost + slipBonus + add) * mult);
+  } else {
+    preview = baseSpeed;
+  }
+  const limit = b?.speedLimit ?? null;
+  const overLimit = limit != null && preview > limit;
+  return { value: preview, isPreview: true, overLimit };
+}
+
+// 速限標誌：紅圈圈、白底、黑字（仿真實標誌）
+// 配置：依道數放在路邊，桿子從路邊向上伸出、標誌掛在桿頂
+//   2 道：左道速限掛左側、右道速限掛右側
+//   3 道：左道掛左側、中道掛右側、右道掛右側下方一點（錯開避免擠）
+function drawSpeedLimitSign(laneIdx, laneCount, limit, time) {
+  const ctx = app.ctx;
+  const h = app.h;
+  const horizon = h * 0.38;
+
+  // 路邊位置（路面跟天空的交界線、路寬的左 / 右邊緣）
+  const yEdge = horizon + 30 * UI_SCALE;  // 在地平線下方一點才能看清「路邊」
+  const bounds = roadLaneBoundsAt(yEdge);
+  const roadW = bounds.right - bounds.left;
+  const sidePad = 28 * UI_SCALE;  // 標誌離路邊的距離
+
+  // 決定掛左還是右
+  //   2 道時：lane 0 → 左、lane 1 → 右
+  //   3 道時：lane 0 → 左、lane 1 → 左下、lane 2 → 右
+  let signX, signY;
+  if (laneCount === 2) {
+    if (laneIdx === 0) {
+      signX = bounds.left - sidePad;
+      signY = yEdge - 40 * UI_SCALE;
+    } else {
+      signX = bounds.right + sidePad;
+      signY = yEdge - 40 * UI_SCALE;
+    }
+  } else {
+    // 3 道
+    if (laneIdx === 0) {
+      signX = bounds.left - sidePad;
+      signY = yEdge - 40 * UI_SCALE;
+    } else if (laneIdx === laneCount - 1) {
+      signX = bounds.right + sidePad;
+      signY = yEdge - 40 * UI_SCALE;
+    } else {
+      // 中間道：找一個空位（路邊下方一點、靠右）
+      signX = bounds.right + sidePad;
+      signY = yEdge + 30 * UI_SCALE;
+    }
+  }
+
+  // 正圓、固定大小
+  const r = 28 * UI_SCALE;
+
+  // 超速判斷（玩家在本道）
+  const overSpeed = app.playerSpeed > limit && laneIdx === app.playerLane;
+  const pulseFreq = overSpeed ? 0.008 : 0.0025;
+  const pulse = 0.75 + Math.sin(time * pulseFreq) * 0.25;
+
+  // 1. 桿子（從路邊向標誌延伸）
+  ctx.save();
+  ctx.strokeStyle = "rgba(120, 120, 130, 0.7)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  // 桿底（在路邊地面）→ 桿頂（標誌中心略下方）
+  const poleBottomX = laneCount === 2
+    ? (laneIdx === 0 ? bounds.left : bounds.right)
+    : (laneIdx === 0 ? bounds.left
+      : laneIdx === laneCount - 1 ? bounds.right
+      : bounds.right);
+  ctx.moveTo(poleBottomX, yEdge + 10);
+  ctx.lineTo(signX, signY + r * 0.5);
+  ctx.stroke();
+  ctx.restore();
+
+  // 2. 標誌本體（紅圈 + 白底）
+  ctx.save();
+  ctx.translate(signX, signY);
+  const ringWidth = r * 0.22;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.lineWidth = ringWidth;
+  ctx.strokeStyle = overSpeed
+    ? `rgba(255, 60, 60, ${pulse})`
+    : `rgba(220, 30, 30, ${pulse * 0.95})`;
+  ctx.shadowColor = overSpeed ? "rgba(255,60,60,0.6)" : "rgba(220,30,30,0.3)";
+  ctx.shadowBlur = overSpeed ? 20 : 10;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, r - ringWidth * 0.55, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(248, 248, 245, 0.96)";
+  ctx.shadowBlur = 0;
+  ctx.fill();
+  ctx.restore();
+
+  // 3. 數字
+  ctx.save();
+  ctx.translate(signX, signY);
+  const fontSize = r * 0.95;
+  ctx.font = `900 ${fontSize}px system-ui, "Microsoft JhengHei", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillText(`${limit}`, 0, 0);
+  ctx.restore();
+}
+
+// 玩家當前速度標誌：AR 投影風格的地板大字（沿用速限原本的視覺）
+// 跟拖曳預覽連動：拖曳中、且 hover 到道格上時顯示預覽值
+function drawCurrentSpeedSign(speed, isPreview, overLimit, time) {
+  const ctx = app.ctx;
+  const h = app.h;
+  const horizon = h * 0.38;
+  const laneCount = app.laneCount || 2;
+
+  // 拖曳預覽中：放在「牌懸停的道」；其他時候放在玩家當前道
+  let targetLane = app.playerLane;
+  if (isPreview && app.drag) {
+    const dragCx = app.drag.x + app.drag.w/2;
+    const dragCy = app.drag.y + app.drag.h/2;
+    const hoverLane = laneAtPoint({ x: dragCx, y: dragCy });
+    if (hoverLane >= 0) targetLane = hoverLane;
+  }
+
+  // 路面位置：往遠處推（在道名提示更前方、不跟道名重疊）
+  const tNear = 0.26;
+  const tFar  = 0.12;
+  const yNear = horizon + (h - horizon) * tNear;
+  const yFar  = horizon + (h - horizon) * tFar;
+  const bNear = roadLaneBoundsAt(yNear);
+  const bFar  = roadLaneBoundsAt(yFar);
+  const laneWNear = (bNear.right - bNear.left) / laneCount;
+  const laneWFar  = (bFar.right  - bFar.left)  / laneCount;
+  const cxNear = bNear.left + laneWNear * (targetLane + 0.5);
+  const cxFar  = bFar.left  + laneWFar  * (targetLane + 0.5);
+  const cx = (cxNear + cxFar) / 2;
+  const cy = (yNear + yFar) / 2;
+
+  // 顏色（沿用原速限色票）
+  //   一般 = 半透明白
+  //   拖曳預覽（上下動） = 亮綠
+  //   超速 = 紅
+  const baseColor = overLimit
+    ? "rgba(255,70,70,0.95)"
+    : isPreview
+      ? "rgba(120,255,160,0.98)"
+      : "rgba(255,255,255,0.65)";
+  const glowColor = overLimit
+    ? "rgba(255,60,60,0.6)"
+    : isPreview
+      ? "rgba(80,255,140,0.7)"
+      : "rgba(255,255,255,0.35)";
+  const pulseFreq = overLimit ? 0.008 : isPreview ? 0.006 : 0.0025;
+  const pulse = 0.75 + Math.sin(time * pulseFreq) * 0.25;
+
+  // 投影感：用 setTransform 把字壓扁鋪在路面
+  const xScale = (laneWFar / laneWNear) * 0.9;
+  const yScale = 0.28;
+  const fontSize = 180;
+  const textStr = `${speed}`;
+
+  ctx.save();
+  ctx.globalAlpha = pulse;
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur = 28;
+  ctx.fillStyle = baseColor;
+  ctx.font = `900 ${fontSize}px system-ui, "Microsoft JhengHei", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.setTransform(xScale, 0, 0, yScale, cx, cy);
+  ctx.fillText(textStr, 0, 0);
+  ctx.restore();
+  // setTransform 後要清掉 transform 避免影響後續繪製
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 // 左側面板：當前對手 / 後車 / 車隊牌
 function drawStage5SidePanel(time) {
@@ -4420,7 +4909,7 @@ function drawStage5SidePanel(time) {
   const ctx = app.ctx;
   const x = 14;
   const y = 80;
-  const w = 200;  // 拿掉對手區後內容變窄、縮寬讓畫面更乾淨
+  const w = 240;  // 字體放大後加寬讓標題跟回合計時不重疊
   let curY = y;
   // 估算面板高度：標題 34 + 名次標 22 + 4 列 × 30 + 後車警告 58 + 尾流 22 + 車隊牌
   const rankBlockH = 4 * 26 + 3 * 4;  // = 116
@@ -4600,44 +5089,45 @@ function drawStage5NextCircuit(time) {
   if (!s5) return;
   const cur  = currentCircuit();
   const next = nextCircuit();
+  const lineH = 24;  // 每道資訊一行的高度（原 18 → 24，視覺更鬆）
   const laneRows = next?.laneBonuses ? next.laneBonuses.length : 1;
   const w = 300;
-  const h = 56 + laneRows * 18 + 58;  // 內框 + 當前賽段行 + padding
+  const h = 60 + laneRows * lineH + 64;
   const x = app.w - w - 14;
   const y = 14;
   roundPanel(x, y, w, h, 14, "rgba(10,18,28,0.92)", "rgba(120,170,220,0.4)", 1.5);
 
-  // ── 上：下一賽段（重點）────────────────────────────────────────────────
   if (next) {
     const nextHideBonus = !!next.hideLaneBonusUntilVisited;
-    const laneRows = next.laneBonuses ? next.laneBonuses.length : (next.lanes || 1);
-    const innerH = 56 + laneRows * 18 + 8;  // 依道路數動態計算
+    const innerLaneRows = next.laneBonuses ? next.laneBonuses.length : (next.lanes || 1);
+    const innerH = 60 + innerLaneRows * lineH + 12;
     roundPanel(x + 8, y + 8, w - 16, innerH, 10, "rgba(255,200,80,0.08)", "rgba(255,200,80,0.4)", 1.5);
-    text("→ 下一賽段", x + 20, y + 24, 11, "rgba(255,200,80,0.8)", "800");
-    text(`${next.icon} ${next.name}`, x + 20, y + 46, 22, "rgba(255,225,130,0.98)", "900");
-    let lby = y + 68;
+    text("→ 下一賽段", x + 20, y + 26, 11, "rgba(255,200,80,0.8)", "800");
+    text(`${next.icon} ${next.name}`, x + 20, y + 52, 22, "rgba(255,225,130,0.98)", "900");
+    let lby = y + 80;
     if (nextHideBonus) {
-      // c8：所有道顯示「?」，不洩漏（也不依賴上次的 laneBonuses）
       const lanes = next.lanes || (next.laneBonuses?.length ?? 3);
       for (let li = 0; li < lanes; li++) {
         const laneName = (next.laneNames && next.laneNames[li]) || `道 ${li}`;
         const color = (next.laneColors && next.laneColors[li]) || "rgba(220,230,255,0.85)";
         text(`${laneName}: ?`, x + 20, lby, 12, color, "700");
-        lby += 18;
+        lby += lineH;
       }
     } else if (next.laneBonuses) {
       for (const lb of next.laneBonuses) {
         const laneName = lb.label.split(" ")[0];
         const limitStr = lb.speedLimit != null ? `  限速 ${lb.speedLimit}` : "";
         text(`道 ${lb.lane}：${laneName}${limitStr}`, x + 20, lby, 12, "rgba(220,230,255,0.85)", "700");
-        lby += 18;
+        lby += lineH;
       }
     } else {
       text("直線道", x + 20, lby, 12, "rgba(220,230,255,0.85)", "700");
-      lby += 18;
+      lby += lineH;
     }
-    // 當前賽段留適當空白後顯示
-    const cy = lby + 30;
+    // 當前賽段：置中於「內框下方到外框底」之間的剩餘空間
+    const innerBottom = y + 8 + innerH;   // 黃框底部
+    const outerBottom = y + h;            // 整個框底部
+    const cy = (innerBottom + outerBottom) / 2 + 4;  // +4 微調基線
     text("當前賽段", x + 20, cy, 10, "rgba(160,180,210,0.5)", "700");
     text(`${cur?.icon ?? ""} ${cur?.name ?? ""}`, x + 90, cy, 15, "rgba(180,200,230,0.75)", "800");
   } else if (cur) {
@@ -4646,12 +5136,6 @@ function drawStage5NextCircuit(time) {
   }
 }
 
-// 第五關開場 intro
-// 開場 intro modal
-// 頁 0：名次面板（左上）— 玩家位置、前/後車
-// 頁 1：下一賽段預告（右上）— 賽道會循環
-// 頁 2：HUD（右下）— 動力、基礎速度、對手速度
-// 頁 3：手牌（下方）— 指令牌 vs 車隊牌差異 + 速度規則
 function drawStage5IntroModal(time) {
   const s5 = app.stage5;
   if (!s5) return;
@@ -4691,29 +5175,29 @@ function drawStage5OvertakeResultModal() {
   const isSuccess = pct >= 0.6;
   drawModalPanel(box, isSuccess ? (isPerfect ? "rgba(255,220,80,0.4)" : "rgba(120,220,150,0.5)") : "rgba(255,100,100,0.35)");
   const cx = box.x + box.w/2;
-  text(title, cx, box.y + 56, 30, titleColor, "1000", "center");
+  text(title, cx, box.y+56*UI_SCALE, 30, titleColor, "1000", "center");
   // QTE 分數
   const scoreStr = app.qteScore != null
     ? `QTE ${app.qteScore} / ${app.qteScoreMax}（${Math.round(app.qteScore / app.qteScoreMax * 100)}%）`
     : "";
-  if (scoreStr) text(scoreStr, cx, box.y + 88, 13, "rgba(200,220,255,0.8)", "700", "center");
+  if (scoreStr) text(scoreStr, cx, box.y+88*UI_SCALE, 13, "rgba(200,220,255,0.8)", "700", "center");
   const opp = STAGE5_OPPONENTS[app.stage5?.passed[app.stage5.passed.length-1]];
   if (isSuccess) {
-    if (opp) text(`超越了「${opp.name}」`, cx, box.y + 114, 13, "rgba(220,240,225,0.85)", "700", "center");
-    text(`名次：${app.rank} / ${app.rankTotal}`, cx, box.y + 134, 13, "rgba(220,240,225,0.85)", "700", "center");
+    if (opp) text(`超越了「${opp.name}」`, cx, box.y+114*UI_SCALE, 13, "rgba(220,240,225,0.85)", "700", "center");
+    text(`名次：${app.rank} / ${app.rankTotal}`, cx, box.y+134*UI_SCALE, 13, "rgba(220,240,225,0.85)", "700", "center");
   } else {
-    text(`名次：${app.rank} / ${app.rankTotal}`, cx, box.y + 114, 13, "rgba(220,220,220,0.75)", "700", "center");
+    text(`名次：${app.rank} / ${app.rankTotal}`, cx, box.y+114*UI_SCALE, 13, "rgba(220,220,220,0.75)", "700", "center");
   }
   // 懲罰/獎勵
   if (isPerfect) {
-    text("✦ 滿分！移除 1 張失誤牌", cx, box.y + 162, 13, "rgba(255,220,100,0.95)", "800", "center");
+    text("✦ 滿分！移除 1 張失誤牌", cx, box.y+162*UI_SCALE, 13, "rgba(255,220,100,0.95)", "800", "center");
   } else if (mistakeCount > 0) {
     const tireLine = !isSuccess ? "　扣 1 輪胎" : "";
-    text(`⚠ 獲得 ${mistakeCount} 張失誤牌${tireLine}`, cx, box.y + 162, 13, "rgba(255,180,80,0.95)", "800", "center");
+    text(`⚠ 獲得 ${mistakeCount} 張失誤牌${tireLine}`, cx, box.y+162*UI_SCALE, 13, "rgba(255,180,80,0.95)", "800", "center");
   } else if (!isSuccess) {
-    text("扣 1 輪胎", cx, box.y + 162, 13, "rgba(255,150,130,0.9)", "800", "center");
+    text("扣 1 輪胎", cx, box.y+162*UI_SCALE, 13, "rgba(255,150,130,0.9)", "800", "center");
   } else {
-    text("無懲罰", cx, box.y + 162, 13, "rgba(160,200,160,0.7)", "700", "center");
+    text("無懲罰", cx, box.y+162*UI_SCALE, 13, "rgba(160,200,160,0.7)", "700", "center");
   }
   if (isSuccess) {
     button("stage5-to-reward", "選擇獎勵牌 →", cx - 110, box.y + boxH - 54, 220, 44, false, "start");
@@ -4727,9 +5211,9 @@ function drawStage5NoOvertakeModal() {
   const box = getCenteredModalBox(380, 160);
   drawModalPanel(box, "rgba(100,130,180,0.35)");
   const cx = box.x + box.w/2;
-  text("Pass", cx, box.y + 54, 28, "#a0b8e0", "900", "center");
-  text("最後一名，無後車追擊", cx, box.y + 90, 13, "rgba(180,200,230,0.75)", "700", "center");
-  button("stage5-next-round", "下一回合 →", cx - 100, box.y + box.h - 46, 200, 40, false, "primary");
+  text("Pass", cx, box.y+54*UI_SCALE, 28, "#a0b8e0", "900", "center");
+  text("最後一名，無後車追擊", cx, box.y+90*UI_SCALE, 13, "rgba(180,200,230,0.75)", "700", "center");
+  button("stage5-next-round", "下一回合 →", cx - 100, box.y+box.h-46*UI_SCALE, 200, 40, false, "primary");
 }
 
 // 防守結算
@@ -4738,9 +5222,9 @@ function drawStage5DefenseResultModal() {
   const box = getCenteredModalBox(420, 200);
   drawModalPanel(box, success ? "rgba(120,220,150,0.5)" : "rgba(255,120,120,0.5)");
   const cx = box.x + box.w/2;
-  text(app.message || "防守結束", cx, box.y + 70, 26, success ? "#7be0a0" : "#ff8a8a", "900", "center");
-  text(`名次：${app.rank} / ${app.rankTotal}`, cx, box.y + 110, 14, "rgba(220,240,225,0.85)", "700", "center");
-  button("stage5-next-round", "下一回合 →", cx - 100, box.y + box.h - 56, 200, 42, false, success ? "start" : "primary");
+  text(app.message || "防守結束", cx, box.y+70*UI_SCALE, 26, success ? "#7be0a0" : "#ff8a8a", "900", "center");
+  text(`名次：${app.rank} / ${app.rankTotal}`, cx, box.y+110*UI_SCALE, 14, "rgba(220,240,225,0.85)", "700", "center");
+  button("stage5-next-round", "下一回合 →", cx - 100, box.y+box.h-56*UI_SCALE, 200, 42, false, success ? "start" : "primary");
 }
 
 // ─── 彎道 QTE（Helldivers 箭頭風格）──────────────────────────────────────
@@ -4954,15 +5438,15 @@ function drawStage5RewardModal(time) {
   const box = getCenteredModalBox(720, 540);
   drawModalPanel(box, "rgba(255,200,80,0.5)");
   const cx = box.x + box.w/2;
-  text("✦ 三選一：成長與調整 ✦", cx, box.y + 50, 22, "#ffd980", "1000", "center");
-  text("這場比賽中，你...", cx, box.y + 80, 13, "rgba(255,230,160,0.75)", "700", "center");
+  text("✦ 三選一:成長與調整 ✦", cx, box.y+50*UI_SCALE, 22, "#ffd980", "1000", "center");
+  text("這場比賽中，你...", cx, box.y+80*UI_SCALE, 13, "rgba(255,230,160,0.75)", "700", "center");
   // 三張卡
-  const cardW = 180;
-  const cardH = 300;
+  const cardW = 200;
+  const cardH = 340;
   const gap = 24;
   const totalW = cardW * 3 + gap * 2;
   const startX = cx - totalW/2;
-  const cardY = box.y + 110;
+  const cardY = box.y+110*UI_SCALE;
   for (let i = 0; i < 3; i++) {
     const c = s5.rewardOptions[i];
     if (!c) continue;
@@ -4972,39 +5456,38 @@ function drawStage5RewardModal(time) {
     const cardBg = hov ? "rgba(255,220,140,0.95)" : "rgba(245,235,210,0.95)";
     const cardBorder = c.cardClass === "team" ? "rgba(80,160,120,0.9)" : "rgba(200,100,40,0.9)";
     roundPanel(cx0, cardY, cardW, cardH, 14, cardBg, cardBorder, 2);
-    // 類別
+    // 類別（放大 11→14）
     const typeLabel = c.cardClass === "team" ? "車隊牌" : "指令牌";
     const typeColor = c.cardClass === "team" ? "#3a7a5a" : "#a85020";
-    text(typeLabel, cx0 + cardW/2, cardY + 22, 11, typeColor, "800", "center");
+    text(typeLabel, cx0 + cardW/2, cardY + 26, 14, typeColor, "800", "center");
     // 名字
-    text(c.name, cx0 + cardW/2, cardY + 60, 18, "#2a2418", "900", "center");
-    // 無 cost 系統
+    text(c.name, cx0 + cardW/2, cardY + 66, 18, "#2a2418", "900", "center");
     // 中央大字速度（v0.9 UI；speedValue=0 或車隊牌不顯示）
     if (typeof c.speedValue === "number" && c.speedValue !== 0) {
       const sv = c.speedValue;
       const speedStr = sv > 0 ? `+${sv}` : `${sv}`;
       const speedColor = sv > 0 ? "#1a7a30" : "#a02030";
-      text(speedStr, cx0 + cardW/2, cardY + 108, 38, speedColor, "1000", "center");
+      text(speedStr, cx0 + cardW/2, cardY + 120, 38, speedColor, "1000", "center");
     }
-    // 效果
-    const lines = wrapTextLines(c.note || "", cardW - 24, 11);
-    let ly = cardY + 148;
+    // 效果敘述（放大 11→14，行距 16→20）
+    const lines = wrapTextLines(c.note || "", cardW - 24, 14);
+    let ly = cardY + 168;
     for (const ln of lines) {
-      text(ln, cx0 + cardW/2, ly, 11, "#3a3020", "700", "center");
-      ly += 16;
+      text(ln, cx0 + cardW/2, ly, 14, "#3a3020", "700", "center");
+      ly += 20;
     }
-    // 持續時機 + 進場方式（車隊牌）
+    // 持續時機 + 進場方式（車隊牌）— 放大 10→13
     if (c.cardClass === "team" && c.persistenceLabel) {
       const isInstant = c.persistence === "permanent";
       const instantLabel = isInstant ? "★ 選後直接進場" : "進牌庫，打出後生效";
       const lblColor = isInstant ? "rgba(180,120,60,0.95)" : "rgba(60,120,90,0.85)";
-      text(`⌛ ${c.persistenceLabel}`, cx0 + cardW/2, cardY + cardH - 86, 10, "rgba(60,120,90,0.85)", "700", "center");
-      text(instantLabel, cx0 + cardW/2, cardY + cardH - 70, 10, lblColor, "800", "center");
+      text(`⌛ ${c.persistenceLabel}`, cx0 + cardW/2, cardY + cardH - 96, 13, "rgba(60,120,90,0.85)", "700", "center");
+      text(instantLabel, cx0 + cardW/2, cardY + cardH - 76, 13, lblColor, "800", "center");
     }
     // 選擇按鈕 - 給足完整高度
     button(`stage5-reward-pick-${i}`, "選這張", cx0 + 14, cardY + cardH - 56, cardW - 28, 44, false, "start");
   }
-  button("stage5-reward-skip", "略過（不拿）", cx - 90, box.y + box.h - 58, 180, 42, false, "gray");
+  button("stage5-reward-skip", "略過（不拿）", cx - 90, box.y+box.h-58*UI_SCALE, 180, 42, false, "gray");
 }
 
 // 簡易文字斷行
@@ -5012,7 +5495,7 @@ function wrapTextLines(text, maxWidth, fontSize) {
   if (!text) return [];
   const ctx = app.ctx;
   ctx.save();
-  ctx.font = `700 ${fontSize}px system-ui`;
+  ctx.font = `700 ${(fontSize) * FONT_SCALE}px system-ui`;
   const chars = text.split("");
   const lines = [];
   let cur = "";
@@ -5108,11 +5591,11 @@ function drawRulesModal(time) {
   const box = getCenteredModalBox(720, 540);
   drawModalPanel(box, "rgba(255,200,60,0.45)");
   const cx = box.x + box.w/2;
-  text("最後車手 / Final Driver", cx, box.y + 38, 22, "#ffd94f", "1000", "center");
-  text("遊戲規則", cx, box.y + 68, 14, "rgba(220,220,200,0.8)", "700", "center");
+  text("最後車手 / Final Driver", cx, box.y+38*UI_SCALE, 22, "#ffd94f", "1000", "center");
+  text("遊戲規則", cx, box.y+68*UI_SCALE, 14, "rgba(220,220,200,0.8)", "700", "center");
   const ctx = app.ctx;
   ctx.save(); ctx.strokeStyle="rgba(255,200,60,0.3)"; ctx.lineWidth=1; ctx.setLineDash([5,5]);
-  ctx.beginPath(); ctx.moveTo(box.x+40,box.y+90); ctx.lineTo(box.x+box.w-40,box.y+90); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(box.x+40*UI_SCALE,box.y+90*UI_SCALE); ctx.lineTo(box.x+box.w-40*UI_SCALE,box.y+90*UI_SCALE); ctx.stroke();
   ctx.setLineDash([]); ctx.restore();
   const sections = [
     ["遊戲目標", "從第 5 名超越所有對手，奪得第 1 名。"],
@@ -5124,14 +5607,14 @@ function drawRulesModal(time) {
     ["三選一", "每次超車成功可從三張牌中選 1 張永久加入牌庫。"],
     ["卡牌類別", "指令牌：立即效果，打出消失。 / 車隊牌：留場持續生效。"],
   ];
-  let y = box.y + 110;
+  let y = box.y+110*UI_SCALE;
   const padX = 40;
   for (const [k, v] of sections) {
     text(k, box.x + padX, y, 14, "#7be0a0", "900", "left");
     text(v, box.x + padX + 110, y, 12, "#e8f0ff", "700", "left");
     y += 32;
   }
-  button("close-rules", "關閉", cx - 80, box.y + box.h - 56, 160, 40, false, "primary");
+  button("close-rules", "關閉", cx - 80, box.y+box.h-56*UI_SCALE, 160, 40, false, "primary");
 }
 
 
@@ -5154,10 +5637,10 @@ function drawSplash() {
   const btnId = isOvertake ? "qte-confirm-overtake"
               : isDefense  ? "qte-confirm-defense"
               :              "qte-confirm-bend";
-  const btnW = 200;
-  const btnH = 48;
+  const btnW = 200 * UI_SCALE;
+  const btnH = 48 * UI_SCALE;
   const btnX = (app.w - btnW) / 2;
-  const btnY = app.h * 0.42 + 240;
+  const btnY = app.h * 0.42 + 240 * UI_SCALE;
   button(btnId, "開始 QTE", btnX, btnY, btnW, btnH, false, "start");
 }
 
@@ -5195,21 +5678,21 @@ function drawQteDifficultyPanel(qteType) {
   const showQteDiff = (qteType === "overtake");
   const qteDiff = showQteDiff ? currentLaneQteDiff() : null;
 
-  const panelW = 460;
-  const panelH = showQteDiff ? 220 : 194;
+  const panelW = 460 * UI_SCALE;
+  const panelH = (showQteDiff ? 220 : 194) * UI_SCALE;
   const panelX = (app.w - panelW) / 2;
   const panelY = app.h * 0.42;
   roundPanel(panelX, panelY, panelW, panelH, 12,
     "rgba(12,18,30,0.92)", "rgba(255,217,79,0.5)", 2);
 
   // 標題
-  text("QTE 難度", panelX + panelW / 2, panelY + 28, 14,
+  text("QTE 難度", panelX + panelW / 2, panelY + 28 * UI_SCALE, 14,
     "rgba(255,217,79,0.7)", "700", "center");
 
   // 大數字
-  text(`${step}`, panelX + panelW / 2, panelY + 78, 44,
+  text(`${step}`, panelX + panelW / 2, panelY + 78 * UI_SCALE, 44,
     "#ffd94f", "1000", "center");
-  text(subline, panelX + panelW / 2, panelY + 102, 12,
+  text(subline, panelX + panelW / 2, panelY + 102 * UI_SCALE, 12,
     "rgba(220,230,245,0.7)", "700", "center");
 
   // 分隔線
@@ -5217,16 +5700,16 @@ function drawQteDifficultyPanel(qteType) {
   ctx.strokeStyle = "rgba(255,217,79,0.25)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(panelX + 30, panelY + 122);
-  ctx.lineTo(panelX + panelW - 30, panelY + 122);
+  ctx.moveTo(panelX + 30 * UI_SCALE, panelY + 122 * UI_SCALE);
+  ctx.lineTo(panelX + panelW - 30 * UI_SCALE, panelY + 122 * UI_SCALE);
   ctx.stroke();
   ctx.restore();
 
-  const rowY1 = panelY + 144;
-  const rowY2 = panelY + 168;
-  const rowY3 = panelY + 192;
-  const labelX = panelX + 40;
-  const valueX = panelX + panelW - 40;
+  const rowY1 = panelY + 144 * UI_SCALE;
+  const rowY2 = panelY + 168 * UI_SCALE;
+  const rowY3 = panelY + 192 * UI_SCALE;
+  const labelX = panelX + 40 * UI_SCALE;
+  const valueX = panelX + panelW - 40 * UI_SCALE;
 
   // 第 1 列：速度
   text(`速度 ${speed}`, labelX, rowY1, 12,
@@ -5493,7 +5976,7 @@ function drawExpressionDock(time) {
   ctx.setLineDash([]);
   drawExpressionFace(ctx,mood,cx,cy,R*2.1);
   const pillH=26, py=cy+R-18;
-  ctx.font='800 12px system-ui,"Microsoft JhengHei",sans-serif';
+  ctx.font=`800 ${12 * FONT_SCALE}px system-ui,"Microsoft JhengHei",sans-serif`;
   ctx.textAlign="center";
   const pillW=Math.min(120,Math.max(88,ctx.measureText(label).width+30));
   roundPanel(cx-pillW/2,py,pillW,pillH,12,COL.pillBg,COL.pillBorder,2);
@@ -5503,7 +5986,32 @@ function drawExpressionDock(time) {
 }
 
 // ─── 通用工具（沿用 Sam）─────────────────────────────────────────────────
+// 設定 ctx 字體（自動套用 FONT_SCALE）
+//   用法：setFont(ctx, 13, "800")
+function setFont(ctx, size, weight = "700") {
+  ctx.font = `${weight} ${size * FONT_SCALE}px system-ui,"Microsoft JhengHei",sans-serif`;
+}
+// 量字寬度（自動套用 FONT_SCALE）
+//   用法：const w = measureScaled(ctx, "hello", 13, "800")
+function measureScaled(ctx, str, size, weight = "700") {
+  ctx.save();
+  setFont(ctx, size, weight);
+  const w = ctx.measureText(str).width;
+  ctx.restore();
+  return w;
+}
+
 function text(message, x, y, size, color, weight="700", align="left", noShadow=false) {
+  const ctx=app.ctx; ctx.save();
+  const scaledSize = size * FONT_SCALE;
+  ctx.fillStyle=color; ctx.font=`${weight} ${scaledSize}px system-ui,"Microsoft JhengHei",sans-serif`;
+  ctx.textAlign=align; ctx.textBaseline="alphabetic";
+  if(!noShadow){ctx.shadowColor="rgba(0,0,0,0.55)";ctx.shadowBlur=6;}
+  ctx.fillText(message,x,y); ctx.restore();
+}
+
+// 不套用 FONT_SCALE 的原始大小（給牌面數字等固定大小用）
+function textRaw(message, x, y, size, color, weight="700", align="left", noShadow=false) {
   const ctx=app.ctx; ctx.save();
   ctx.fillStyle=color; ctx.font=`${weight} ${size}px system-ui,"Microsoft JhengHei",sans-serif`;
   ctx.textAlign=align; ctx.textBaseline="alphabetic";
@@ -5541,7 +6049,8 @@ function button(id,label,x,y,w,h,disabled=false,variant="primary") {
     ctx.restore();
   }
   roundPanel(x,y,w,h,10,fill,stroke);
-  text(label,x+w/2,y+27,16,disabled?"rgba(216,236,255,0.55)":start?"#fff4d6":"#d8ecff",start?"1000":"800","center");
+  // 文字位置：用 h 的比例自適應、不寫死、避免 FONT_SCALE 變大時跑位
+  text(label,x+w/2,y+h*0.66,16,disabled?"rgba(216,236,255,0.55)":start?"#fff4d6":"#d8ecff",start?"1000":"800","center");
 }
 
 function hitButton(p) {

@@ -190,7 +190,7 @@ export const STAGE5_COMMAND_CARDS = {
   turbo:         { type:"turbo",         cardClass:"action", name:"渦輪增壓", speedValue:30, note:"" },
   tailwind:      { type:"tailwind",      cardClass:"action", name:"加速",     speedValue:20, note:"" },
   drag:          { type:"drag",          cardClass:"action", name:"風阻減免", speedValue:15, note:"" },
-  laneRhythm:    { type:"laneRhythm",    cardClass:"action", name:"換道節奏", speedValue:15, tireCost:1, note:"打完選道換 / 消耗 1 胎", canChangeLane:true },
+  laneRhythm:    { type:"laneRhythm",    cardClass:"action", name:"換道節奏", speedValue:15, tireCost:1, note:"打加速後換道且消耗 1 胎", canChangeLane:true },
   nitro:         { type:"nitro",         cardClass:"action", name:"氮氣噴射", speedValue:60, tireCost:1, note:"消耗 1 胎" },
   reignite:      { type:"reignite",      cardClass:"action", name:"重燃引擎", speedValue:25, note:"下回合手牌 +1", drawNextHand:1 },
   drift:         { type:"drift",         cardClass:"action", name:"甩尾過彎", speedValue:0,  note:"僅彎道：必觸 QTE，依結果調整賽道加成（成功 +60 / Good +30 / Miss -10）", driftQte:true, requireBend:true },
@@ -214,7 +214,7 @@ export const STAGE5_TEAM_CARDS = {
   // === 裝備類（trigger: equip）— 選了立即生效、不進牌庫 ===
   newTireWarm:      { type:"newTireWarm",      cardClass:"team", name:"暖胎電熱絲",   note:"啟動時 -1 輪胎；之後每回合結算後保留 +10 速度",     effect:"keepSpeed",           value:10, costOnEquip:{ tire:1 }, trigger:"equip", persistence:"permanent",  persistenceLabel:"永久" },
   bigData:          { type:"bigData",          cardClass:"team", name:"大數據預測",   note:"預告升級：顯示對手下一招的具體內容",              effect:"showOpponent",        value:1,                          trigger:"equip", persistence:"permanent",  persistenceLabel:"永久" },
-  backup:           { type:"backup",           cardClass:"team", name:"後援車隊",     note:"防守失敗時不掉名次（一次）",                     effect:"saveOnDefeat",        value:1,                          trigger:"equip", persistence:"oneShot",    persistenceLabel:"觸發後棄" },
+  backup:           { type:"backup",           cardClass:"team", name:"後援車隊",     note:"裝備後生效；防守失敗時不掉名次，觸發一次後消失",   effect:"saveOnDefeat",        value:1,                          trigger:"equip", persistence:"oneShot",    persistenceLabel:"觸發後棄" },
   patch:            { type:"patch",            cardClass:"team", name:"補丁",         note:"撞坑時不扣胎、不降速（一次）",                   effect:"savePothole",         value:1,                          trigger:"equip", persistence:"oneShot",    persistenceLabel:"觸發後棄" },
   tirePreservation: { type:"tirePreservation", cardClass:"team", name:"保胎策略",     note:"所有指令牌 -10 速度；無視每回合第 1 次輪胎消耗",effect:"tirePreserve",        value:1,                          trigger:"equip", persistence:"permanent",  persistenceLabel:"永久" },
   // === 打出類（trigger: play）— 進牌庫、需要打出才生效 ===
