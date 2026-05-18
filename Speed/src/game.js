@@ -4694,15 +4694,24 @@ function drawModalBackdrop(time) {
   app.backdropCanvas.width  = app.canvas.width;
   app.backdropCanvas.height = app.canvas.height;
   const bctx = app.backdropCanvas.getContext("2d");
+  const SCV = window.StoryCanvasViewport;
+  // bctx 套 dpr + design transform，跟主 ctx 一致，這樣 drawRace 用 design 座標時才能正確填到整個 canvas
   bctx.setTransform(app.dpr,0,0,app.dpr,0,0);
+  if (SCV && app.viewport) SCV.applyDesignTransform(bctx, app.viewport);
   const prev = app.ctx; app.ctx = bctx;
   drawRace(time);
   app.ctx = prev;
   const ctx = app.ctx;
-  ctx.save(); ctx.setTransform(app.dpr,0,0,app.dpr,0,0);
-  ctx.clearRect(0,0,app.w,app.h);
+  // 此時主 ctx 已套了 design transform（外層 draw() 套的）。直接用 design 座標 (0,0,app.w,app.h) 畫
+  // ⚠ 不再用 setTransform 切到 dpr-only、那會清掉 design transform、讓後續繪製跑掉
+  ctx.save();
+  ctx.clearRect(0, 0, app.w, app.h);
   ctx.filter = "blur(6px)"; ctx.globalAlpha = 0.96;
-  ctx.drawImage(app.backdropCanvas,0,0,app.w,app.h);
+  // drawImage source 是整個 backdrop canvas（內部緩衝、像素座標）、dest 是 design (0,0,app.w,app.h)
+  ctx.drawImage(app.backdropCanvas,
+    0, 0, app.backdropCanvas.width, app.backdropCanvas.height,   // source: 整張 backdrop
+    0, 0, app.w, app.h                                            // dest: design 0,0,1920,1080
+  );
   ctx.filter = "none"; ctx.globalAlpha = 1;
   ctx.fillStyle = "rgba(0,0,0,0.52)"; ctx.fillRect(0,0,app.w,app.h);
   ctx.restore();
