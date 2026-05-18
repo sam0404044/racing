@@ -6,13 +6,19 @@ const FONT_STACK = "Microsoft JhengHei, Microsoft YaHei, PingFang TC, Noto Sans 
 
 const DEFAULT_BACKGROUND_SRC = "assets/BG/xiaoman-supply-station-bg.png";
 
-/** 試算表「背景CG」填 none／無等表示沿用上一張，不載入 assets/BG/none.png */
+const BLACK_BACKGROUND_KEY = "__black_background__";
+
+/** 試算表「背景CG」留空表示沿用上一張；play_test_2 填 none 表示純黑背景 */
 function isSheetBackgroundUnsetToken(raw) {
   const s = (raw || "").trim();
   if (!s) {
     return true;
   }
-  return /^(none|無|無背景|transparent|n\/a|na|-)$/i.test(s);
+  return /^(無|transparent|n\/a|na|-)$/i.test(s);
+}
+
+function isSheetBackgroundBlackToken(raw) {
+  return /^(none|無背景)$/i.test((raw || "").trim());
 }
 
 const PORTRAIT_ROLE_FOLDER = {
@@ -120,6 +126,7 @@ let storyGuideMilestoneLive = 0;
 let typedChars = 0;
 let lastTypeAt = 0;
 let transition = null;
+let backgroundTransition = null;
 let needsRedraw = true;
 let atlasIconHover = false;
 /** 0..1，平滑接往 hover 目標（控制縮放） */
@@ -128,6 +135,7 @@ let lastLoopNow = 0;
 const ATLAS_HOVER_TAU_MS = 520;
 const typeStep = 2;
 const PORTRAIT_FADE_MS = 420;
+const BACKGROUND_TRANSITION_MS = 980;
 let autoAdvanceReadyAt = 0;
 let skipHeld = false;
 
@@ -279,6 +287,9 @@ function portraitSrc(role, expr) {
 }
 
 function backgroundSrc(backgroundKey) {
+  if (backgroundKey === BLACK_BACKGROUND_KEY) {
+    return BLACK_BACKGROUND_KEY;
+  }
   if (isSheetBackgroundUnsetToken(backgroundKey)) {
     return DEFAULT_BACKGROUND_SRC;
   }
@@ -304,6 +315,44 @@ function resizeCanvas() {
 
 function currentLine() {
   return storyLines[lineIndex] || storyLines[storyLines.length - 1];
+}
+
+function maybeStartBackgroundTransition(fromIndex, toIndex) {
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+    return;
+  }
+  const fromLine = storyLines[fromIndex];
+  const toLine = storyLines[toIndex];
+  if (!Array.isArray(fromLine) || !Array.isArray(toLine)) {
+    return;
+  }
+  if (fromLine[0] === transitionKey || toLine[0] === transitionKey) {
+    return;
+  }
+  const fromPart = fromLine[2]?.sheetPart ?? 0;
+  const toPart = toLine[2]?.sheetPart ?? 0;
+  if (fromPart !== toPart) {
+    return;
+  }
+  const fromStage = resolveStageState(fromIndex);
+  const toStage = resolveStageState(toIndex);
+  const fromSrc = backgroundSrc(fromStage.backgroundKey);
+  const toSrc = backgroundSrc(toStage.backgroundKey);
+  if (fromSrc === toSrc) {
+    return;
+  }
+  if (fromSrc !== BLACK_BACKGROUND_KEY) {
+    ensureImage(fromSrc);
+  }
+  if (toSrc !== BLACK_BACKGROUND_KEY) {
+    ensureImage(toSrc);
+  }
+  backgroundTransition = {
+    fromStage,
+    toStage,
+    start: performance.now(),
+    duration: BACKGROUND_TRANSITION_MS
+  };
 }
 
 function resetPortraitSlotAnimations() {
@@ -377,6 +426,7 @@ async function loadStoryLinesFromSheet() {
     typedChars = 0;
     lastTypeAt = 0;
     transition = null;
+    backgroundTransition = null;
     resetAutoAdvanceTimer();
     resetPortraitSlotAnimations();
     needsRedraw = true;
@@ -390,6 +440,7 @@ async function loadStoryLinesFromSheet() {
     typedChars = 0;
     lastTypeAt = 0;
     transition = null;
+    backgroundTransition = null;
     resetAutoAdvanceTimer();
     resetPortraitSlotAnimations();
     needsRedraw = true;
@@ -532,6 +583,7 @@ function advanceLine() {
     return;
   }
   if (lineIndex < storyLines.length - 1) {
+    const prevLineIndex = lineIndex;
     markLineRead();
     lineIndex += 1;
     typedChars = 0;
@@ -539,12 +591,15 @@ function advanceLine() {
     resetAutoAdvanceTimer();
     bumpStoryMaxLine();
     if (currentLine()[0] === transitionKey) {
+      backgroundTransition = null;
       transition = {
         text: currentLine()[1],
         start: performance.now(),
         duration: 1800
       };
       resetPortraitSlotAnimations();
+    } else {
+      maybeStartBackgroundTransition(prevLineIndex, lineIndex);
     }
     needsRedraw = true;
   }
@@ -617,8 +672,19 @@ function updateTransition(now) {
     lineIndex = Math.min(storyLines.length - 1, lineIndex + 1);
     typedChars = 0;
     lastTypeAt = 0;
+    backgroundTransition = null;
     resetAutoAdvanceTimer();
     bumpStoryMaxLine();
+  }
+  needsRedraw = true;
+}
+
+function updateBackgroundTransition(now) {
+  if (!backgroundTransition) {
+    return;
+  }
+  if (now - backgroundTransition.start >= backgroundTransition.duration) {
+    backgroundTransition = null;
   }
   needsRedraw = true;
 }
@@ -664,7 +730,9 @@ function resolveStageState(upToLineIndex) {
     applySlot("center", "centerRole", "centerExpr");
     applySlot("right", "rightRole", "rightExpr");
     const bg = (meta.backgroundKey || "").trim();
-    if (bg && !isSheetBackgroundUnsetToken(bg)) {
+    if (meta.sheetPart === 2 && isSheetBackgroundBlackToken(bg)) {
+      state.backgroundKey = BLACK_BACKGROUND_KEY;
+    } else if (bg && !isSheetBackgroundUnsetToken(bg) && !isSheetBackgroundBlackToken(bg)) {
       state.backgroundKey = bg;
     }
   }
@@ -747,9 +815,8 @@ function clientToCanvasStory(clientX, clientY) {
 }
 
 function atlasIconLayout() {
-  const pad = 14;
-  const size = 168;
-  return { x: pad, y: pad, size };
+  const size = 48;
+  return { x: 28, y: 24, size };
 }
 
 function atlasIconHit(mx, my) {
@@ -775,20 +842,33 @@ function drawAtlasIcon() {
   const { x, y, size } = atlasIconLayout();
   const cx = x + size / 2;
   const cy = y + size / 2;
-  const scale = 1 + 0.06 * atlasHoverAnim;
+  const scale = 1 + 0.04 * atlasHoverAnim;
 
-  const stroke = "#ffffff";
-  const lineLens = Math.max(5, size * 0.048);
-  const lineHandle = Math.max(5.5, size * 0.052);
+  const stroke = "#f5f5f5";
+  const lineLens = Math.max(2.4, size * 0.07);
+  const lineHandle = Math.max(2.8, size * 0.078);
 
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(scale, scale);
   ctx.translate(-cx, -cy);
 
-  const gr = size * 0.19;
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 10;
+  ctx.fillStyle = atlasIconHover ? "rgba(255, 255, 255, 0.16)" : "rgba(8, 13, 18, 0.62)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.48)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size / 2 - 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  const gr = size * 0.17;
   const handleAngle = Math.PI / 4;
-  const handleLen = gr * 1.52;
+  const handleLen = gr * 1.38;
   const shift = gr * 0.34;
   const lx = cx - shift * Math.cos(handleAngle);
   const ly = cy - shift * Math.sin(handleAngle);
@@ -824,6 +904,7 @@ function draw() {
     const stage = resolveStageState(lineIndex);
     drawBackground(stage);
     drawPortraits();
+    drawBackgroundAccordionTransition();
   }
   drawDialogue();
   drawAtlasIcon();
@@ -832,10 +913,19 @@ function draw() {
 }
 
 function drawBackground(stage) {
-  const src = backgroundSrc(stage.backgroundKey);
-  const image = ensureImage(src);
-  ctx.fillStyle = "#080d12";
+  const activeTransition = backgroundTransition && !transition;
+  const displayStage = activeTransition
+    ? ((performance.now() - backgroundTransition.start) / backgroundTransition.duration < 0.5
+        ? backgroundTransition.fromStage
+        : backgroundTransition.toStage)
+    : stage;
+  const src = backgroundSrc(displayStage.backgroundKey);
+  ctx.fillStyle = src === BLACK_BACKGROUND_KEY ? "#000" : "#080d12";
   ctx.fillRect(0, 0, viewWidth, viewHeight);
+  if (src === BLACK_BACKGROUND_KEY) {
+    return;
+  }
+  const image = ensureImage(src);
   if (!image || !image.complete || !image.naturalWidth || image._loadFailed) {
     return;
   }
@@ -1027,6 +1117,47 @@ function drawTransition() {
   ctx.restore();
 }
 
+function drawBackgroundAccordionTransition() {
+  if (!backgroundTransition || transition) {
+    return;
+  }
+  const elapsed = performance.now() - backgroundTransition.start;
+  const t = Math.min(1, Math.max(0, elapsed / backgroundTransition.duration));
+  const closing = t < 0.5;
+  const phase = closing ? t / 0.5 : (t - 0.5) / 0.5;
+  const base = closing ? easeInOut(phase) : 1 - easeInOut(phase);
+  const stripCount = Math.max(10, Math.min(18, Math.round(viewWidth / 92)));
+  const stripW = Math.ceil(viewWidth / stripCount);
+
+  ctx.save();
+  for (let i = 0; i < stripCount; i += 1) {
+    const delay = (i / Math.max(1, stripCount - 1)) * 0.16;
+    const local = closing
+      ? Math.min(1, Math.max(0, base * 1.16 - delay))
+      : Math.min(1, Math.max(0, base * 1.16 - (0.16 - delay)));
+    const cover = easeInOut(local);
+    if (cover <= 0.001) {
+      continue;
+    }
+    const x0 = i * stripW;
+    const w = Math.min(stripW + 1, viewWidth - x0 + 1);
+    const foldW = w * cover;
+    const x = i % 2 === 0 ? x0 : x0 + w - foldW;
+    const gradient = ctx.createLinearGradient(x, 0, x + Math.max(1, foldW), 0);
+    gradient.addColorStop(0, "rgba(0, 0, 0, 0.98)");
+    gradient.addColorStop(0.5, "rgba(0, 0, 0, 0.94)");
+    gradient.addColorStop(1, "rgba(10, 10, 12, 0.98)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x, 0, foldW, viewHeight);
+
+    ctx.globalAlpha = Math.min(0.36, cover * 0.36);
+    ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.34)";
+    ctx.fillRect(i % 2 === 0 ? x + foldW - 3 : x, 0, 3, viewHeight);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
 function dialogueBoxRect() {
   const margin = 30;
   const width = Math.min(1180, viewWidth - margin * 2);
@@ -1085,6 +1216,7 @@ function loop(now) {
   updateTyping(now);
   updateAutoPlay(now);
   updateTransition(now);
+  updateBackgroundTransition(now);
   updatePortraitAnimations(now);
   if (needsRedraw) {
     draw();
