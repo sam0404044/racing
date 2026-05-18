@@ -731,8 +731,9 @@ function resolveStageState(upToLineIndex) {
       const expr = (meta[exprKey] || "").trim();
       if (role) {
         state[side] = { role, expr: expr || "日常" };
-      } else if (expr && state[side]?.role) {
-        state[side] = { role: state[side].role, expr };
+      } else {
+        /** 該欄角色名稱留空表示離場，不沿用上一行 */
+        state[side] = null;
       }
     };
     applySlot("left", "leftRole", "leftExpr");
