@@ -287,7 +287,7 @@
           <tr><td><code>stay</code> + <code>absBonus: true</code>（B 清道夫強招）</td><td>取對手所在道的 abs(add)，永遠正值</td></tr>
           <tr><td>其他切道動作（無 boostAfter）</td><td>不變</td></tr>
           <tr><td>進入彎道 / 限速段 / 加成道</td><td><strong>不變</strong>（對手免疫加成）</td></tr>
-          <tr><td><strong>c6 油污中央道（forceCornerQte）</strong></td><td>50% 機率失控、滑到隨機鄰道（清道夫光環免疫）</td></tr>
+          <tr><td><strong>c6 油污中道（forceCornerQte）</strong></td><td>50% 機率失控、滑到隨機鄰道（清道夫光環免疫）</td></tr>
           <tr><td><strong>c7 坑洞道</strong></td><td>速度 ÷ 2（清道夫光環免疫）</td></tr>
         </tbody>
       </table>
@@ -306,7 +306,7 @@ function applyOpponentBonus(currentSpeed, laneIdx, bypassAura = false) {
   return currentSpeed + (b.add ?? 0);
 }
 
-// handleOpponentForceQte（油污 c6 lane 1）— 災害仍生效（清道夫免疫）
+// handleOpponentForceQte（油污 c6 中道）— 災害仍生效（清道夫光環免疫）
 function handleOpponentForceQte() {
   if (isOpponentAuraActive()) return;  // 清道夫光環免疫
   const b = getLaneBonusFor(app.opponentLane, "opponent");
@@ -347,7 +347,7 @@ function handleOpponentForceQte() {
         </thead>
         <tbody>
           <tr><td><code>moveTo</code></td><td><code>target</code>: lane index 或 <code>"playerLane"</code></td><td>對手切到指定賽道。<code>"playerLane"</code> 切到「玩家上一個動作開始前所在的道」（玩家換道可閃過）</td></tr>
-          <tr><td><code>moveSmart</code></td><td><code>strategy</code>: <code>bestForSelf</code> / <code>avoidPlayer</code> / <code>dynamicAvoidOrBlock</code></td><td>依策略選道。avoidPlayer 跟 dynamic 挑最快道、bestForSelf 隨機選（v0.9）</td></tr>
+          <tr><td><code>moveSmart</code></td><td><code>strategy</code>: <code>bestForSelf</code> / <code>avoidPlayer</code> / <code>dynamicAvoidOrBlock</code></td><td>後手最佳化選道，AI 根據策略 + 賽道狀況評估</td></tr>
           <tr><td><code>moveAdjacent</code></td><td>—</td><td>隨機切相鄰道</td></tr>
           <tr><td><code>boost</code></td><td><code>amount</code>: 加速量</td><td>對手速度永久 + amount</td></tr>
           <tr><td><code>boostAfter</code></td><td>附加參數（接在 moveTo / moveSmart 後）</td><td>移動完直接 + boostAfter</td></tr>
@@ -359,7 +359,7 @@ function handleOpponentForceQte() {
       <h3>moveSmart 三策略</h3>
       <p>這三種策略決定 AI 怎麼選道：</p>
       <ul>
-        <li><code>bestForSelf</code>（v0.9 改）：<strong>在非災害道之間隨機選道</strong>、無視玩家位置。災害道（坑洞、油污 forceCornerQte）仍會避開。例：破風者（C）的兩個 behavior 都用這個。設計意圖：破風者「自顧自亂跑」、不可預測。</li>
+        <li><code>bestForSelf</code>：選對自己速度最高的道，<strong>無視玩家位置</strong>。例：破風者（C）的兩個 behavior 都用這個。</li>
         <li><code>avoidPlayer</code>：選速度最高的道、<strong>但排除玩家動作前所在道</strong>。讓玩家吃不到尾流。</li>
         <li><code>dynamicAvoidOrBlock</code>：動態策略——玩家還沒吃尾流 → 等同 avoidPlayer；玩家已吃尾流 → 切到玩家動作前道（block）。例：禿鷹（A）的兩個 behavior。</li>
       </ul>
@@ -404,7 +404,7 @@ function handleOpponentForceQte() {
       <ul>
         <li>常駐：B 所在道的 lane bonus 對「玩家」與「對手自己」都被清除（add=0, mult=1）</li>
         <li>玩家跟 B 同道 → 不吃尾流 +30（光環抵消）</li>
-        <li><strong>免疫所有賽道災害</strong>：清道夫站任何坑洞道、坑洞自動抵消（不降速）；站油污中央道、不會 50% 滑開。預告也因此維持原意圖 ⛔ 不降級成 ❗</li>
+        <li><strong>免疫所有賽道災害</strong>：清道夫站任何坑洞道、坑洞自動抵消（不降速）；站油污中道、不會 50% 滑開。預告也因此維持原意圖 ⛔ 不降級成 ❗</li>
         <li><code>bypassAura: true</code>：B 在那一動<strong>無視自己的光環</strong>，可以吃 lane bonus（強招那一動）</li>
         <li><code>absBonus: true</code>：bypassAura 那一動套用「絕對加成」——若該道 add=-10（逆風）→ 對手反而吃 +10</li>
       </ul>
@@ -420,7 +420,7 @@ function handleOpponentForceQte() {
           <tr><td><code>c-strong</code></td><td>2</td><td>strong</td><td>moveSmart</td><td>bestForSelf</td><td>+10</td></tr>
         </tbody>
       </table>
-      <p>C 完全無視玩家，每動都<strong>隨機選一條非災害道</strong>（v0.9 改、原本是挑最快道、但 v0.8 對手免疫加成後「最快道」概念失效、改成隨機更符合「自顧自跑」的角色定位），再加 5 或 10 速。預告永遠是 ❓（unknown）、玩家無法用尾流預判。</p>
+      <p>C 完全無視玩家，每動都選自己最快的道、再加 5 或 10 速。雖然強招數值不如禿鷹，但因為 v0.8 對手不吃賽道加成、C 的 bestForSelf 策略<strong>實際失效</strong>（沒有「最快道」可選了）—— 詳見 §6。</p>
       <p><strong>玩家對策</strong>（當前實作）：C 是這三個對手中威脅最低的。專注度 0、超車一次就甩開、累積速度比較容易。</p>
 
       <h2>§ 5&nbsp;&nbsp;UI 預告與意圖系統</h2>
@@ -446,7 +446,7 @@ function handleOpponentForceQte() {
       <ul>
         <li><strong>❓ unknown</strong>：
           <ul>
-            <li><code>moveSmart bestForSelf</code>：在非災害道之間隨機選、無視玩家</li>
+            <li><code>moveSmart bestForSelf</code>：選自己最快道、無視玩家</li>
             <li><code>moveAdjacent</code>：隨機切相鄰道</li>
           </ul>
         </li>

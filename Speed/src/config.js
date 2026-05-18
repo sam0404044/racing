@@ -130,9 +130,9 @@ export const STAGE5_CIRCUITS = [
     type:"straight",
     randomPothole: true,
     laneBonuses:[
-      { lane:0, add:5, mult:1, label:"道 0 +5" },
-      { lane:1, add:5, mult:1, label:"道 1 +5" },
-      { lane:2, add:5, mult:1, label:"道 2 +5" },
+      { lane:0, add:5, mult:1, label:"左道 +5" },
+      { lane:1, add:5, mult:1, label:"中道 +5" },
+      { lane:2, add:5, mult:1, label:"右道 +5" },
     ],
     hint:"三道都 +5，但有一道藏坑（可見）",
   },

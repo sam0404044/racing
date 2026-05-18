@@ -406,7 +406,7 @@
           <tr><td><strong>QTE 失敗位移</strong>(c6 滑到鄰道)</td><td><code>slipOnQteFail</code> 旗標、<code>endBendQte</code> 內處理、<code>bendQteResult.slippedTo</code> 顯示</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
           <tr><td><strong>賽段級 QTE 難度偏移</strong>(c6 整段 +1 級)</td><td><code>qteDifficultyOffset</code> 由 <code>speedTierStep</code> 統一讀取、影響所有 QTE</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
           <tr><td><strong>對手 c6 失敗判定</strong>(50% 滑走)</td><td><code>handleOpponentForceQte</code> 在 <code>resolveOpponentCircuit</code> 之前判定</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
-          <tr><td><strong>對手 AI 期望值</strong>(c6 lane 1 加成只算一半)</td><td><code>calcOpponentSpeedAtLane</code> 對 forceCornerQte 道計算期望值</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
+          <tr><td><strong>對手 AI 期望值</strong>(c6 中道加成只算一半)</td><td><code>calcOpponentSpeedAtLane</code> 對 forceCornerQte 道計算期望值</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
           <tr><td><strong>隨機坑洞道</strong>(c7 進關抽 2 道、結算 -1 胎)</td><td><code>randomPothole</code> 旗標、<code>app.stage5.potholeLanes</code> 陣列、<code>checkPotholeDamage</code></td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
           <tr><td><strong>對手 c7 避坑（AI 決策層）</strong></td><td><code>pickSmartLaneForOpponent</code>、moveTo / moveAdjacent 內排除坑洞道</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
           <tr><td><strong>清道夫光環抵消坑洞</strong></td><td><code>checkPotholeDamage</code> 內判斷光環道</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
@@ -433,26 +433,26 @@
             <tr><td><strong>加成類型</strong></td><td>add（中央 +10、邊緣 -10）</td></tr>
             <tr><td><strong>QTE 難度</strong></td><td>整段 +1 級（速度檔位 +1）</td></tr>
             <tr><td><strong>lane bonuses</strong></td><td>
-              lane 0：add -10（外緣，安全）<br>
-              lane 1：add +10（油污中央，<strong>強制彎道 QTE</strong>）<br>
-              lane 2：add -10（外緣，安全）
+              左道（lane 0）：add -10（外緣，安全）<br>
+              中道（lane 1）：add +10（油污中央，<strong>強制彎道 QTE</strong>）<br>
+              右道（lane 2）：add -10（外緣，安全）
             </td></tr>
           </tbody>
         </table>
 
-        <p><strong>玩家在中央道（lane 1）：</strong></p>
+        <p><strong>玩家在中道（lane 1）：</strong></p>
         <ul>
-          <li>結算後在 lane 1 → <strong>強制觸發彎道 QTE</strong>（不看速度、無視 speedLimit）。</li>
+          <li>結算後在中道 → <strong>強制觸發彎道 QTE</strong>（不看速度、無視 speedLimit）。</li>
           <li>QTE 成功：正常吃 +10、不位移。</li>
-          <li>QTE 失敗：<strong>-1 輪胎</strong> + <strong>+1 張失誤牌</strong>（沿用既有副作用）+ <strong>滑到隨機鄰道</strong>（lane 0 或 lane 2、50/50）。</li>
+          <li>QTE 失敗：<strong>-1 輪胎</strong> + <strong>+1 張失誤牌</strong>（沿用既有副作用）+ <strong>滑到隨機鄰道</strong>（左道或右道、50/50）。</li>
         </ul>
 
-        <p><strong>對手在中央道（lane 1）：</strong></p>
+        <p><strong>對手在中道（lane 1）：</strong></p>
         <ul>
           <li>對手不打 QTE、改用 <strong>50% 機率失敗</strong>判定（在 <code>resolveOpponentCircuit</code> 之前判定）。</li>
-          <li>成功（50%）：留在 lane 1、結算用 +10。</li>
+          <li>成功（50%）：留在中道、結算用 +10。</li>
           <li>失敗（50%）：滑到隨機鄰道、結算改用該鄰道 -10（不是雙重懲罰，是把加成從 +10 變 -10）。</li>
-          <li><strong>AI 期望值</strong>：對手評估 lane 1 時，期望加成 = 0.5 × (+10) + 0.5 × (鄰道平均 -10) = 0。所以對手仍會傾向中央（兩邊真實 -10 比 0 差），但不會誤把中央當純好處。</li>
+          <li><strong>AI 期望值</strong>：對手評估中道時，期望加成 = 0.5 × (+10) + 0.5 × (鄰道平均 -10) = 0。所以對手仍會傾向中央（兩邊真實 -10 比 0 差），但不會誤把中央當純好處。</li>
         </ul>
 
         <p><strong>整段 QTE 難度 +1 級：</strong></p>
@@ -462,7 +462,7 @@
           <li>UI 提示：每條道頂部都顯示「⚠ QTE 難度 +1 級」（橙色、所有道）。</li>
         </ul>
 
-        <p><strong>視覺：</strong>lane 1 道格遠方有紫色油污 sprite（橢圓 + 光澤 + 「油」字）。</p>
+        <p><strong>視覺：</strong>中道（lane 1）道格遠方有紫色油污 sprite（橢圓 + 光澤 + 「油」字）。</p>
 
         <p><strong>跟既有牌互動：</strong></p>
         <ul>
@@ -502,7 +502,7 @@
             <tr><td><strong>加成類型</strong></td><td>add（三道相同 +5）+ 隨機坑洞傷害</td></tr>
             <tr><td><strong>QTE 難度</strong></td><td>普通</td></tr>
             <tr><td><strong>lane bonuses</strong></td><td>
-              lane 0/1/2：全部 add +5<br>
+              左道 / 中道 / 右道：全部 add +5<br>
               <strong>2 道隨機有坑</strong>（進關時抽 1 道為安全道、其他全是坑），玩家可見
             </td></tr>
           </tbody>
@@ -531,7 +531,7 @@
 
         <p><strong>清道夫(B)光環互動：</strong></p>
         <ul>
-          <li><strong>清道夫光環免疫所有賽道災害</strong>：當前對手是清道夫時、踩到任何坑洞道 → <strong>不降速</strong>；踩到油污中央道 → 不會 50% 滑開。</li>
+          <li><strong>清道夫光環免疫所有賽道災害</strong>：當前對手是清道夫時、踩到任何坑洞道 → <strong>不降速</strong>；踩到油污中道 → 不會 50% 滑開。</li>
           <li>玩家在「清道夫所在道」踩坑 → 也免疫（光環延伸到玩家）。</li>
           <li>玩家可以主動跟到清道夫所在道避坑——多了一個戰術層。</li>
         </ul>
@@ -543,9 +543,9 @@
   type:"straight",
   randomPothole: true,   // applyCircuit 時抽 1 道安全、其他全坑
   laneBonuses:[
-    { lane:0, add:+5, mult:1, label:"道 0 +5" },
-    { lane:1, add:+5, mult:1, label:"道 1 +5" },
-    { lane:2, add:+5, mult:1, label:"道 2 +5" },
+    { lane:0, add:+5, mult:1, label:"左道 +5" },
+    { lane:1, add:+5, mult:1, label:"中道 +5" },
+    { lane:2, add:+5, mult:1, label:"右道 +5" },
   ],
   // 注意：坑洞道由 applyCircuit 動態決定(存在 app.stage5.potholeLanes 陣列)
   hint:"三道都 +5，但有兩道藏坑(可見)",
@@ -669,7 +669,7 @@
       <h2>§ 6&nbsp;&nbsp;Playtest 觀察項</h2>
       <p>各賽段內主要規則已拍板實作。以下為原型期需要 playtest 後微調的數值：</p>
       <ol>
-        <li><strong>c6 油污段</strong>：對手中央道失敗率目前 50%。觀察是否太重？可調整成 30-40%；或對手依個性差異化(清道夫高、技術派低)。</li>
+        <li><strong>c6 油污段</strong>：對手中道失敗率目前 50%。觀察是否太重？可調整成 30-40%；或對手依個性差異化(清道夫高、技術派低)。</li>
         <li><strong>c6 油污段</strong>：整段 QTE +1 級對玩家是否太重？尤其搭配 <code>孤注一擲</code>(+60) 時速度檔位可能直接跳 2-3 級。</li>
         <li><strong>c7 坑洞段</strong>：目前對手「沒 action 那回合不能避坑」是否太懲罰？或反之、太優勢給玩家？</li>
         <li><strong>c8 紅綠燈干擾</strong>：抽出極端 bad 組合(三道都負)時要不要保底？目前不保底(聽天由命也是賽車運氣的一部分)；若反饋太挫敗、可加「至少一道 ≥ 0」的保底規則。</li>
@@ -727,9 +727,9 @@
     type:"straight",
     randomPothole: true,   // applyCircuit 時抽 1 道安全、其他全坑
     laneBonuses:[
-      { lane:0, add:+5, mult:1, label:"道 0 +5" },
-      { lane:1, add:+5, mult:1, label:"道 1 +5" },
-      { lane:2, add:+5, mult:1, label:"道 2 +5" },
+      { lane:0, add:+5, mult:1, label:"左道 +5" },
+      { lane:1, add:+5, mult:1, label:"中道 +5" },
+      { lane:2, add:+5, mult:1, label:"右道 +5" },
     ],
     // 注意：坑洞道由 applyCircuit 動態決定(存在 app.stage5.potholeLanes 陣列)
     hint:"三道都 +5，但有兩道藏坑(可見)",

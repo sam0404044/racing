@@ -76,6 +76,19 @@ export const app = {
   // 對手行動視覺提示
   opponentActionFx: null,  // { label, until }
 
+  // 速度結算飛字系統（每個來源一個 pop，依序冒出車身上方）
+  // queue: 待播放的 pop，每隔 SPEED_POP_INTERVAL 從 queue 取一個移到 active
+  // active: 正在播放動畫的 pop
+  //   每筆形狀：{ target: "player"|"opponent", text, color, bornAt, duration }
+  speedPopsQueue:  [],     // [{ target, text, color, durationOverride? }]
+  speedPopsActive: [],     // [{ target, text, color, bornAt, duration }]
+  speedPopsNextSpawnAt: { player: 0, opponent: 0 },  // 下次可從 queue 取的時間
+
+  // 飛字播放期間鎖玩家輸入（拖牌、超車、PASS 都擋）
+  // 由 deferUntilSpeedPopsClear() 設、tickSpeedPopGates() 在閘門觸發時清
+  inputLocked: false,
+
+
   // 超車過場動畫
   overtakeAnim: null,  // { startTime, phase } phase: "approach"→"pass"→"recede"
 

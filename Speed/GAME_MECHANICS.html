@@ -266,7 +266,7 @@
                 <li>對手速度變化來自：
                   <ol>
                     <li>對手自己的動作：<code>boost</code>（+amount）、<code>moveTo + boostAfter</code>、<code>stay + absBonus</code></li>
-                    <li><strong>賽道災害</strong>（雙方都怕、但清道夫光環免疫）：c6 油污中央道 50% 滑到鄰道、c7 坑洞速度 ÷ 2</li>
+                    <li><strong>賽道災害</strong>（雙方都怕、但清道夫光環免疫）：c6 油污中道 50% 滑到鄰道、c7 坑洞速度 ÷ 2</li>
                   </ol>
                 </li>
                 <li>例外：若 lane bonus 有 <code>forOpponent</code> 子物件可顯式覆寫對手版加成（目前所有賽道未定義）</li>
@@ -284,7 +284,86 @@
         <li><strong>打牌（順風道，無尾流）</strong>：playerSpeed 50、順風道 +10、打 +20 牌：步驟 1 → 70。步驟 3 無同道 → 70。步驟 4 (70 + 10) × 1 → <strong>80</strong>。</li>
         <li><strong>換到對手道（吃尾流）</strong>：playerSpeed 60、跨 1 道、對手在目標道：步驟 1 → 60 - 10 = 50。步驟 2 對手沒切走。步驟 3 同道 +30 → 80。步驟 4 標準道 → <strong>80</strong>。</li>
       </ul>
-      <p class="note"><strong>對手在彎道</strong>（v0.8 後）：對手免疫所有賽道加成、進彎道後速度<strong>不變</strong>。舊版本對手會吃 mult 加乘、現已移除。但 c6 油污中央道（forceCornerQte）、c7 坑洞道仍會懲罰對手——加成只影響玩家，災害不分敵我。</p>
+      <p class="note"><strong>對手在彎道</strong>（v0.8 後）：對手免疫所有賽道加成、進彎道後速度<strong>不變</strong>。舊版本對手會吃 mult 加乘、現已移除。但 c6 油污中道（forceCornerQte）、c7 坑洞道仍會懲罰對手——加成只影響玩家，災害不分敵我。</p>
+
+      <h2>飛字結算 <span class="tag new">v0.9</span></h2>
+      <p>每筆速度／輪胎變動會在對應車身上方冒出一個飛字（speed pop），<strong>一個來源一筆</strong>、依序播出。讓玩家清楚看見一動的結算過程：哪些加成、扣減、災害、誰拿了多少。</p>
+
+      <h3>來源清單</h3>
+      <p>每個 pop 對應一個獨立的事件來源、不會合併。下表依照五步驟流程順序列出：</p>
+      <table>
+        <thead><tr><th>步驟</th><th>來源</th><th>對象</th><th>顯示範例</th></tr></thead>
+        <tbody>
+          <tr><td rowspan="9"><strong>1 玩家行動</strong></td><td>跨道扣速</td><td>玩家</td><td><code>-10 跨道</code></td></tr>
+          <tr><td>卡牌主效果</td><td>玩家</td><td><code>+20 加速</code> / <code>+60 氮氣噴射</code> 等（用卡牌名）</td></tr>
+          <tr><td>fuelMaster（燃料策士）</td><td>玩家</td><td><code>+5 燃料策士</code></td></tr>
+          <tr><td>rhythmCoach（節奏教練）連擊</td><td>玩家</td><td><code>+10 連擊</code> 或 <code>+20 連擊×3</code></td></tr>
+          <tr><td>tirePreserve（保胎策略）扣速</td><td>玩家</td><td><code>-10 保胎</code></td></tr>
+          <tr><td>smoothOperator（賽車節奏）</td><td>玩家</td><td><code>+20 賽車節奏</code></td></tr>
+          <tr><td>卡牌 tireCost 扣胎</td><td>玩家</td><td><code>-1 胎</code></td></tr>
+          <tr><td>tirePreserve 抵消扣胎</td><td>玩家</td><td><code>🩹 保胎抵消</code></td></tr>
+          <tr><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td rowspan="2"><strong>2 對手行動</strong></td><td>boost / moveTo+boostAfter / moveSmart+boostAfter</td><td>對手</td><td><code>+15 加速</code></td></tr>
+          <tr><td>油污失控（c6 中道 50%）</td><td>對手</td><td><code>油污失控</code>（紫紅）</td></tr>
+          <tr><td><strong>3 尾流</strong></td><td>同道 +30 速</td><td>玩家</td><td><code>+30 尾流</code>（橘）</td></tr>
+          <tr><td rowspan="6"><strong>4 賽道結算</strong></td><td>賽道 add（順風／逆風）</td><td>玩家</td><td><code>+10 左道 +10</code></td></tr>
+          <tr><td>賽道 mult（彎道）</td><td>玩家</td><td><code>×1.25 中道 ×1.25 +25</code>（藍綠）</td></tr>
+          <tr><td>清道夫強招 abs 加成</td><td>對手</td><td><code>+10 清道夫強招</code></td></tr>
+          <tr><td>玩家踩坑洞（無抵消）</td><td>玩家</td><td><code>-1 胎 坑洞</code>（紫紅）</td></tr>
+          <tr><td>對手踩坑洞</td><td>對手</td><td><code>-N 坑洞</code>（紫紅、N = 降速量）</td></tr>
+          <tr><td>光環／補丁抵消坑洞</td><td>對應方</td><td><code>🛡️ 光環抵消</code> / <code>🩹 補丁抵消</code></td></tr>
+          <tr><td rowspan="3"><strong>觸發 QTE 前</strong></td><td>踩到油污</td><td>玩家</td><td><code>油污！</code>（紫紅）</td></tr>
+          <tr><td>速度超過彎道速限</td><td>玩家</td><td><code>超速！</code>（紫紅）</td></tr>
+          <tr><td>彎道 QTE 失敗</td><td>玩家</td><td><code>-1 胎 彎道失誤</code>（紫紅）</td></tr>
+        </tbody>
+      </table>
+
+      <h3>顏色語意</h3>
+      <table>
+        <thead><tr><th>顏色</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td style="color:#ffd86a"><strong>黃 #ffd86a</strong></td><td>一般加速、補丁抵消（正向）</td></tr>
+          <tr><td style="color:#ff7066"><strong>紅 #ff7066</strong></td><td>一般扣速（跨道、保胎）</td></tr>
+          <tr><td style="color:#6fe0d0"><strong>藍綠 #6fe0d0</strong></td><td>賽道 mult、光環抵消（保護色）</td></tr>
+          <tr><td style="color:#ff9b54"><strong>橘 #ff9b54</strong></td><td>尾流（特殊獎勵高亮）</td></tr>
+          <tr><td style="color:#ff5fa0"><strong>紫紅 #ff5fa0</strong></td><td>災害（坑洞、油污、超速、扣胎、彎道失誤）</td></tr>
+        </tbody>
+      </table>
+
+      <h3>節奏與動畫</h3>
+      <ul>
+        <li><strong>排隊播出</strong>：所有來源先進 queue、同一台車每 280ms 從 queue 取一個進入 active；多個來源不會擠成一團。</li>
+        <li><strong>動畫</strong>：從車頂上方 50px（玩家）或 30px（對手）出生、往上飄 30px、總共 1200ms（前 70% 全顯、後 30% 線性淡出）。同一台車多筆同時 active 會往上堆疊、每筆 +28px。</li>
+        <li><strong>視覺</strong>：800-weight 字、22px、黑色描邊（提升對比）、無背景框。</li>
+      </ul>
+
+      <h3>流程鎖定（閘門系統）</h3>
+      <p>飛字播放期間玩家無法操作、且後續結算流程也會等待飛字播完才繼續。設計目的：讓玩家有時間看完每個加成來源、不被新動作打斷。</p>
+      <p>閘門位置（依順序）：</p>
+      <ol>
+        <li><strong>閘門 A</strong>：玩家動作 → 對手回合<br>等步驟 1 所有玩家飛字（卡牌主效果 + 車隊牌加成 + 跨道扣速）播完，再開啟對手過場。</li>
+        <li><strong>閘門 B</strong>：對手過場結束 → 後半結算<br>等對手飛字（boost / 油污失控）播完，再執行 <code>finishPlayerAction</code>（步驟 3 尾流 + 步驟 4 賽道結算）。</li>
+        <li><strong>閘門 C</strong>：賽道結算 → 切下一賽段<br>等步驟 4 所有結算飛字（賽道 add、mult、坑洞傷害、光環抵消）播完，再實際切到下一賽段。<strong>飛字跟玩家身處的賽段在視覺上對齊</strong>——先看完當前段的結算、再進新段。</li>
+        <li><strong>閘門 D</strong>：所有閘門跑完 + 飛字 queue/active 都清空 → 解開 <code>inputLocked</code>，玩家可下一動。</li>
+      </ol>
+      <p>閘門等待期間 <code>app.inputLocked = true</code>，<strong>手牌、超車按鈕、PASS 按鈕都隱藏</strong>，畫面只剩賽道、兩台車跟 HUD，讓視覺焦點集中在飛字結算。</p>
+
+      <h3>時間預估</h3>
+      <p>單張 turbo（+30）打到無加成道、無對手回合：約 <strong>1.5 秒</strong>（步驟 1 飛字 + 對手 idle 過場 0.5 秒）。</p>
+      <p>連發第 3 張同名 turbo、有 fuelMaster + rhythmCoach + 彎道 mult、對手 boost：可能 <strong>3-4 秒</strong>（步驟 1 四筆飛字 + 對手過場 + 對手 boost 飛字 + 賽道 add + mult 飛字 + 切段）。</p>
+      <p>這個延遲是換來「玩家看懂每動結算」的代價——如果 playtest 反饋太慢，可調整 <code>SPEED_POP_INTERVAL</code>（目前 280ms）或 <code>SPEED_POP_DURATION</code>（目前 1200ms）。</p>
+
+      <h3>實作對應</h3>
+      <table>
+        <thead><tr><th>系統</th><th>實作位置</th></tr></thead>
+        <tbody>
+          <tr><td>核心 API</td><td><code>pushSpeedPop()</code> / <code>pushSpeedDeltaPop()</code> / <code>pushSpeedMultPop()</code></td></tr>
+          <tr><td>更新循環</td><td><code>updateSpeedPops(time)</code>（每幀從 queue 取進 active、淘汰過期）</td></tr>
+          <tr><td>繪製</td><td><code>drawSpeedPops(time, anchors)</code>（在兩台車的車頂錨點繪製）</td></tr>
+          <tr><td>閘門 helper</td><td><code>deferUntilSpeedPopsClear(fn)</code> / <code>tickSpeedPopGates()</code></td></tr>
+          <tr><td>狀態</td><td><code>app.speedPopsQueue</code>、<code>app.speedPopsActive</code>、<code>app._speedPopGates</code>、<code>app.inputLocked</code></td></tr>
+        </tbody>
+      </table>
 
       <h2>輪胎扣胎來源</h2>
       <table>

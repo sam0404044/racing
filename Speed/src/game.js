@@ -28,9 +28,15 @@ import {
 } from './config.js';
 import { app } from './state.js';
 
+// ─── 設計稿座標系統 ────────────────────────────────────────────────────
+// 固定設計稿 1920×1080、letterbox（contain）置中
+// 使用 window.StoryCanvasViewport library（canvas-viewport.js）
+// app.w / app.h 永遠 = DESIGN_W / DESIGN_H
+const DESIGN_W = 1920;
+const DESIGN_H = 1080;
+
 // ─── 全局 UI 倍率 ────────────────────────────────────────────────────────
 // 一次調整所有文字大小與 modal 框框尺寸
-// 1.0 = 原始大小；1.2 = 放大 20%
 const FONT_SCALE = 1.2;
 const UI_SCALE = FONT_SCALE;
 
@@ -134,6 +140,171 @@ function isOpponentAuraActive() {
   return opp?.id === "B";
 }
 
+// ─── 速度結算飛字 (speed pop) 系統 ───────────────────────────────────────
+// 每處速度變動呼叫一次 pushSpeedPop()、每個來源一個 pop。
+// pop 進 queue、每 SPEED_POP_INTERVAL ms 從同 target 的 queue 取出一個進 active；
+// active 的 pop 在繪製時往上飄 + 淡出，drawSpeedPops() 從車頂位置算座標。
+//
+// 顏色語意：
+//   - 正值（加速）：黃 (#ffd86a)
+//   - 負值（扣速）：紅 (#ff7066)
+//   - 乘法（彎道 ×N）：藍綠 (#6fe0d0)
+//   - 尾流：橘 (#ff9b54)
+//   - 災害（坑洞、油污）：紫紅 (#ff5fa0)
+const SPEED_POP_INTERVAL = 280;   // 同台車兩個 pop 之間至少間隔 280ms
+const SPEED_POP_DURATION = 1200;  // 一個 pop 從生到完全消失 1200ms
+
+// 推一筆速度變動到飛字 queue
+//   target: "player" | "opponent"
+//   text:   要顯示的文字，例：「+20 加速」「+10 順風」「×1.25 彎道 +25」
+//   color:  CSS 顏色字串（不傳則自動依正負判斷）
+function pushSpeedPop(target, text, color = null) {
+  if (!text) return;
+  if (color == null) {
+    // 從文字第一個字元自動判斷顏色
+    if (text.startsWith("×")) color = "#6fe0d0";
+    else if (text.startsWith("-")) color = "#ff7066";
+    else color = "#ffd86a";
+  }
+  app.speedPopsQueue.push({ target, text, color });
+}
+
+// 便利包裝：推「+N 標籤」or「-N 標籤」格式的數值 pop
+function pushSpeedDeltaPop(target, delta, label, colorOverride = null) {
+  if (!delta) return;  // 0 不顯示
+  const sign = delta > 0 ? "+" : "";
+  const txt  = `${sign}${delta} ${label}`;
+  pushSpeedPop(target, txt, colorOverride);
+}
+
+// 推「×mult 標籤 +diff」格式（賽道結算 mult 用）
+function pushSpeedMultPop(target, mult, label, diff) {
+  const diffPart = diff > 0 ? ` +${diff}` : diff < 0 ? ` ${diff}` : "";
+  const txt = `×${mult} ${label}${diffPart}`;
+  pushSpeedPop(target, txt, "#6fe0d0");
+}
+
+// 每幀呼叫：從 queue 取出可發射的 pop 進 active、淘汰過期的 active
+function updateSpeedPops(now) {
+  // 1) queue → active：每個 target 都看
+  for (const target of ["player", "opponent"]) {
+    if ((app.speedPopsNextSpawnAt[target] || 0) > now) continue;
+    // 找出 queue 中第一個 target 相符的 pop
+    const idx = app.speedPopsQueue.findIndex(p => p.target === target);
+    if (idx < 0) continue;
+    const p = app.speedPopsQueue.splice(idx, 1)[0];
+    app.speedPopsActive.push({
+      target: p.target,
+      text: p.text,
+      color: p.color,
+      bornAt: now,
+      duration: p.durationOverride || SPEED_POP_DURATION,
+    });
+    app.speedPopsNextSpawnAt[target] = now + SPEED_POP_INTERVAL;
+  }
+  // 2) 淘汰過期
+  app.speedPopsActive = app.speedPopsActive.filter(p => now - p.bornAt < p.duration);
+}
+
+// 繪製 active 中的飛字
+//   anchors: { player:{x,y}, opponent:{x,y} } — 兩台車的頂部基準座標
+function drawSpeedPops(time, anchors) {
+  if (!app.speedPopsActive.length) return;
+  // 同 target 多個 active 時、按 bornAt 順序往上堆疊（每個再往上 28px）
+  const byTarget = { player: [], opponent: [] };
+  for (const p of app.speedPopsActive) byTarget[p.target].push(p);
+  for (const target of ["player", "opponent"]) {
+    const anchor = anchors[target];
+    if (!anchor) continue;
+    const list = byTarget[target].sort((a, b) => a.bornAt - b.bornAt);
+    list.forEach((p, idx) => {
+      const t = (time - p.bornAt) / p.duration;     // 0..1
+      if (t < 0 || t > 1) return;
+      // 動畫：前段往上飄、整段淡出
+      const easeOut = 1 - Math.pow(1 - t, 2);
+      const baseDy  = -60 - idx * 28;               // 同 target 多筆堆疊
+      const dy      = baseDy - easeOut * 30;        // 再往上飄 30px
+      // alpha：前 70% 全顯、後 30% 線性淡出
+      const alpha = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+      // 顏色帶 alpha
+      const rgb = hexToRgb(p.color);
+      const fillColor = rgb
+        ? `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`
+        : p.color;
+      // 加陰影描邊看清楚
+      const ctx = app.ctx;
+      ctx.save();
+      ctx.font = `800 22px system-ui,"Microsoft JhengHei",sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      // 深色描邊（提升對比）
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = `rgba(0,0,0,${0.7 * alpha})`;
+      ctx.strokeText(p.text, anchor.x, anchor.y + dy);
+      // 主體填色
+      ctx.fillStyle = fillColor;
+      ctx.fillText(p.text, anchor.x, anchor.y + dy);
+      ctx.restore();
+    });
+  }
+}
+
+// 取道路名稱（依車道數量決定用左/中/右、內/外彎、或自訂名稱）
+// laneIdx: 0-based 道編號
+// 優先級：賽段自訂 laneNames > 標準命名（laneCount 2/3）> fallback「道 N」
+function laneDisplayName(laneIdx) {
+  const circ = currentCircuit();
+  if (circ?.laneNames && circ.laneNames[laneIdx]) return circ.laneNames[laneIdx];
+  const laneCount = app.laneCount;
+  if (laneCount === 2) return ["內彎", "外彎"][laneIdx] ?? `道 ${laneIdx + 1}`;
+  if (laneCount === 3) return ["左道", "中道", "右道"][laneIdx] ?? `道 ${laneIdx + 1}`;
+  return `道 ${laneIdx + 1}`;
+}
+
+// hex → rgb 輔助
+function hexToRgb(hex) {
+  if (!hex || hex[0] !== "#") return null;
+  const m = hex.slice(1);
+  if (m.length !== 6) return null;
+  return {
+    r: parseInt(m.slice(0, 2), 16),
+    g: parseInt(m.slice(2, 4), 16),
+    b: parseInt(m.slice(4, 6), 16),
+  };
+}
+
+// 飛字是否還在跑（queue 有東西、或 active 有東西）
+function isSpeedPopsActive() {
+  return app.speedPopsQueue.length > 0 || app.speedPopsActive.length > 0;
+}
+
+// 待飛字播完後執行的回呼佇列
+// 每幀檢查：若飛字都跑完 → 取出第一個回呼執行
+// 用陣列是因為閘門 callback 內可能再呼叫 deferUntilSpeedPopsClear
+// （例如：打牌閘門 callback 觸發對手回合、對手回合結束又有後半結算閘門）
+// 進入時自動鎖 inputLocked、所有閘門都跑完才解鎖
+function deferUntilSpeedPopsClear(fn) {
+  if (!app._speedPopGates) app._speedPopGates = [];
+  app._speedPopGates.push(fn);
+  app.inputLocked = true;
+}
+
+// 每幀呼叫：若飛字播完 → 觸發第一個 pending 閘門
+// 跑完所有閘門且飛字也都播完 → 解鎖 inputLocked
+function tickSpeedPopGates() {
+  if (!app._speedPopGates) return;
+  // 飛字還在播 → 等
+  if (isSpeedPopsActive()) return;
+  // 有 pending 閘門 → 取一個執行（執行後可能 push 新飛字、設新閘門）
+  if (app._speedPopGates.length > 0) {
+    const fn = app._speedPopGates.shift();
+    try { fn(); } catch (e) { console.error("speed pop gate error:", e); }
+    return;
+  }
+  // 沒 pending 閘門 + 飛字也都播完 → 解鎖
+  if (app.inputLocked) app.inputLocked = false;
+}
+
 // ─── 玩家速度結算（兩階段）──────────────────────────────────────────────
 // 步驟 1「玩家行動」：純加減速到 playerSpeed，不套賽道加成
 //   - 換道 delta = -laneCost
@@ -142,6 +313,19 @@ function isOpponentAuraActive() {
 function applyPlayerActionDelta(delta) {
   app.playerSpeed = app.playerSpeed + delta;
   if (app.playerSpeed < 0) app.playerSpeed = 0;
+}
+
+// 從 lane bonus 的 label 取車道名稱（去掉數值跟符號部分）
+//   "順風道 +10"           → "順風道"
+//   "內彎 ×1.25 | 限速 75" → "內彎"
+//   "標準道"                → "標準道"
+//   "外緣 -10（安全）"       → "外緣"
+//   null / undefined        → "車道加成"
+function extractLaneLabelName(label) {
+  if (!label) return "車道加成";
+  // 取第一個空白前的部分（避免帶上 +10 / ×1.25 / 限速 等數值）
+  const first = String(label).split(/\s+/)[0];
+  return first || "車道加成";
 }
 
 // 階段 5「賽道結算」：套當前道加成（add → mult → speedLimit）
@@ -153,7 +337,20 @@ function resolvePlayerCircuit() {
   const b = getLaneBonusFor(app.playerLane);
   const add  = b?.add  ?? 0;
   const mult = b?.mult ?? 1;
-  app.playerSpeed = Math.floor((app.playerSpeed + add) * mult);
+  const laneName = extractLaneLabelName(b?.label);
+  const before = app.playerSpeed;
+  // add 階段：先 +add（飛字只顯示車道名、不重複數值）
+  if (add) {
+    pushSpeedDeltaPop("player", add, laneName);
+  }
+  const afterAdd = before + add;
+  // mult 階段：算出 ×mult 後的差值、用 `×N 車道名 +diff` 顯示
+  if (mult !== 1) {
+    const afterMult = Math.floor(afterAdd * mult);
+    const diff = afterMult - afterAdd;
+    pushSpeedMultPop("player", mult, laneName, diff);
+  }
+  app.playerSpeed = Math.floor(afterAdd * mult);
   if (app.playerSpeed < 0) app.playerSpeed = 0;
 }
 // 公式：playerSpeed = floor((playerSpeed + delta + add) × mult)
@@ -234,9 +431,17 @@ function resolveOpponentCircuit() {
     // 清道夫強招：取 abs(差) 當加成、永遠拿正加成
     const absBonus = Math.abs(after - before);
     app.opponentSpeed = before + absBonus;
+    if (absBonus) pushSpeedDeltaPop("opponent", absBonus, "清道夫強招");
     // 用完旗標 → 重置（一次性、強招發動那動有效）
     app.opponentAbsBonusActive = false;
   } else {
+    // 一般情況：對手免疫賽道加成（多數時候 after === before）
+    // 若有差值（極少數有 forOpponent 設定的賽道）→ push pop
+    const diff = after - before;
+    if (diff) {
+      const b = getLaneBonusFor(app.opponentLane, "opponent");
+      pushSpeedDeltaPop("opponent", diff, extractLaneLabelName(b?.label));
+    }
     app.opponentSpeed = after;
   }
 }
@@ -261,9 +466,10 @@ function handleOpponentForceQte() {
       const newLane = safeLanes[Math.floor(Math.random() * safeLanes.length)];
       app.opponentLane = newLane;
       app.opponentActionFx = {
-        label: `對手在油污失控！滑到第 ${newLane + 1} 道`,
+        label: `對手在油污失控！滑到${laneDisplayName(newLane)}`,
         until: performance.now() + 3500,
       };
+      pushSpeedPop("opponent", "油污失控", "#ff5fa0");
     }
   }
   // 成功：靜默通過、不顯示訊息（避免反饋疲勞）
@@ -436,7 +642,11 @@ function generateLaneBonusesFromDistribution(circ) {
   for (let i = 0; i < circ.lanes; i++) {
     const add = pickFromWeightedDistribution(circ.laneBonusDistribution);
     const sign = add >= 0 ? "+" : "";
-    const laneName = (circ.laneNames && circ.laneNames[i]) || `道 ${i}`;
+    let laneName;
+    if (circ.laneNames && circ.laneNames[i]) laneName = circ.laneNames[i];
+    else if (circ.lanes === 2) laneName = ["內彎", "外彎"][i] ?? `道 ${i + 1}`;
+    else if (circ.lanes === 3) laneName = ["左道", "中道", "右道"][i] ?? `道 ${i + 1}`;
+    else laneName = `道 ${i + 1}`;
     bonuses.push({
       lane: i,
       add,
@@ -525,13 +735,18 @@ function advanceCircuitOnCard() {
   // ── 切到下一賽段 ──
   // 若 checkBendSpeedLimit 觸發了 QTE → 延後切段
   // 等 QTE 結束（endBendQte 1.5 秒後）才切下一段
-  // 這保證 endBendQte 內 getLaneBonusFor(playerLane) 拿到的是當前段（c6 lane 1）、不是下一段
+  // 這保證 endBendQte 內 getLaneBonusFor(playerLane) 拿到的是當前段（c6 中道）、不是下一段
   // 注意：splash-bend 也算「QTE 已觸發」狀態（玩家還沒按確認鍵）
-  if (app.mode === "bend-qte" || app.mode === "splash-bend") {
+  //       _pendingBendQteTrigger 也算（飛字還在播、splash-bend 尚未切入）
+  if (app.mode === "bend-qte" || app.mode === "splash-bend" || app._pendingBendQteTrigger) {
     app.stage5.pendingCircuitAdvance = true;
     return;
   }
-  advanceCircuitToNextSegment();
+  // 閘門：等步驟 4 賽道結算的飛字（順風 +10、彎道 ×1.25 等）播完，才實際切到下一段
+  // 飛字跟玩家身處的賽段在視覺上對齊：先看完當前段的結算、再進新段
+  deferUntilSpeedPopsClear(() => {
+    advanceCircuitToNextSegment();
+  });
 }
 // 切到下一賽段（從 advanceCircuitOnCard 或 QTE 結束後叫）
 function advanceCircuitToNextSegment() {
@@ -573,6 +788,11 @@ function checkPotholeDamage() {
   if (playerHit && !playerSafe) {
     app.message = "💥 撞到坑洞！-1 輪胎";
     spendTire(1);
+    pushSpeedPop("player", "-1 胎 坑洞", "#ff5fa0");
+  } else if (playerHit && playerSafePatch) {
+    pushSpeedPop("player", "🩹 補丁抵消", "#ffd86a");
+  } else if (playerHit && playerSafeAura) {
+    pushSpeedPop("player", "🛡️ 光環抵消", "#6fe0d0");
   }
   // 對手判定（速度 / 2）
   let oppBefore = null, oppAfter = null;
@@ -580,6 +800,9 @@ function checkPotholeDamage() {
     oppBefore = app.opponentSpeed;
     app.opponentSpeed = Math.floor(oppBefore / 2);
     oppAfter = app.opponentSpeed;
+    pushSpeedPop("opponent", `${oppAfter - oppBefore} 坑洞`, "#ff5fa0");
+  } else if (oppHit && oppSafe) {
+    pushSpeedPop("opponent", "🛡️ 光環抵消", "#6fe0d0");
   }
   // 合併訊息：考慮光環抵消的不同組合
   if (playerSafePatch) {
@@ -615,27 +838,42 @@ function checkBendSpeedLimit() {
   const b = getLaneBonusFor(app.playerLane);
   // c6 油污：強制彎道 QTE（不看速度）
   if (b && b.forceCornerQte) {
+    pushSpeedPop("player", "油污！", "#ff5fa0");
     triggerBendQTE();
     return;
   }
   const limit = currentLaneSpeedLimit();
   if (limit === null) return;
-  if (currentLaneSpeed() > limit) triggerBendQTE();
+  if (currentLaneSpeed() > limit) {
+    pushSpeedPop("player", "超速！", "#ff5fa0");
+    triggerBendQTE();
+  }
 }
 // 彎道 QTE 觸發（速度越快箭頭越多越快）
+//   兩階段：
+//     A. 立即：準備好 arrows / secs、設旗標 _pendingBendQteTrigger
+//     B. 飛字播完後：實際切 mode = "splash-bend"、確認按鈕才會出現
+//   設計意圖：避免賽道結算飛字（中道 +10、×1.25 等）跟「油污！」警告飛字
+//             還在播時、QTE 確認按鈕就跑出來、視覺亂且在小視窗會被擋。
 function triggerBendQTE() {
   const step = speedTierStep(app.playerSpeed);
   const baseSecs = 6;
   const secs = Math.max(2, baseSecs * Math.pow(0.90, step));
-  // 先進 splash 顯示難度，等玩家按確認鍵才真正開始
-  app.mode = "splash-bend";
-  app.message = "緊急過彎！";
-  app.qteStart = performance.now();
   // 預先生成箭頭與參數（按確認鍵時不需重算）
   app._pendingBendQte = {
     arrows: generateBendArrows(step),
     secs,
   };
+  // 設旗標：advanceCircuitOnCard 末端會看這個、不去排切段閘門
+  // 飛字閘門解開後才真正進 splash-bend
+  app._pendingBendQteTrigger = true;
+  deferUntilSpeedPopsClear(() => {
+    if (!app._pendingBendQteTrigger) return;  // 被取消（保險）
+    app._pendingBendQteTrigger = false;
+    app.mode = "splash-bend";
+    app.message = "緊急過彎！";
+    app.qteStart = performance.now();
+  });
 }
 function generateBendArrows(step) {
   const dirs  = ["↑","↓","←","→"];
@@ -814,6 +1052,13 @@ function loadStage(idx) {
   if (!stage) return;
   app.stageIndex = idx;
   initStage5State();
+  // 清空飛字系統殘留（前一關沒播完的 pop、閘門、輸入鎖）
+  app.speedPopsQueue = [];
+  app.speedPopsActive = [];
+  app.speedPopsNextSpawnAt = { player: 0, opponent: 0 };
+  app._speedPopGates = [];
+  app.inputLocked = false;
+  app._pendingBendQteTrigger = false;
   app.rank = 4;
   app.rankTotal = 4;
   app.playerLane = 1;
@@ -936,6 +1181,7 @@ function playCardToLane(cardIdx, targetLane) {
     if (isStage5()) {
       // 步驟 1：自身代價立即生效（扣 laneCost）
       applyPlayerActionDelta(-laneCost);
+      pushSpeedDeltaPop("player", -laneCost, "跨道");
       // 換道打斷「連續指令牌」連擊鏈
       const s5 = app.stage5;
       s5.lastActionWasCard = false;
@@ -948,8 +1194,11 @@ function playCardToLane(cardIdx, targetLane) {
     } else {
       app.playerSpeed = Math.max(0, app.playerSpeed - 1);
     }
-    triggerOpponentActions();
-    checkAutoPrompt();
+    // 閘門 A：等步驟 1 的玩家飛字（-跨道）播完，再開啟對手回合
+    deferUntilSpeedPopsClear(() => {
+      triggerOpponentActions();
+      checkAutoPrompt();
+    });
     return;
   }
 
@@ -969,8 +1218,10 @@ function playCardToLane(cardIdx, targetLane) {
       if (hasTirePreserve && !s5.tirePreserveUsedThisRound) {
         s5.tirePreserveUsedThisRound = true;
         // 免疫這次扣胎（不呼叫 spendTire）
+        pushSpeedPop("player", "🩹 保胎抵消", "#6fe0d0");
       } else {
         spendTire(card.tireCost);
+        pushSpeedPop("player", `-${card.tireCost} 胎`, "#ff5fa0");
       }
     }
     if (card.penaltyNextHand) {
@@ -982,9 +1233,16 @@ function playCardToLane(cardIdx, targetLane) {
     }
     // ─ 算「實際打牌速度」= base + 車隊牌加成 ─
     let cardSpd = card.speedValue || 0;
+    // 卡牌主效果（先 push、後面車隊牌加成依次 push）
+    if (cardSpd) {
+      pushSpeedDeltaPop("player", cardSpd, card.name || "加速");
+    }
     // fuelMaster：本回合內所有指令牌 +5
     const hasFuelMaster = s5.teamCardsActive.some(c => c.effect === "cardBonusThisRound");
-    if (hasFuelMaster) cardSpd += 5;
+    if (hasFuelMaster) {
+      cardSpd += 5;
+      pushSpeedDeltaPop("player", 5, "燃料策士");
+    }
     // rhythmCoach：連續同名指令牌 +10 / +20
     const hasRhythmCoach = s5.teamCardsActive.some(c => c.effect === "comboBonusThisRound");
     if (hasRhythmCoach) {
@@ -994,8 +1252,13 @@ function playCardToLane(cardIdx, targetLane) {
         : 1;
       s5.lastCardType = card.type;
       s5.lastCardSameStreak = lastSameNameStreak;
-      if (lastSameNameStreak === 2) cardSpd += 10;
-      else if (lastSameNameStreak >= 3) cardSpd += 20;
+      if (lastSameNameStreak === 2) {
+        cardSpd += 10;
+        pushSpeedDeltaPop("player", 10, "連擊");
+      } else if (lastSameNameStreak >= 3) {
+        cardSpd += 20;
+        pushSpeedDeltaPop("player", 20, "連擊×3");
+      }
     } else {
       // 沒裝 rhythmCoach 也要記錄、玩家可能後續再裝
       s5.lastCardType = card.type;
@@ -1003,10 +1266,14 @@ function playCardToLane(cardIdx, targetLane) {
     }
     // tirePreserve：所有指令牌 -10 速度
     const hasTirePreserveActive = s5.teamCardsActive.some(c => c.effect === "tirePreserve");
-    if (hasTirePreserveActive) cardSpd -= 10;
+    if (hasTirePreserveActive) {
+      cardSpd -= 10;
+      pushSpeedDeltaPop("player", -10, "保胎");
+    }
     // smoothOperator（賽車節奏）：若前一動作也是指令牌（不論種類） → 額外 +20（總共 +40）
     if (card.smoothOperator && s5.lastActionWasCard) {
       cardSpd += 20;
+      pushSpeedDeltaPop("player", 20, "賽車節奏");
     }
     // chill（冷靜應對）：本動 QTE 容錯 +qteForgive（用 flag 傳到 QTE 結算處）
     if (card.qteForgive) {
@@ -1037,8 +1304,11 @@ function playCardToLane(cardIdx, targetLane) {
     return;
   }
 
-  triggerOpponentActions();
-  checkAutoPrompt();
+  // 閘門 A：等步驟 1 的玩家飛字（卡牌主效果、車隊牌加成等）播完，再開啟對手回合
+  deferUntilSpeedPopsClear(() => {
+    triggerOpponentActions();
+    checkAutoPrompt();
+  });
 }
 
 // 動作後半：對手過場結束後執行
@@ -1059,13 +1329,20 @@ function finishPlayerAction() {
   const slipDelta = consumeSlipstreamDelta();
   if (slipDelta) {
     applyPlayerActionDelta(slipDelta);
+    pushSpeedPop("player", `+${slipDelta} 尾流`, "#ff9b54");
   } else if (pa.wasSameLane && app.playerLane !== app.opponentLane) {
     // 玩家步驟 1 結束時同道、但對手切走 → 嘲諷
     showOpponentTaunt();
   }
-  // 步驟 4：賽道結算 + 限速 + 切段
-  advanceCircuitOnCard();
+  // 閘門：等步驟 3 尾流飛字播完，才執行步驟 4（賽道結算 → push 賽道飛字 + 可能觸發 QTE）
+  // 設計意圖：卡牌加成跟尾流的飛字先看完、再開始看賽道的結算
+  //   - 避免飛字疊在一起、看不清楚
+  //   - 也避免「油污！」這種觸發 QTE 的飛字跟尾流同時冒、QTE 確認按鈕被擋
   app.pendingAction = null;
+  deferUntilSpeedPopsClear(() => {
+    // 步驟 4：賽道結算 + 限速 + 切段
+    advanceCircuitOnCard();
+  });
 }
 
 // 對手嘲諷文字（玩家想吃尾流、對手躲開時觸發）
@@ -1177,7 +1454,7 @@ function beginOpponentTurn(act) {
 // 顯示對手當前道的速度（讓玩家看到「對手吃加成 / 被限速」）
 function beginOpponentTurnIdle() {
   const opp = currentOpponent();
-  const oppLaneNum = app.opponentLane + 1;
+  const oppLaneName = laneDisplayName(app.opponentLane);
   // display 顯示「本動結算後」速度（從當前 speed 預算）
   const display = applyOpponentBonus(app.opponentSpeed, app.opponentLane, app.opponentAuraBypassed);
   const cur = app.opponentSpeed;
@@ -1189,16 +1466,16 @@ function beginOpponentTurnIdle() {
   const seg = currentCircuit();
   const isBend = seg?.type === "bend";
   if (b?._auraSuppressed) {
-    label = `對手駐守第 ${oppLaneNum} 道（光環抵消）→ 速度 ${display}`;
+    label = `對手駐守${oppLaneName}（光環抵消）→ 速度 ${display}`;
   } else if (isBend && speedLimit != null && cur > speedLimit) {
-    label = `對手駐守第 ${oppLaneNum} 道（彎道速限 ${speedLimit}）→ 速度 ${display}`;
+    label = `對手駐守${oppLaneName}（彎道速限 ${speedLimit}）→ 速度 ${display}`;
   } else if (isBend) {
-    label = `對手駐守第 ${oppLaneNum} 道（彎道）→ 速度 ${display}`;
+    label = `對手駐守${oppLaneName}（彎道）→ 速度 ${display}`;
   } else if (add !== 0) {
     const sign = add > 0 ? "+" : "";
-    label = `對手駐守第 ${oppLaneNum} 道 ${sign}${add} → 速度 ${display}`;
+    label = `對手駐守${oppLaneName} ${sign}${add} → 速度 ${display}`;
   } else {
-    label = `對手駐守第 ${oppLaneNum} 道 → 速度 ${display}`;
+    label = `對手駐守${oppLaneName} → 速度 ${display}`;
   }
   app.opponentActionFx = {
     label,
@@ -1222,12 +1499,18 @@ function tickOpponentTurn(time) {
     return;
   }
   if (time >= app.opponentTurnAnim.endTime) {
-    // 過場結束 → 執行玩家動作後半（行動結算 + 賽道結算 + 切段）
+    // 過場結束 → 切回 playing、但用閘門等對手飛字（步驟 2 boost / abs 等）播完
+    // 再執行玩家動作後半（步驟 3 尾流 + 步驟 4 賽道結算，會 push 更多飛字）
     app.opponentTurnAnim = null;
     app.mode = "playing";
-    finishPlayerAction();
-    // 過場結束後再檢查自動 prompt（手牌空、動力空等）
-    checkAutoPrompt();
+    // 閘門 B：等對手步驟 2 的飛字播完
+    deferUntilSpeedPopsClear(() => {
+      finishPlayerAction();
+      // 閘門 C：等步驟 3、4 的飛字（尾流 / 賽道結算）也播完，才檢查自動 prompt
+      deferUntilSpeedPopsClear(() => {
+        checkAutoPrompt();
+      });
+    });
   }
 }
 
@@ -1273,6 +1556,7 @@ function executeOpponentAction(act) {
     // boostAfter：moveTo 之後附帶加速
     if (act.boostAfter) {
       app.opponentSpeed += act.boostAfter;
+      pushSpeedDeltaPop("opponent", act.boostAfter, "加速");
       // 阻擋 / 遠離標籤
       let intentTag = "";
       if (isStage5() && app.playerLaneBeforeAction != null) {
@@ -1284,7 +1568,7 @@ function executeOpponentAction(act) {
       }
       if (app.opponentLane !== prevLane) {
         app.opponentActionFx = {
-          label: `對手切到第 ${app.opponentLane + 1} 道${intentTag}，並加速！速度 ${app.opponentSpeed}`,
+          label: `對手切到${laneDisplayName(app.opponentLane)}${intentTag}，並加速！速度 ${app.opponentSpeed}`,
           until: performance.now() + 4800,
         };
       } else {
@@ -1315,6 +1599,7 @@ function executeOpponentAction(act) {
     // boostAfter：moveSmart 之後附帶加速（A 強招用）
     if (act.boostAfter) {
       app.opponentSpeed += act.boostAfter;
+      pushSpeedDeltaPop("opponent", act.boostAfter, "加速");
       // 阻擋 / 遠離標籤
       let intentTag = "";
       if (isStage5() && app.playerLaneBeforeAction != null) {
@@ -1327,7 +1612,7 @@ function executeOpponentAction(act) {
       const auraTag = bypass ? "（豁免光環）" : "";
       if (app.opponentLane !== prevLane) {
         app.opponentActionFx = {
-          label: `對手切到第 ${app.opponentLane + 1} 道${intentTag}${auraTag}，並加速！速度 ${app.opponentSpeed}`,
+          label: `對手切到${laneDisplayName(app.opponentLane)}${intentTag}${auraTag}，並加速！速度 ${app.opponentSpeed}`,
           until: performance.now() + 4800,
         };
       } else {
@@ -1377,6 +1662,7 @@ function executeOpponentAction(act) {
     // 對手反擊：speedBoost — 直接加 opponentSpeed
     const amt = act.amount ?? 1;
     app.opponentSpeed += amt;
+    pushSpeedDeltaPop("opponent", amt, "加速");
     app.opponentActionFx = {
       label: `對手加速！速度 ${app.opponentSpeed}`,
       until: performance.now() + 4000,
@@ -1475,7 +1761,7 @@ function announceOpponentMove(prevLane, newLane) {
     }
   }
   app.opponentActionFx = {
-    label: `對手切到第 ${newLane + 1} 道${intentTag}${auraTag} → 速度 ${newDisplay}`,
+    label: `對手切到${laneDisplayName(newLane)}${intentTag}${auraTag} → 速度 ${newDisplay}`,
     until: performance.now() + 4000,
   };
 }
@@ -2219,7 +2505,9 @@ function setupInput() {
   app.canvas.addEventListener("touchend", e => {
     if (!app.drag) return;
     const t = e.changedTouches[0];
-    const p = { x: t.clientX - app.canvas.getBoundingClientRect().left, y: t.clientY - app.canvas.getBoundingClientRect().top };
+    const SCV = window.StoryCanvasViewport;
+    const cssPoint = SCV.getCanvasPoint(app.canvas, t.clientX, t.clientY);
+    const p = SCV.screenToWorld(cssPoint, app.viewport);
     const handTop = app.h - 190 - 60;
     const handBottom = app.h - 190 + 164 + 30;
     if (p.y >= handTop && p.y <= handBottom) {
@@ -2272,14 +2560,22 @@ function setupInput() {
 }
 
 function point(e) {
-  const rect = app.canvas.getBoundingClientRect();
-  if (e.touches && e.touches[0]) {
-    return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+  const SCV = window.StoryCanvasViewport;
+  if (!SCV || !app.viewport) {
+    // fallback：直接回 CSS 像素
+    const rect = app.canvas.getBoundingClientRect();
+    const cx = e.touches?.[0]?.clientX ?? e.clientX;
+    const cy = e.touches?.[0]?.clientY ?? e.clientY;
+    return { x: cx - rect.left, y: cy - rect.top };
   }
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  const clientX = e.touches?.[0]?.clientX ?? e.clientX;
+  const clientY = e.touches?.[0]?.clientY ?? e.clientY;
+  const cssPoint = SCV.getCanvasPoint(app.canvas, clientX, clientY);
+  return SCV.screenToWorld(cssPoint, app.viewport);
 }
 
 function canDragCards() {
+  if (app.inputLocked) return false;
   return app.mode === "playing";
 }
 
@@ -2336,11 +2632,11 @@ function handleButton(id) {
     return;
   }
   // 打牌階段
-  if (id === "btn-overtake" && app.mode === "playing") {
+  if (id === "btn-overtake" && app.mode === "playing" && !app.inputLocked) {
     if (canDirectOvertake()) pressOvertake();
     return;
   }
-  if (id === "btn-pass" && app.mode === "playing") {
+  if (id === "btn-pass" && app.mode === "playing" && !app.inputLocked) {
     pressPass();
     return;
   }
@@ -2475,11 +2771,34 @@ function draw(time) {
   app.zones.buttons = [];
   if (!isRhythmMode()) app.zones.circles = [];
 
+  // 每幀更新速度結算飛字（從 queue 取出 active、淘汰過期）
+  updateSpeedPops(time);
+  // 飛字播完才放行的閘門（打牌→對手回合、過場結束→後半結算等）
+  tickSpeedPopGates();
+
+  const SCV = window.StoryCanvasViewport;
+  // 1. 先用 setTransform(dpr) 把整個 canvas 填滿黑（letterbox 黑邊）
+  if (SCV && app.viewport) {
+    SCV.fillLetterbox(app.ctx, app.viewport, "#05090d");
+    // 2. 套 design transform：scale + offset、進入設計座標 1920×1080
+    SCV.applyDesignTransform(app.ctx, app.viewport);
+  }
+
+  try {
+    drawInner(time);
+  } finally {
+    // 確保結束前 restore（不論前面是 return 或 throw）
+    if (SCV && app.viewport) {
+      SCV.restoreDesignTransform(app.ctx);
+    }
+  }
+}
+
+function drawInner(time) {
   // 背景：永遠畫賽道
   drawRace(time);
 
   const m = app.mode;
-
   // 模糊背景 modal 層
   if (m === "start-ready" || m === "rules" || m.includes("intro") || m === "stage5-reward") {
     drawModalBackdrop(time);
@@ -2503,7 +2822,8 @@ function draw(time) {
 
   if (m === "playing" || m === "prompt-overtake-or-pass") {
     drawLanes(time);
-    drawHand(time);
+    // 飛字播放期間（閘門等待中）隱藏手牌，讓玩家專注看結算
+    if (!app.inputLocked) drawHand(time);
     if (m === "prompt-overtake-or-pass") drawPromptModal();
   }
 
@@ -2555,6 +2875,14 @@ function draw(time) {
         hoverLane = laneAtPoint({ x: dragCx, y: dragCy });
         if (hoverLane >= 0) {
           const li = hoverLane;
+          // c8 紅綠燈未揭曉的道：不顯示加成算式（會洩漏）
+          const circ4 = currentCircuit();
+          const isC8HiddenLane = circ4?.hideLaneBonusUntilVisited
+            && !(app.stage5?.revealedC8Lanes?.has(li));
+          if (isC8HiddenLane) {
+            hoverLines.push({ left: "? 未揭曉的道", color: "rgba(200,200,210,0.85)" });
+            hoverLines.push({ left: "進入後才知道效果", color: "rgba(160,170,185,0.7)" });
+          } else {
           const b = getLaneBonusFor(li);
           const add = b?.add ?? 0; const mult = b?.mult ?? 1;
           if (li === app.playerLane) {
@@ -2613,6 +2941,7 @@ function draw(time) {
               hoverLines.push({ left: "（失敗 -1 胎、滑開）", color: "rgba(220,160,80,0.85)" });
             }
           }
+          }  // end else (非 c8 隱藏)
         }  // end if (hoverLane >= 0)
       }  // end if (!isDragTeamCard)
 
@@ -3070,6 +3399,12 @@ function drawRace(time) {
   }
   drawCar(whiteX, whiteY, whiteW, 82, "#dceaff");
 
+  // 速度結算飛字：以兩台車車頂為錨點，每個來源一個 pop 往上飄 + 淡出
+  drawSpeedPops(time, {
+    player:   { x: whiteX,  y: whiteY - 50 },
+    opponent: { x: redX,    y: opponentY - 30 },
+  });
+
   // 雨線
   ctx.strokeStyle="rgba(129,180,255,0.22)"; ctx.lineWidth=1;
   for(let i=0;i<60;i++){
@@ -3303,16 +3638,7 @@ function drawDragHighlight(time, h, horizon) {
     const tx = tBounds.left + laneWide * (li + 0.5);
 
     // 道名：優先用 circuit 自訂的 laneNames（c8 紅黃綠道），否則用通用名
-    let laneName;
-    if (circ?.laneNames && circ.laneNames[li]) {
-      laneName = circ.laneNames[li];
-    } else if (laneCount === 2) {
-      laneName = ["內彎", "外彎"][li] ?? `道 ${li + 1}`;
-    } else if (laneCount === 3) {
-      laneName = ["左道", "中道", "右道"][li] ?? `道 ${li + 1}`;
-    } else {
-      laneName = `道 ${li + 1}`;
-    }
+    let laneName = laneDisplayName(li);
 
     const actionLabel = isOwnLane ? "打牌" : "換道";
     const fullLabel = `${laneName} ‧ ${actionLabel}`;
@@ -3528,7 +3854,8 @@ function drawLanes(time) {
   const actualBtnX0 = Math.min(btnX0, maxRight - totalBtnW);
 
   // 自由打牌階段：超車按鈕跟 Pass 按鈕都永遠顯示
-  const isFreePlayPhase = app.mode === "playing" || app.mode === "prompt-overtake-or-pass";
+  // 飛字播放期間（閘門等待中）也要隱藏，跟手牌一起讓玩家專注看結算
+  const isFreePlayPhase = (app.mode === "playing" || app.mode === "prompt-overtake-or-pass") && !app.inputLocked;
 
   if (isFreePlayPhase) {
     const laneSpd = currentLaneSpeed();
@@ -3889,7 +4216,7 @@ function computeOpponentNextActionHint(mode = "compact") {
   const hasForceQte = app.laneBonuses && app.laneBonuses.some(b => b.forceCornerQte);
   // 清道夫光環免疫災害 → 預告不降級
   const oppImmuneToHazards = isOpponentAuraActive();
-  if (!oppImmuneToHazards && (hasPotholes || hasForceQte) && (intent === "block" || intent === "flee")) {
+  if (!oppImmuneToHazards && (hasPotholes || hasForceQte) && (intent === "block" || intent === "flee" || intent === "unknown")) {
     // 預測對手會落在哪一道
     let targetLane = null;
     if (nextAct.action === "moveTo") {
@@ -3897,9 +4224,8 @@ function computeOpponentNextActionHint(mode = "compact") {
       else if (typeof nextAct.target === "number") targetLane = nextAct.target;
     } else if (nextAct.action === "moveSmart") {
       // moveSmart 在「有災害的賽段」全面降級：AI 選道空間被災害道影響、不再純粹照 strategy 走
-      //   - 坑洞賽段：選道空間被坑洞排除、可能被擠到玩家道（block）或被迫離開玩家道（flee）
-      //   - 油污賽段：AI 用期望值評估、可能選到油污道、50% 滑開實際落點不確定
-      //   - bestForSelf：本來就是 unknown、不會走到這分支
+      //   - bestForSelf（破風者）：可能選到坑洞道或避開、結果不確定
+      //   - 其他 strategy：同樣會被災害排擠、結果不純粹
       intent = "disrupted";
     }
     // moveTo 鎖定目標道 → 若目標道是坑洞 → AI 不一定真的會撞坑
@@ -4896,11 +5222,14 @@ function drawCurrentSpeedSign(speed, isPreview, overLimit, time) {
   ctx.font = `900 ${fontSize}px system-ui, "Microsoft JhengHei", sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.setTransform(xScale, 0, 0, yScale, cx, cy);
+  // ⚠ 不用 setTransform(xScale, 0, 0, yScale, cx, cy) — 那是絕對覆寫、會清掉
+  //   applyDesignTransform 已套好的 design transform，導致在非 1920×1080 視窗下跑位。
+  //   改用 translate + scale 疊加在當前 transform 上。
+  ctx.translate(cx, cy);
+  ctx.scale(xScale, yScale);
   ctx.fillText(textStr, 0, 0);
   ctx.restore();
-  // setTransform 後要清掉 transform 避免影響後續繪製
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // 5217 ctx.save() + 上面 ctx.restore() 已成對、transform 自動還原成 design transform
 }
 // 左側面板：當前對手 / 後車 / 車隊牌
 function drawStage5SidePanel(time) {
@@ -4914,7 +5243,7 @@ function drawStage5SidePanel(time) {
   // 估算面板高度：標題 34 + 名次標 22 + 4 列 × 30 + 後車警告 58 + 尾流 22 + 車隊牌
   const rankBlockH = 4 * 26 + 3 * 4;  // = 116
   const teamCardsH = s5.teamCardsActive.length > 0 ? 28 + s5.teamCardsActive.length * 26 : 0;
-  const panelH = 16 + 34 + 22 + rankBlockH + 16 + teamCardsH + 80; // 含尾流/後車預留
+  const panelH = 16 + 34 + 22 + rankBlockH + 16 + teamCardsH + 80;
   roundPanel(x, y, w, panelH, 12, "rgba(10,18,28,0.88)", "rgba(120,170,220,0.35)", 1.5);
   curY = y + 16;
   text("機制驗證場", x + 14, curY + 14, 17, "rgba(255,220,120,0.85)", "900");
@@ -4980,6 +5309,10 @@ function drawStage5SidePanel(time) {
   }
 }
 
+
+// ─── UI 尺寸選擇器（S / M / L）─────────────────────────────────────────
+// 透過 ctx 全局 transform 套用倍率（resize 內處理）、UI 元素整體縮放
+// 位置：右上角「下賽段預告框」正下方
 // 場上車隊牌 hover tooltip（在最上層繪製）
 function drawStage5TeamCardTooltip(time) {
   const s5 = app.stage5;
@@ -5089,17 +5422,21 @@ function drawStage5NextCircuit(time) {
   if (!s5) return;
   const cur  = currentCircuit();
   const next = nextCircuit();
-  const lineH = 24;  // 每道資訊一行的高度（原 18 → 24，視覺更鬆）
-  const laneRows = next?.laneBonuses ? next.laneBonuses.length : 1;
+  const lineH = 24;  // 每道資訊一行的高度
+  const laneRows = next
+    ? (next.laneBonuses ? next.laneBonuses.length : (next.lanes || 1))
+    : 1;
   const w = 300;
-  const h = 60 + laneRows * lineH + 64;
+  // 外框高度 = padding(8) + 內框高(60 + laneRows*lineH + 12) + 當前賽段區(60) + padding(8)
+  const innerHCalc = 60 + laneRows * lineH + 12;
+  const h = 8 + innerHCalc + 60 + 8;
   const x = app.w - w - 14;
   const y = 14;
   roundPanel(x, y, w, h, 14, "rgba(10,18,28,0.92)", "rgba(120,170,220,0.4)", 1.5);
 
   if (next) {
     const nextHideBonus = !!next.hideLaneBonusUntilVisited;
-    const innerLaneRows = next.laneBonuses ? next.laneBonuses.length : (next.lanes || 1);
+    const innerLaneRows = laneRows;  // 跟外框一致
     const innerH = 60 + innerLaneRows * lineH + 12;
     roundPanel(x + 8, y + 8, w - 16, innerH, 10, "rgba(255,200,80,0.08)", "rgba(255,200,80,0.4)", 1.5);
     text("→ 下一賽段", x + 20, y + 26, 11, "rgba(255,200,80,0.8)", "800");
@@ -5108,16 +5445,26 @@ function drawStage5NextCircuit(time) {
     if (nextHideBonus) {
       const lanes = next.lanes || (next.laneBonuses?.length ?? 3);
       for (let li = 0; li < lanes; li++) {
-        const laneName = (next.laneNames && next.laneNames[li]) || `道 ${li}`;
+        let laneName;
+        if (next.laneNames && next.laneNames[li]) laneName = next.laneNames[li];
+        else if (lanes === 2) laneName = ["內彎", "外彎"][li] ?? `道 ${li + 1}`;
+        else if (lanes === 3) laneName = ["左道", "中道", "右道"][li] ?? `道 ${li + 1}`;
+        else laneName = `道 ${li + 1}`;
         const color = (next.laneColors && next.laneColors[li]) || "rgba(220,230,255,0.85)";
         text(`${laneName}: ?`, x + 20, lby, 12, color, "700");
         lby += lineH;
       }
     } else if (next.laneBonuses) {
+      const lanes = next.lanes || next.laneBonuses.length;
       for (const lb of next.laneBonuses) {
-        const laneName = lb.label.split(" ")[0];
+        let laneName;
+        if (next.laneNames && next.laneNames[lb.lane]) laneName = next.laneNames[lb.lane];
+        else if (lanes === 2) laneName = ["內彎", "外彎"][lb.lane] ?? `道 ${lb.lane + 1}`;
+        else if (lanes === 3) laneName = ["左道", "中道", "右道"][lb.lane] ?? `道 ${lb.lane + 1}`;
+        else laneName = `道 ${lb.lane + 1}`;
+        const bonusLabel = lb.label.split(" ")[0];
         const limitStr = lb.speedLimit != null ? `  限速 ${lb.speedLimit}` : "";
-        text(`道 ${lb.lane}：${laneName}${limitStr}`, x + 20, lby, 12, "rgba(220,230,255,0.85)", "700");
+        text(`${laneName}：${bonusLabel}${limitStr}`, x + 20, lby, 12, "rgba(220,230,255,0.85)", "700");
         lby += lineH;
       }
     } else {
@@ -5235,6 +5582,7 @@ function endBendQte(success) {
     // 失敗：扣 1 胎 + 1 張失誤牌進牌庫頂
     spendTire(1);
     mistakeCount = 1;
+    pushSpeedPop("player", "-1 胎 彎道失誤", "#ff5fa0");
     if (app.stage5) {
       const uid = `bend-mis-${Date.now()}`;
       app.stage5.drawPile.unshift(makeCard("mistake", uid));
@@ -5320,7 +5668,7 @@ function drawBendQteResult() {
     }
     if (hasSlip) {
       line += 26;
-      text(`油污滑到第 ${r.slippedTo + 1} 道！`, cx, line, 13, "rgba(255,160,200,0.95)", "800", "center");
+      text(`油污滑到${laneDisplayName(r.slippedTo)}！`, cx, line, 13, "rgba(255,160,200,0.95)", "800", "center");
     }
   }
 }
@@ -6071,23 +6419,32 @@ function hideGameWinOverlay() {
 
 // ─── Main Loop ────────────────────────────────────────────────────────────
 function loop(time) {
-  resize();
+  // resize 改由 StoryCanvasViewport.bindCanvasResize 監聽（在 start() 內註冊）
+  // 不再每幀 resize
   update(time);
   draw(time);
   requestAnimationFrame(loop);
 }
 
 function resize() {
-  const rect = app.canvas.getBoundingClientRect();
-  app.dpr = Math.min(2, window.devicePixelRatio||1);
-  app.w = rect.width||window.innerWidth;
-  app.h = rect.height||window.innerHeight;
-  const width=Math.max(1,Math.floor(app.w*app.dpr));
-  const height=Math.max(1,Math.floor(app.h*app.dpr));
-  if(app.canvas.width!==width||app.canvas.height!==height){
-    app.canvas.width=width; app.canvas.height=height;
+  // 用 StoryCanvasViewport library 處理 letterbox + DPR + viewport state
+  const SCV = window.StoryCanvasViewport;
+  if (!SCV) {
+    console.error("StoryCanvasViewport library 未載入");
+    return;
   }
-  app.ctx.setTransform(app.dpr,0,0,app.dpr,0,0);
+  if (!app.viewport) {
+    app.viewport = SCV.createViewportState(DESIGN_W, DESIGN_H);
+  }
+  // resizeCanvasToDisplay：設定 canvas.width/height、setTransform(dpr,...)、更新 viewport state
+  // 注意：library 內 setTransform 只套 DPR、不套 finalScale
+  //      我們之後再套 design transform 給整個 frame
+  SCV.resizeCanvasToDisplay(app.canvas, app.ctx, app.viewport, { useUiScale: true });
+
+  // app.w / app.h 永遠是設計稿大小（給遊戲程式碼用）
+  app.w = DESIGN_W;
+  app.h = DESIGN_H;
+  app.dpr = app.viewport.dpr;
 }
 
 function start(root) {
@@ -6112,6 +6469,22 @@ function start(root) {
     });
   }
   setupInput();
+  // 註冊 viewport 自動 resize（RAF + ResizeObserver + IntersectionObserver）
+  const SCV = window.StoryCanvasViewport;
+  if (SCV) {
+    if (!app.viewport) {
+      app.viewport = SCV.createViewportState(DESIGN_W, DESIGN_H);
+    }
+    SCV.bindCanvasResize(app.canvas, app.ctx, app.viewport, () => {
+      app.w = DESIGN_W;
+      app.h = DESIGN_H;
+      app.dpr = app.viewport.dpr;
+    }, { useUiScale: true });
+  } else {
+    // fallback：原本的 resize
+    resize();
+    window.addEventListener("resize", resize);
+  }
   reset();
   requestAnimationFrame(loop);
 }
