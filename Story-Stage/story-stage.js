@@ -22,7 +22,14 @@ function isSheetBackgroundBlackToken(raw) {
 }
 
 const PORTRAIT_ROLE_FOLDER = {
-  小滿: "xiaoman"
+  小滿: "xiaoman",
+  藍司: "藍司",
+  烏爾: "烏爾"
+};
+
+const FIXED_ROLE_PORTRAITS = {
+  藍司: "normal.png",
+  烏爾: "normal.png"
 };
 
 const PORTRAIT_PATH_OVERRIDES = {};
@@ -266,6 +273,8 @@ ensureImage("assets/character/xiaoman/xiaoman-angry.png");
 ensureImage("assets/character/xiaoman/xiaoman-sad.png");
 ensureImage("assets/character/xiaoman/xiaoman-happy.png");
 ensureImage("assets/character/xiaoman/xiaoman-surprised.png");
+ensureImage("assets/character/藍司/normal.png");
+ensureImage("assets/character/烏爾/normal.png");
 ensureImage("assets/BG/race-results-screen.png");
 ensureImage("assets/BG/pit-lounge.png");
 
@@ -277,7 +286,9 @@ function portraitSrc(role, expr) {
   }
   const folder = PORTRAIT_ROLE_FOLDER[role] || role;
   let file;
-  if (folder === "xiaoman") {
+  if (FIXED_ROLE_PORTRAITS[role]) {
+    file = FIXED_ROLE_PORTRAITS[role];
+  } else if (folder === "xiaoman") {
     if (ex === "日常") {
       file = "xiaoman-normal.png";
     } else if (ex === "生氣") {
