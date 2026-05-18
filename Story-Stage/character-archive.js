@@ -4,10 +4,19 @@ const ctx = canvas.getContext("2d");
 /** 畫布用黑體系：正黑／雅黑／PingFang／Noto TC */
 const FONT_STACK = "Microsoft JhengHei, Microsoft YaHei, PingFang TC, Noto Sans TC, sans-serif";
 
-/** 圖鑑主視窗角色名稱標籤上下內距（與 computeLayout 的 nameTagH 一致） */
-const NAME_TAG_V_PAD = 11;
+/** 圖鑑主視窗角色名稱標籤上下內距（與 layout / drawCharacterNameBelow 一致） */
+const NAME_TAG_V_PAD = 7;
 /** 名稱標籤下緣與「車手編號」文字頂端的間距 */
-const NAME_CODE_BELOW_GAP = 18;
+const NAME_CODE_BELOW_GAP = 12;
+
+function nameTagMetrics() {
+  const nameSize = Math.min(34, Math.max(26, Math.floor(DESIGN_WIDTH * 0.022)));
+  const codeSize = Math.min(18, Math.max(15, Math.floor(DESIGN_WIDTH * 0.014)));
+  const padX = Math.max(10, Math.min(14, Math.round(nameSize * 0.36)));
+  const tagH = NAME_TAG_V_PAD * 2 + nameSize;
+  const codeLineH = Math.round(codeSize * 1.15);
+  return { nameSize, codeSize, padX, tagH, codeLineH };
+}
 
 const COLORS = {
   paper: "#d9d0c5",
@@ -66,8 +75,13 @@ const CHARACTERS = Array.from({ length: 10 }, (_, i) => {
   };
 });
 
-let viewWidth = 0;
-let viewHeight = 0;
+const DESIGN_WIDTH = StoryCanvasViewport.DEFAULT_DESIGN_WIDTH;
+const DESIGN_HEIGHT = StoryCanvasViewport.DEFAULT_DESIGN_HEIGHT;
+const SHOW_VIEWPORT_DEBUG = new URLSearchParams(globalThis.location?.search || "").has(
+  "viewportDebug"
+);
+
+const viewport = StoryCanvasViewport.createViewportState(DESIGN_WIDTH, DESIGN_HEIGHT);
 let dpr = 1;
 let selectedIndex = 0;
 let activeTab = ACTIVE_TAB;
@@ -77,7 +91,14 @@ let needsRedraw = true;
 
 window.addEventListener("message", (event) => {
   const d = event.data;
-  if (!d || typeof d !== "object" || d.type !== "archiveSetGuideLevel") {
+  if (!d || typeof d !== "object" || !d.type) {
+    return;
+  }
+  if (d.type === "archiveForceResize") {
+    resizeCanvas();
+    return;
+  }
+  if (d.type !== "archiveSetGuideLevel") {
     return;
   }
   storyGuideMilestoneLevel = Math.min(2, Math.max(0, Number.parseInt(String(d.level), 10) || 0));
@@ -108,23 +129,31 @@ function ensureImage(src) {
 }
 
 function layout() {
-  const stripH = 136;
-  const marginX = 24;
-  const marginTop = 8;
-  const marginBottom = stripH + 8;
+  const bottomSafe = 10;
+  const stripGap = Math.max(8, Math.min(14, Math.round(DESIGN_HEIGHT * 0.01)));
+  const stripH = Math.max(80, Math.min(124, Math.round(DESIGN_HEIGHT * 0.115)));
+  const marginX = Math.max(12, Math.min(24, Math.round(DESIGN_WIDTH * 0.018)));
+  const marginTop = Math.max(6, Math.min(8, Math.round(DESIGN_HEIGHT * 0.01)));
+  const stripTop = DESIGN_HEIGHT - stripH - bottomSafe;
+  const mainBottom = stripTop - stripGap;
   const book = {
     x: marginX,
     y: marginTop,
-    w: viewWidth - marginX * 2,
-    h: viewHeight - marginTop - marginBottom
+    w: Math.max(200, DESIGN_WIDTH - marginX * 2),
+    h: Math.max(120, mainBottom - marginTop)
   };
-  const narrow = viewWidth < 980;
+  const narrow = viewport.width < 980;
   const title = { x: 44, y: 36, w: 280, h: 72 };
-  const close = { x: viewWidth - 42 - 64, y: 20, w: 64, h: 64 };
+  const close = {
+    x: DESIGN_WIDTH - 42 - 64,
+    y: 20,
+    w: 64,
+    h: 64
+  };
   const contentTop = book.y + (narrow ? 100 : 112);
   const contentH = book.y + book.h - contentTop - 24;
   const padX = narrow ? 26 : 56;
-  const tabW = narrow ? Math.min(140, (viewWidth - padX * 2 - 32) / 5) : 150;
+  const tabW = narrow ? Math.min(140, (DESIGN_WIDTH - padX * 2 - 32) / 5) : 150;
   const tabH = narrow ? 52 : 72;
   const gap = narrow ? 8 : 26;
   const tabs = [];
@@ -145,7 +174,7 @@ function layout() {
     }
   }
 
-  const dividerX = viewWidth / 2;
+  const dividerX = DESIGN_WIDTH / 2;
   const dividerGap = narrow ? 18 : 30;
   const leftInnerLeft = book.x + padX;
   const leftInnerRight = dividerX - dividerGap;
@@ -156,17 +185,16 @@ function layout() {
     narrow ? leftColW - 6 : Math.min(520, leftColW - 10),
     leftColW * 0.98
   );
-  const portraitH = Math.min(
-    portraitMaxW / portraitAspect,
-    contentH * (narrow ? 0.48 : 0.56)
+  const portraitCap = Math.max(
+    72,
+    Math.min(contentH * (narrow ? 0.48 : 0.56), mainBottom - contentTop - 80)
   );
+  const portraitH = Math.min(portraitMaxW / portraitAspect, portraitCap);
   const portraitW = portraitH * portraitAspect;
   const portraitX = leftInnerLeft + (leftColW - portraitW) / 2;
-  const portraitToNameGap = 28;
-  const nameSizeEst = Math.min(46, Math.max(40, Math.floor(viewWidth * 0.03)));
-  const nameTagH = NAME_TAG_V_PAD * 2 + nameSizeEst;
+  const portraitToNameGap = 22;
+  const { tagH: nameTagH, codeLineH } = nameTagMetrics();
   const codeBelowTagGap = NAME_CODE_BELOW_GAP;
-  const codeLineH = 26;
   const nameBelowH = nameTagH + codeBelowTagGap + codeLineH;
   const leftBlockH = portraitH + portraitToNameGap + nameBelowH;
   const rightBlockH = Math.min(contentH * 0.52, narrow ? 220 : 300);
@@ -184,15 +212,16 @@ function layout() {
   const dividerTop = startY + 6;
   const dividerBottom = startY + blockH - 6;
 
-  const strip = { x: 0, y: viewHeight - stripH, w: viewWidth, h: stripH };
-  const filmCardW = 156;
-  const filmCardH = 88;
-  const filmGap = 16;
-  const filmPad = Math.max(44, Math.floor(viewWidth * 0.034));
+  const strip = { x: 0, y: stripTop, w: DESIGN_WIDTH, h: stripH };
+  const filmGap = 14;
+  const filmPad = Math.max(40, Math.floor(DESIGN_WIDTH * 0.034));
+  const filmCardW = Math.min(148, Math.max(108, Math.round(DESIGN_WIDTH * 0.1)));
+  const filmCardPadY = 8;
+  const filmCardH = Math.max(48, Math.min(76, stripH - filmCardPadY * 2));
   const filmContentW = CHARACTERS.length * filmCardW + (CHARACTERS.length - 1) * filmGap;
   const filmTotalW = filmPad * 2 + filmContentW;
-  const filmMaxScroll = Math.max(0, filmTotalW - viewWidth);
-  const filmStartBias = filmMaxScroll > 0 ? 0 : Math.max(0, (viewWidth - filmTotalW) / 2);
+  const filmMaxScroll = Math.max(0, filmTotalW - DESIGN_WIDTH);
+  const filmStartBias = filmMaxScroll > 0 ? 0 : Math.max(0, (DESIGN_WIDTH - filmTotalW) / 2);
 
   return {
     book,
@@ -208,6 +237,8 @@ function layout() {
     strip,
     filmCardW,
     filmCardH,
+    filmCardPadY,
+    bottomSafe,
     filmGap,
     filmPad,
     filmStartBias,
@@ -217,9 +248,9 @@ function layout() {
 }
 
 function filmCardAt(layout, index) {
-  const { strip, filmCardW, filmCardH, filmGap, filmPad, filmStartBias } = layout;
+  const { strip, filmCardW, filmCardH, filmCardPadY, filmGap, filmPad, filmStartBias } = layout;
   const x = strip.x + filmPad + filmStartBias - filmScroll + index * (filmCardW + filmGap);
-  const y = strip.y + 24;
+  const y = strip.y + filmCardPadY;
   return { x, y, w: filmCardW, h: filmCardH };
 }
 
@@ -261,24 +292,24 @@ function drawWrappedText(text, x, y, maxWidth, lineHeight, font, fillStyle) {
 }
 
 function drawBackground() {
-  const g = ctx.createLinearGradient(0, 0, viewWidth, viewHeight);
+  const g = ctx.createLinearGradient(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
   g.addColorStop(0, "#0b0b0b");
   g.addColorStop(0.55, "#171412");
   g.addColorStop(1, "#080808");
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, viewWidth, viewHeight);
+  ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
   const r1 = ctx.createRadialGradient(
-    viewWidth * 0.1,
-    viewHeight * 0.12,
+    DESIGN_WIDTH * 0.1,
+    DESIGN_HEIGHT * 0.12,
     0,
-    viewWidth * 0.1,
-    viewHeight * 0.12,
-    viewWidth * 0.24
+    DESIGN_WIDTH * 0.1,
+    DESIGN_HEIGHT * 0.12,
+    DESIGN_WIDTH * 0.24
   );
   r1.addColorStop(0, "rgba(120, 108, 96, 0.16)");
   r1.addColorStop(1, "transparent");
   ctx.fillStyle = r1;
-  ctx.fillRect(0, 0, viewWidth, viewHeight);
+  ctx.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
 }
 
 function drawPaperBook(L) {
@@ -300,7 +331,7 @@ function drawPaperBook(L) {
 function drawTitle(L) {
   const t = L.title;
   ctx.save();
-  ctx.font = `700 ${Math.min(92, Math.max(44, viewWidth * 0.055))}px ${FONT_STACK}`;
+  ctx.font = `700 ${Math.min(92, Math.max(44, DESIGN_WIDTH * 0.055))}px ${FONT_STACK}`;
   ctx.fillStyle = TITLE_DARK;
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
@@ -318,7 +349,7 @@ function drawClose(L) {
   ctx.translate(cx, cy);
   ctx.scale(scale, scale);
   ctx.translate(-cx, -cy);
-  ctx.font = `72px ${FONT_STACK}`;
+  ctx.font = `${Math.round(c.h * 1.12)}px ${FONT_STACK}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.lineJoin = "round";
@@ -388,20 +419,17 @@ function drawPortraitFrame(L, ch) {
 function drawCharacterNameBelow(L, ch) {
   const p = L.portrait;
   const y0 = L.nameBelowY;
-  const padX = 18;
-  const nameSize = Math.min(46, Math.max(40, Math.floor(viewWidth * 0.03)));
-  const codeSize = 22;
+  const { nameSize, codeSize, padX, tagH } = nameTagMetrics();
   const line2 = `車手編號 ${ch.code}`;
   ctx.save();
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   ctx.font = `700 ${nameSize}px ${FONT_STACK}`;
   const tw = ctx.measureText(ch.name).width;
-  const tagW = Math.min(p.w, tw + padX * 2);
-  const tagH = NAME_TAG_V_PAD * 2 + nameSize;
+  const tagW = Math.min(p.w * 0.92, tw + padX * 2);
   const lx = p.x;
   const ly = y0;
-  const r = 8;
+  const r = 6;
   ctx.fillStyle = "#1c1612";
   roundRect(lx, ly, tagW, tagH, r);
   ctx.fill();
@@ -432,7 +460,7 @@ function drawContentDivider(L) {
 
 function drawProfileXiaoman(L) {
   const t = L.text;
-  const body = Math.min(34, Math.max(20, viewWidth * 0.022));
+  const body = Math.min(34, Math.max(20, DESIGN_WIDTH * 0.022));
   const memoSize = 18;
   const lvl = readStoryGuideMilestone();
   let y = drawWrappedText(
@@ -483,7 +511,7 @@ function drawProfile(L, ch) {
     return;
   }
   const t = L.text;
-  const body = Math.min(34, Math.max(20, viewWidth * 0.022));
+  const body = Math.min(34, Math.max(20, DESIGN_WIDTH * 0.022));
   const memoSize = 18;
   let y = drawWrappedText(
     ch.lineA,
@@ -563,6 +591,11 @@ function drawTabs(L) {
 
 function drawFilmStrip(L) {
   const s = L.strip;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(s.x, s.y, s.w, s.h);
+  ctx.clip();
+
   ctx.fillStyle = COLORS.filmStripBar;
   ctx.fillRect(s.x, s.y, s.w, s.h);
   ctx.strokeStyle = "rgba(32, 26, 22, 0.9)";
@@ -606,16 +639,17 @@ function drawFilmStrip(L) {
     ctx.restore();
 
     ctx.strokeStyle = active ? "#ffb5c6" : "rgba(236, 226, 218, 0.72)";
-    ctx.lineWidth = active ? 4 : 3;
+    ctx.lineWidth = active ? 3 : 2;
     roundRect(card.x, card.y, card.w, card.h, 3);
     ctx.stroke();
     if (active) {
       ctx.strokeStyle = "rgba(143, 38, 57, 0.72)";
-      ctx.lineWidth = 3;
-      roundRect(card.x - 2, card.y - 2, card.w + 4, card.h + 4, 4);
+      ctx.lineWidth = 2;
+      roundRect(card.x - 1, card.y - 1, card.w + 2, card.h + 2, 4);
       ctx.stroke();
     }
   }
+  ctx.restore();
 }
 
 function tabPolygonContains(tab, mx, my) {
@@ -649,11 +683,14 @@ function hitTest(mx, my) {
 }
 
 function draw() {
+  if (viewport.width < 32 || viewport.height < 32) {
+    return;
+  }
   const L = layout();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, viewport.width, viewport.height);
+  StoryCanvasViewport.fillLetterbox(ctx, viewport, "#111");
 
+  StoryCanvasViewport.applyDesignTransform(ctx, viewport);
   drawBackground();
   drawPaperBook(L);
   drawTitle(L);
@@ -666,45 +703,50 @@ function draw() {
   drawTabs(L);
   drawFilmStrip(L);
   drawClose(L);
+  StoryCanvasViewport.restoreDesignTransform(ctx);
+
+  if (SHOW_VIEWPORT_DEBUG) {
+    StoryCanvasViewport.drawViewportDebug(ctx, viewport, FONT_STACK);
+  }
 
   needsRedraw = false;
 }
 
+function syncViewFromViewport() {
+  dpr = viewport.dpr;
+}
+
 function resizeCanvas() {
-  dpr = Math.max(1, window.devicePixelRatio || 1);
-  viewWidth = window.innerWidth;
-  viewHeight = window.innerHeight;
-  if (viewWidth < 980) {
-    viewHeight = Math.max(viewHeight, 900);
+  document.documentElement.style.removeProperty("height");
+  document.body.style.removeProperty("height");
+  document.querySelector(".archive-shell")?.style.removeProperty("height");
+
+  const ok = StoryCanvasViewport.resizeCanvasToDisplay(canvas, ctx, viewport);
+  if (!ok) {
+    return;
   }
-  canvas.width = Math.round(viewWidth * dpr);
-  canvas.height = Math.round(viewHeight * dpr);
-  canvas.style.width = `${viewWidth}px`;
-  canvas.style.height = `${viewHeight}px`;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  syncViewFromViewport();
   selectedIndex = Math.min(selectedIndex, CHARACTERS.length - 1);
   needsRedraw = true;
 }
 
 function loop() {
+  if (viewport.width < 32 || viewport.height < 32) {
+    resizeCanvas();
+  }
   if (needsRedraw) {
     draw();
   }
   requestAnimationFrame(loop);
 }
 
-function clientToCanvas(clientX, clientY) {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = viewWidth / rect.width;
-  const scaleY = viewHeight / rect.height;
-  return {
-    x: (clientX - rect.left) * scaleX,
-    y: (clientY - rect.top) * scaleY
-  };
+function pointerWorldPoint(clientX, clientY) {
+  const screen = StoryCanvasViewport.getCanvasPoint(canvas, clientX, clientY);
+  return StoryCanvasViewport.screenToWorld(screen, viewport);
 }
 
-canvas.addEventListener("mousemove", (event) => {
-  const { x, y } = clientToCanvas(event.clientX, event.clientY);
+function updateArchiveHover(clientX, clientY) {
+  const { x, y } = pointerWorldPoint(clientX, clientY);
   const hit = hitTest(x, y);
   const next = {
     close: hit?.type === "close",
@@ -717,16 +759,23 @@ canvas.addEventListener("mousemove", (event) => {
       hit?.type === "close" || hit?.type === "film" || hit?.type === "tab" ? "pointer" : "default";
     needsRedraw = true;
   }
-});
+}
 
-canvas.addEventListener("mouseleave", () => {
-  hover = { close: false, tab: -1, film: -1 };
-  canvas.style.cursor = "default";
-  needsRedraw = true;
-});
-
-canvas.addEventListener("click", (event) => {
-  const { x, y } = clientToCanvas(event.clientX, event.clientY);
+function handleArchivePointer(event) {
+  if (event.type === "pointermove") {
+    updateArchiveHover(event.clientX, event.clientY);
+    return;
+  }
+  if (event.type === "pointerleave") {
+    hover = { close: false, tab: -1, film: -1 };
+    canvas.style.cursor = "default";
+    needsRedraw = true;
+    return;
+  }
+  if (event.type === "pointerdown" && event.button !== 0) {
+    return;
+  }
+  const { x, y } = pointerWorldPoint(event.clientX, event.clientY);
   const hit = hitTest(x, y);
   if (hit?.type === "close") {
     if (window.parent !== window) {
@@ -753,14 +802,18 @@ canvas.addEventListener("click", (event) => {
     }
     needsRedraw = true;
   }
-});
+}
+
+canvas.addEventListener("pointermove", handleArchivePointer);
+canvas.addEventListener("pointerleave", handleArchivePointer);
+canvas.addEventListener("pointerdown", handleArchivePointer);
 
 canvas.addEventListener(
   "wheel",
   (event) => {
     const L = layout();
     const s = L.strip;
-    const { x, y } = clientToCanvas(event.clientX, event.clientY);
+    const { x, y } = pointerWorldPoint(event.clientX, event.clientY);
     if (y >= s.y && y <= s.y + s.h) {
       event.preventDefault();
       filmScroll = Math.max(
@@ -773,13 +826,23 @@ canvas.addEventListener(
   { passive: false }
 );
 
-window.addEventListener("resize", resizeCanvas);
+StoryCanvasViewport.bindCanvasResize(
+  canvas,
+  ctx,
+  viewport,
+  () => {
+    syncViewFromViewport();
+    selectedIndex = Math.min(selectedIndex, CHARACTERS.length - 1);
+    needsRedraw = true;
+  },
+  { useUiScale: true }
+);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    needsRedraw = true;
+    resizeCanvas();
   }
 });
-resizeCanvas();
+syncViewFromViewport();
 CHARACTERS.forEach((c) => {
   if (c.portraitSrc) {
     ensureImage(c.portraitSrc);

@@ -90,6 +90,16 @@ function openArchiveFrame() {
   const reveal = () => {
     postGuideLevelToArchiveFrame();
     frame.removeAttribute("hidden");
+    const nudgeArchiveResize = () => {
+      try {
+        frame.contentWindow?.postMessage({ type: "archiveForceResize" }, "*");
+      } catch {
+        /* ignore */
+      }
+    };
+    nudgeArchiveResize();
+    requestAnimationFrame(nudgeArchiveResize);
+    setTimeout(nudgeArchiveResize, 50);
   };
   if (!frame.dataset.archiveLoaded) {
     frame.addEventListener("load", reveal, { once: true });
@@ -115,8 +125,13 @@ const dialogueStyle = {
   arrow: "#3c2b1c"
 };
 
-let viewWidth = 0;
-let viewHeight = 0;
+const DESIGN_WIDTH = StoryCanvasViewport.DEFAULT_DESIGN_WIDTH;
+const DESIGN_HEIGHT = StoryCanvasViewport.DEFAULT_DESIGN_HEIGHT;
+const SHOW_VIEWPORT_DEBUG = new URLSearchParams(globalThis.location?.search || "").has(
+  "viewportDebug"
+);
+
+const viewport = StoryCanvasViewport.createViewportState(DESIGN_WIDTH, DESIGN_HEIGHT);
 let dpr = 1;
 let lineIndex = 0;
 /** 本頁已讀到最遠的台詞索引，用於圖鑑里程碑（不持久化，重新整理劇情頁即重算） */
@@ -128,11 +143,7 @@ let lastTypeAt = 0;
 let transition = null;
 let backgroundTransition = null;
 let needsRedraw = true;
-let atlasIconHover = false;
-/** 0..1，平滑接往 hover 目標（控制縮放） */
-let atlasHoverAnim = 0;
-let lastLoopNow = 0;
-const ATLAS_HOVER_TAU_MS = 520;
+const atlasOpenBtn = document.getElementById("atlasOpenBtn");
 const typeStep = 2;
 const PORTRAIT_FADE_MS = 420;
 const BACKGROUND_TRANSITION_MS = 980;
@@ -301,15 +312,13 @@ function backgroundSrc(backgroundKey) {
   return `assets/BG/${base}.png`;
 }
 
+function syncViewFromViewport() {
+  dpr = viewport.dpr;
+}
+
 function resizeCanvas() {
-  dpr = Math.max(1, window.devicePixelRatio || 1);
-  viewWidth = window.innerWidth;
-  viewHeight = window.innerHeight;
-  canvas.width = Math.round(viewWidth * dpr);
-  canvas.height = Math.round(viewHeight * dpr);
-  canvas.style.width = `${viewWidth}px`;
-  canvas.style.height = `${viewHeight}px`;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  StoryCanvasViewport.resizeCanvasToDisplay(canvas, ctx, viewport);
+  syncViewFromViewport();
   needsRedraw = true;
 }
 
@@ -803,116 +812,62 @@ function updatePortraitAnimations(now) {
   }
 }
 
-function clientToCanvasStory(clientX, clientY) {
-  const rect = canvas.getBoundingClientRect();
-  if (!rect.width || !rect.height) {
-    return { x: 0, y: 0 };
-  }
-  return {
-    x: ((clientX - rect.left) / rect.width) * viewWidth,
-    y: ((clientY - rect.top) / rect.height) * viewHeight
-  };
-}
-
-function atlasIconLayout() {
-  const size = 48;
-  return { x: 28, y: 24, size };
-}
-
-function atlasIconHit(mx, my) {
-  const { x, y, size } = atlasIconLayout();
-  return mx >= x && mx <= x + size && my >= y && my <= y + size;
-}
-
-function updateAtlasHoverEase(now) {
-  const prev = atlasHoverAnim;
-  const dt = lastLoopNow ? Math.min(80, now - lastLoopNow) : 16;
-  const target = atlasIconHover ? 1 : 0;
-  const k = 1 - Math.exp(-dt / ATLAS_HOVER_TAU_MS);
-  atlasHoverAnim += (target - atlasHoverAnim) * k;
-  if (Math.abs(atlasHoverAnim - prev) > 0.0008) {
-    needsRedraw = true;
-  }
-}
-
-function drawAtlasIcon() {
-  if (transition) {
+function syncAtlasButtonVisibility() {
+  if (!atlasOpenBtn) {
     return;
   }
-  const { x, y, size } = atlasIconLayout();
-  const cx = x + size / 2;
-  const cy = y + size / 2;
-  const scale = 1 + 0.04 * atlasHoverAnim;
+  atlasOpenBtn.hidden = Boolean(transition);
+}
 
-  const stroke = "#f5f5f5";
-  const lineLens = Math.max(2.4, size * 0.07);
-  const lineHandle = Math.max(2.8, size * 0.078);
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.scale(scale, scale);
-  ctx.translate(-cx, -cy);
-
-  ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-  ctx.shadowBlur = 30;
-  ctx.shadowOffsetY = 10;
-  ctx.fillStyle = atlasIconHover ? "rgba(255, 255, 255, 0.16)" : "rgba(8, 13, 18, 0.62)";
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.48)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(cx, cy, size / 2 - 0.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-
-  const gr = size * 0.17;
-  const handleAngle = Math.PI / 4;
-  const handleLen = gr * 1.38;
-  const shift = gr * 0.34;
-  const lx = cx - shift * Math.cos(handleAngle);
-  const ly = cy - shift * Math.sin(handleAngle);
-  const rimX = lx + Math.cos(handleAngle) * gr;
-  const rimY = ly + Math.sin(handleAngle) * gr;
-
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = stroke;
-
-  ctx.beginPath();
-  ctx.arc(lx, ly, gr, 0, Math.PI * 2);
-  ctx.lineWidth = lineLens;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(rimX, rimY);
-  ctx.lineTo(rimX + Math.cos(handleAngle) * handleLen, rimY + Math.sin(handleAngle) * handleLen);
-  ctx.lineCap = "round";
-  ctx.lineWidth = lineHandle;
-  ctx.stroke();
-
-  ctx.restore();
+function transitionOverlayAlpha() {
+  if (!transition) {
+    return 0;
+  }
+  const elapsed = performance.now() - transition.start;
+  const fadeIn = Math.min(1, elapsed / 520);
+  const fadeOut =
+    elapsed > transition.duration - 520
+      ? Math.max(0, (transition.duration - elapsed) / 520)
+      : 1;
+  return Math.min(fadeIn, fadeOut);
 }
 
 function draw() {
   const [sp] = currentLine();
   const blackChapterBreak = Boolean(transition);
-  ctx.clearRect(0, 0, viewWidth, viewHeight);
+  const vw = viewport.width;
+  const vh = viewport.height;
+
+  ctx.clearRect(0, 0, vw, vh);
+
   if (blackChapterBreak) {
     ctx.fillStyle = "#080d12";
-    ctx.fillRect(0, 0, viewWidth, viewHeight);
+    ctx.fillRect(0, 0, vw, vh);
   } else {
     const stage = resolveStageState(lineIndex);
-    drawBackground(stage);
+    drawBackgroundFullscreen(stage);
+    drawBackgroundAccordionTransitionFullscreen();
+  }
+
+  StoryCanvasViewport.applyDesignTransform(ctx, viewport);
+  if (!blackChapterBreak) {
     drawPortraits();
-    drawBackgroundAccordionTransition();
   }
   drawDialogue();
-  drawAtlasIcon();
-  drawTransition();
+  drawTransitionText();
+  StoryCanvasViewport.restoreDesignTransform(ctx);
+
+  syncAtlasButtonVisibility();
+
+  if (SHOW_VIEWPORT_DEBUG) {
+    StoryCanvasViewport.drawViewportDebug(ctx, viewport, FONT_STACK);
+  }
+
   needsRedraw = Boolean(!transition && sp !== transitionKey);
 }
 
-function drawBackground(stage) {
+/** 背景獨立於設計座標系，以 cover 填滿整個 CSS 視窗 */
+function drawBackgroundFullscreen(stage) {
   const activeTransition = backgroundTransition && !transition;
   const displayStage = activeTransition
     ? ((performance.now() - backgroundTransition.start) / backgroundTransition.duration < 0.5
@@ -920,8 +875,11 @@ function drawBackground(stage) {
         : backgroundTransition.toStage)
     : stage;
   const src = backgroundSrc(displayStage.backgroundKey);
+  const vw = viewport.width;
+  const vh = viewport.height;
+
   ctx.fillStyle = src === BLACK_BACKGROUND_KEY ? "#000" : "#080d12";
-  ctx.fillRect(0, 0, viewWidth, viewHeight);
+  ctx.fillRect(0, 0, vw, vh);
   if (src === BLACK_BACKGROUND_KEY) {
     return;
   }
@@ -929,7 +887,7 @@ function drawBackground(stage) {
   if (!image || !image.complete || !image.naturalWidth || image._loadFailed) {
     return;
   }
-  drawImageCover(image, 0, 0, viewWidth, viewHeight);
+  drawImageCover(image, 0, 0, vw, vh);
 }
 
 function drawPortraitSlotWithAlpha(slot, layout, alpha) {
@@ -941,19 +899,19 @@ function drawPortraitSlotWithAlpha(slot, layout, alpha) {
   if (!image || !image.complete || !image.naturalWidth || image._loadFailed) {
     return;
   }
-  const targetHeight = viewHeight * layout.heightFactor;
+  const targetHeight = DESIGN_HEIGHT * layout.heightFactor;
   const scale = targetHeight / image.naturalHeight;
   const width = image.naturalWidth * scale;
   const height = image.naturalHeight * scale;
-  const footOverflow = viewHeight * layout.footOverflow;
-  const y = viewHeight - height + footOverflow;
+  const footOverflow = DESIGN_HEIGHT * layout.footOverflow;
+  const y = DESIGN_HEIGHT - height + footOverflow;
   let x;
   if (layout.anchor === "left") {
-    x = viewWidth * layout.xRatio;
+    x = DESIGN_WIDTH * layout.xRatio;
   } else if (layout.anchor === "right") {
-    x = viewWidth * layout.xRatio - width;
+    x = DESIGN_WIDTH * layout.xRatio - width;
   } else {
-    x = viewWidth * layout.xRatio - width / 2;
+    x = DESIGN_WIDTH * layout.xRatio - width / 2;
   }
 
   ctx.save();
@@ -1046,8 +1004,9 @@ function drawSpeakerLabel(speaker, box) {
   const labelRadius = 15;
   const borderW = 3;
   const innerR = Math.max(0, labelRadius - borderW);
-  const x = Math.round((box.x + 39) * 2) / 2;
-  const y = Math.round((box.y - 39) * 2) / 2;
+  const labelOffset = 39;
+  const x = Math.round((box.x + labelOffset) * 2) / 2;
+  const y = Math.round((box.y - labelOffset) * 2) / 2;
   ctx.save();
   ctx.translate(x, y);
 
@@ -1096,38 +1055,46 @@ function drawNextArrow(box) {
   ctx.restore();
 }
 
-function drawTransition() {
+function drawTransitionText() {
   if (!transition) {
     return;
   }
-  const elapsed = performance.now() - transition.start;
-  const fadeIn = Math.min(1, elapsed / 520);
-  const fadeOut = elapsed > transition.duration - 520 ? Math.max(0, (transition.duration - elapsed) / 520) : 1;
-  const alpha = Math.min(fadeIn, fadeOut);
+  const alpha = transitionOverlayAlpha();
+  const vw = viewport.width;
+  const vh = viewport.height;
+
   ctx.save();
+  ctx.setTransform(viewport.dpr, 0, 0, viewport.dpr, 0, 0);
   ctx.globalAlpha = alpha;
   ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, viewWidth, viewHeight);
-  const transitionFontPx = Math.floor(Math.min(120, Math.max(56, viewWidth * 0.072)));
+  ctx.fillRect(0, 0, vw, vh);
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const transitionFontPx = 96;
   ctx.fillStyle = "rgba(255, 238, 207, 0.92)";
   ctx.font = `900 ${transitionFontPx}px ${FONT_STACK}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(transition.text, viewWidth / 2, viewHeight / 2);
+  ctx.fillText(transition.text, DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2);
   ctx.restore();
 }
 
-function drawBackgroundAccordionTransition() {
+/** 背景切換動畫覆蓋全視窗 */
+function drawBackgroundAccordionTransitionFullscreen() {
   if (!backgroundTransition || transition) {
     return;
   }
+  const vw = viewport.width;
+  const vh = viewport.height;
   const elapsed = performance.now() - backgroundTransition.start;
   const t = Math.min(1, Math.max(0, elapsed / backgroundTransition.duration));
   const closing = t < 0.5;
   const phase = closing ? t / 0.5 : (t - 0.5) / 0.5;
   const base = closing ? easeInOut(phase) : 1 - easeInOut(phase);
-  const stripCount = Math.max(10, Math.min(18, Math.round(viewWidth / 92)));
-  const stripW = Math.ceil(viewWidth / stripCount);
+  const stripCount = Math.max(10, Math.min(18, Math.round(vw / 92)));
+  const stripW = Math.ceil(vw / stripCount);
 
   ctx.save();
   for (let i = 0; i < stripCount; i += 1) {
@@ -1140,7 +1107,7 @@ function drawBackgroundAccordionTransition() {
       continue;
     }
     const x0 = i * stripW;
-    const w = Math.min(stripW + 1, viewWidth - x0 + 1);
+    const w = Math.min(stripW + 1, vw - x0 + 1);
     const foldW = w * cover;
     const x = i % 2 === 0 ? x0 : x0 + w - foldW;
     const gradient = ctx.createLinearGradient(x, 0, x + Math.max(1, foldW), 0);
@@ -1148,11 +1115,11 @@ function drawBackgroundAccordionTransition() {
     gradient.addColorStop(0.5, "rgba(0, 0, 0, 0.94)");
     gradient.addColorStop(1, "rgba(10, 10, 12, 0.98)");
     ctx.fillStyle = gradient;
-    ctx.fillRect(x, 0, foldW, viewHeight);
+    ctx.fillRect(x, 0, foldW, vh);
 
     ctx.globalAlpha = Math.min(0.36, cover * 0.36);
     ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.34)";
-    ctx.fillRect(i % 2 === 0 ? x + foldW - 3 : x, 0, 3, viewHeight);
+    ctx.fillRect(i % 2 === 0 ? x + foldW - 3 : x, 0, 3, vh);
     ctx.globalAlpha = 1;
   }
   ctx.restore();
@@ -1160,12 +1127,12 @@ function drawBackgroundAccordionTransition() {
 
 function dialogueBoxRect() {
   const margin = 30;
-  const width = Math.min(1180, viewWidth - margin * 2);
+  const width = Math.min(1180, DESIGN_WIDTH - margin * 2);
   const height = 278;
   const bottomCrop = -50;
   return {
-    x: (viewWidth - width) / 2,
-    y: viewHeight - margin - height + bottomCrop,
+    x: (DESIGN_WIDTH - width) / 2,
+    y: DESIGN_HEIGHT - margin - height + bottomCrop,
     w: width,
     h: height
   };
@@ -1211,8 +1178,6 @@ function roundRect(context, x, y, width, height, radius) {
 }
 
 function loop(now) {
-  updateAtlasHoverEase(now);
-  lastLoopNow = now;
   updateTyping(now);
   updateAutoPlay(now);
   updateTransition(now);
@@ -1224,42 +1189,26 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
-canvas.addEventListener("mousemove", (event) => {
-  if (transition) {
-    if (atlasIconHover) {
-      atlasIconHover = false;
-      canvas.style.cursor = "default";
-      needsRedraw = true;
-    }
+function handleStoryCanvasPointer(event) {
+  if (event.type === "pointermove" || event.type === "pointerleave") {
     return;
   }
-  const { x, y } = clientToCanvasStory(event.clientX, event.clientY);
-  const over = atlasIconHit(x, y);
-  if (over !== atlasIconHover) {
-    atlasIconHover = over;
-    canvas.style.cursor = over ? "pointer" : "default";
-    needsRedraw = true;
-  }
-});
-
-canvas.addEventListener("mouseleave", () => {
-  if (atlasIconHover) {
-    atlasIconHover = false;
-    canvas.style.cursor = "default";
-    needsRedraw = true;
-  }
-});
-
-canvas.addEventListener("click", (event) => {
-  if (!transition) {
-    const { x, y } = clientToCanvasStory(event.clientX, event.clientY);
-    if (atlasIconHit(x, y)) {
-      openArchiveFrame();
-      return;
-    }
+  if (event.type === "pointerdown" && event.button !== 0) {
+    return;
   }
   advanceLine();
+}
+
+atlasOpenBtn?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (!transition) {
+    openArchiveFrame();
+  }
 });
+
+canvas.addEventListener("pointermove", handleStoryCanvasPointer);
+canvas.addEventListener("pointerleave", handleStoryCanvasPointer);
+canvas.addEventListener("pointerdown", handleStoryCanvasPointer);
 window.addEventListener("keydown", (event) => {
   if (event.key === " " || event.key === "Enter") {
     event.preventDefault();
@@ -1276,7 +1225,16 @@ window.addEventListener("keyup", (event) => {
     resetAutoAdvanceTimer();
   }
 });
-window.addEventListener("resize", resizeCanvas);
+StoryCanvasViewport.bindCanvasResize(
+  canvas,
+  ctx,
+  viewport,
+  () => {
+    syncViewFromViewport();
+    needsRedraw = true;
+  },
+  { useUiScale: true }
+);
 window.addEventListener("storage", (event) => {
   if (event.key === SETTINGS_STORAGE_KEY) {
     resetAutoAdvanceTimer();
@@ -1288,6 +1246,7 @@ window.addEventListener("message", (event) => {
   }
 });
 
-resizeCanvas();
+syncViewFromViewport();
+syncAtlasButtonVisibility();
 loadStoryLinesFromSheet();
 requestAnimationFrame(loop);

@@ -19,28 +19,67 @@ body {
 
 .story-shell {
   position: relative;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 #storyCanvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.atlas-link {
+  position: absolute;
+  top: clamp(12px, 2.2vh, 24px);
+  left: clamp(16px, 2.2vw, 28px);
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  width: clamp(40px, 4.2vw, 48px);
+  height: clamp(40px, 4.2vw, 48px);
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 999px;
+  color: #f5f5f5;
+  background: rgba(8, 13, 18, 0.62);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.atlas-link:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.atlas-link[hidden] {
+  display: none;
+}
+
+.atlas-link-icon {
+  display: block;
 }
 
 .settings-link {
   position: absolute;
-  top: 24px;
-  right: 28px;
+  top: clamp(12px, 2.2vh, 24px);
+  right: clamp(16px, 2.2vw, 28px);
   z-index: 35;
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
+  width: clamp(40px, 4.2vw, 48px);
+  height: clamp(40px, 4.2vw, 48px);
   border: 1px solid rgba(255, 255, 255, 0.48);
   border-radius: 999px;
   color: #f5f5f5;
@@ -62,6 +101,8 @@ body {
   z-index: 40;
   width: 100%;
   height: 100%;
+  max-height: 100%;
   border: 0;
   background: #111;
+  overflow: hidden;
 }

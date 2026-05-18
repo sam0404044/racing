@@ -20,23 +20,28 @@ body {
   background: var(--page-bg);
 }
 
+/**
+ * 圖鑑在 iframe 內時請用 100% 傳遞高度，勿用 100dvh（易以外層視窗為準而高出 iframe，底部被裁切）。
+ * 單獨開啟此頁時由 html/body height:100% 撐滿視窗即可。
+ */
+.archive-shell {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+}
+
 #archiveCanvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   touch-action: none;
   cursor: default;
-}
-
-@media (max-width: 980px) {
-  html,
-  body {
-    overflow: auto;
-    min-height: 100%;
-    height: auto;
-  }
-
-  #archiveCanvas {
-    min-height: min(900px, 100vh);
-  }
 }

@@ -2,13 +2,16 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
   <title>角色圖鑑表</title>
   <link rel="stylesheet" href="character-archive.css">
 </head>
 <body>
-  <canvas id="archiveCanvas" width="800" height="600" aria-label="角色圖鑑表"></canvas>
+  <main class="archive-shell">
+    <canvas id="archiveCanvas" aria-label="角色圖鑑表"></canvas>
+  </main>
+  <script src="canvas-viewport.js"></script>
   <script src="character-archive.js"></script>
 </body>
 </html>

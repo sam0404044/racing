@@ -2,13 +2,19 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
   <title>劇情演出</title>
   <link rel="stylesheet" href="story-stage.css">
 </head>
 <body>
   <main class="story-shell">
+    <button type="button" class="atlas-link" id="atlasOpenBtn" aria-label="角色圖鑑">
+      <svg class="atlas-link-icon" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="2"></circle>
+        <line x1="14.5" y1="14.5" x2="20" y2="20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></line>
+      </svg>
+    </button>
     <a class="settings-link" href="story-settings.html" aria-label="設定">⚙</a>
     <canvas id="storyCanvas" aria-label="劇情演出畫面"></canvas>
     <iframe
@@ -19,6 +25,7 @@
       hidden
     ></iframe>
   </main>
+  <script src="canvas-viewport.js"></script>
   <script src="story-stage.js"></script>
 </body>
 </html>
