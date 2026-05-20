@@ -15,10 +15,8 @@ export const app = {
   laneCount: 3,
   playerSpeed: 0,         // 玩家速度（跟著車子走）
   opponentSpeed: 40,      // 對手當前速度（每動結算更新、boost 直接加）
-  tires: 5,               // 輪胎層數（血量）
-  tiresMax: 5,
   // 空力區（穩定區）：本回合塞進來的牌數、每張讓道路節奏降一階（封頂 easy）
-  // 在 stage5StartNewRound 重置；丟牌不觸發對手、不算行動
+  // 在 stage2StartNewRound 重置；丟牌不觸發對手、不算行動
   stabilityCharges: 0,
   stabilityChargesMax: 3,
   stabilityDropFx: null,   // { until } — 丟牌後的閃光提示
@@ -105,8 +103,8 @@ export const app = {
   roadWidthScale: 1.0,
 
   // ─── 主關卡專用狀態 ─────────────────────────────────────────────────────
-  stage5: null,
-  /* stage5 結構（loadStage(0) 時建立）：
+  stage2: null,
+  /* stage2 結構（loadStage(0) 時建立）：
      {
        ahead: ["A","B","C"],                // 前方對手陣容
        passed: [],                          // 已超過的對手（不會回來追）
@@ -115,7 +113,6 @@ export const app = {
        chaserId: null,                       // 當前後方追車對手 id；null=無後車
        circuitIndex: 0,                      // 賽道圈索引（0..4）
        circuitJustChanged: false,            // 切賽道後第一回合的 flag
-       potholeLanes: null,                   // c7 坑洞段：本次抽到的坑洞道陣列（如 [0,2] 或 null）
        deckPermanent: [],                    // 玩家累積牌庫（永久，從三選一加入）
        teamCardsActive: [],                  // 場上車隊牌
        rewardOptions: [],                    // 三選一卡選項

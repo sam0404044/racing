@@ -16,15 +16,16 @@ export const RHYTHM_UI_AVOID_PAD = 24;
 // 目前只有「機制驗證場」一關。未來加新關卡就往這個陣列加。
 export const STAGES = [
   {
-    id: "stage-5",
+    id: "stage-2",
     title: "機制驗證場",
-    isStage5: true,
+    isStage2: true,
+    hasTires: false,           // 本關沒有輪胎機制；獎勵池會排除需要輪胎的牌
     lanes: 3,
     playerLane: 1,
     opponentLane: 0,
     opponentSpeed: 50,
     noDefense: false,
-    deal: "dealStage5Initial",
+    deal: "dealStage2Initial",
     opponentActions: [],
     laneBonus: null,
     laneBonuses: null,
@@ -48,9 +49,19 @@ export const STAGES = [
 // ★ 對手預設不吃任何賽道加成（add/mult/speedLimit 全免疫）。
 //   若需讓特定賽道也影響對手，於 lane bonus 加 forOpponent: { add, mult, speedLimit } 覆寫。
 //   設計意圖：賽道是玩家的工具，對手只受自己的動作（切道/boost/absBonus）影響。
-export const STAGE5_OPPONENTS = {
+export const STAGE2_OPPONENTS = {
+  P: {
+    id: "P", name: "陪跑員", speed: 40, chaserSpeed: 40, focus: 0,
+    behaviors: [
+      // 唯一招（cd 1、weak）：切到玩家道、阻擋。
+      // weight: "weak" → 初始 lastTriggeredAt = -cooldown → 第 1 動就 ready
+      // 用於教學：玩家第一動前就會看到 ⛔ 阻擋意圖
+      { id:"p-block", cooldown: 1, weight: "weak", action: "moveTo", target: "playerLane" },
+    ],
+    flavor: "陪跑員 — 你的訓練夥伴、總是切到你的道上阻擋",
+  },
   A: {
-    id: "A", name: "禿鷹", speed: 60, chaserSpeed: 50, focus: 0,
+    id: "A", name: "禿鷹", speed: 60, chaserSpeed: 50, focus: 1,
     behaviors: [
       // 動態策略：玩家沒吃尾流 → 遠離；吃了尾流 → 阻擋
       // 弱招（cd 1）：dynamic、無加速
@@ -84,7 +95,7 @@ export const STAGE5_OPPONENTS = {
 // ─── 霓虹多線街區：賽段定義 ──────────────────────────────────────────────
 // laneBonuses 新格式：{ lane, add, mult, speedLimit, qteDiff, label }
 // add=加法加成, mult=乘法加成, speedLimit=彎道限速（顯示速度比較）
-export const STAGE5_CIRCUITS = [
+export const STAGE2_CIRCUITS = [
   {
     id:"c1", name:"直線段", icon:"🛣", lanes:2, bendCurve:0, roadWidthScale:1.0,
     type:"straight", length: 3,
@@ -125,38 +136,6 @@ export const STAGE5_CIRCUITS = [
     ],
     hint:"急彎限速更低，高速超車必須換道",
   },
-  // ─── c7 坑洞段 ─────────────────────────────────────────────────
-  // 三道 add 都 +5，但進關時隨機抽一道有坑洞（玩家可見）。
-  // 走進坑洞道結算 -1 輪胎；坑洞位置存在 app.stage5.potholeLanes（陣列，2 道有坑、1 道安全）。
-  {
-    id:"c7", name:"坑洞段", icon:"🕳", lanes:3, bendCurve:0.1, roadWidthScale:1.0,
-    type:"straight", length: 2,
-    randomPothole: true,
-    laneBonuses:[
-      { lane:0, add:5, mult:1, label:"左道 +5" },
-      { lane:1, add:5, mult:1, label:"中道 +5" },
-      { lane:2, add:5, mult:1, label:"右道 +5" },
-    ],
-    hint:"三道都 +5，但有一道藏坑（可見）",
-  },
-  // ─── c6 油污段 ─────────────────────────────────────────────────
-  // 中央道強制彎道 QTE：踏入即觸發（不看速度）；失敗 -1 胎 + 1 失誤牌 + 滑到鄰道。
-  // 油污中央道 QTE 難度 +1 級（只有踏進中央時、QTE 才變難）。
-  {
-    id:"c6", name:"油污段", icon:"🛢", lanes:3, bendCurve:0, roadWidthScale:1.0,
-    type:"straight", length: 2,
-    laneBonuses:[
-      { lane:0, add:-10, mult:1, label:"外緣 -10（安全）" },
-      { lane:1, add:+10, mult:1,
-        forceCornerQte: true,        // 踏入此道強制觸發彎道 QTE
-        slipOnQteFail: "adjacent",   // QTE 失敗時滑到隨機鄰道
-        qteDifficultyOffset: 1,      // 這道的 QTE 難度 +1 級
-        label:"油污中央 +10（強制 QTE）"
-      },
-      { lane:2, add:-10, mult:1, label:"外緣 -10（安全）" },
-    ],
-    hint:"中央 +10 但強制彎道 QTE、難度 +1 級",
-  },
   // ─── c8 紅綠燈干擾路段 ────────────────────────────────────────────
   // 電磁場干擾路面：三道 add 從機率分布獨立抽取，每次進入 c8 都重抽。
   // 引擎在 applyCircuit 時把 laneBonusDistribution 解析成實際的 laneBonuses。
@@ -182,19 +161,19 @@ export const STAGE5_CIRCUITS = [
     hint:"紅綠燈電磁干擾——三道加成隱藏，駛過才知道",
   },
 ];
-// 一般循環的「賽段池」（c1-c4 + c7 + c6 + c8）— 每次開局會隨機洗牌一次，
-// 結果存在 app.stage5.circuitOrder，之後整局都沿這個固定順序循環。
+// 一般循環的「賽段池」（c1-c4 + c8）— 每次開局會隨機洗牌一次，
+// 結果存在 app.stage2.circuitOrder，之後整局都沿這個固定順序循環。
 // 注意：array index 跟 id 不對應（id 是字串、index 只是位置）。
-//   0=c1, 1=c2, 2=c3, 3=c4, 4=c7, 5=c6, 6=c8
-export const STAGE5_NORMAL_CIRCUITS_POOL = [0,1,2,3,4,5,6];
-// ─── 第五關卡池（v0.9 重設計） ─────────────────────────────────────────
-// 指令牌：拖到自己道上打 → +speedValue（玩家動作）；可選效果：tireCost、canChangeLane、qteOnPlay
-export const STAGE5_COMMAND_CARDS = {
+//   0=c1, 1=c2, 2=c3, 3=c4, 4=c8
+export const STAGE2_NORMAL_CIRCUITS_POOL = [0,1,2,3,4];
+// ─── 第二關卡池 ─────────────────────────────────────────
+// 指令牌：拖到自己道上打 → +speedValue（玩家動作）；可選效果：canChangeLane、qteOnPlay
+export const STAGE2_COMMAND_CARDS = {
   turbo:         { type:"turbo",         cardClass:"action", name:"渦輪增壓", speedValue:30, note:"", color:"red" },
   tailwind:      { type:"tailwind",      cardClass:"action", name:"加速",     speedValue:20, note:"", color:"basic" },
   drag:          { type:"drag",          cardClass:"action", name:"風阻減免", speedValue:15, note:"", color:"basic" },
-  laneRhythm:    { type:"laneRhythm",    cardClass:"action", name:"換道節奏", speedValue:15, tireCost:1, note:"打加速後換道且消耗 1 胎", canChangeLane:true, color:"red" },
-  nitro:         { type:"nitro",         cardClass:"action", name:"氮氣噴射", speedValue:60, tireCost:1, note:"消耗 1 胎", color:"red" },
+  laneRhythm:    { type:"laneRhythm",    cardClass:"action", name:"換道節奏", speedValue:15, note:"打加速後換道", canChangeLane:true, requiresTires:true, color:"red" },
+  nitro:         { type:"nitro",         cardClass:"action", name:"氮氣噴射", speedValue:60, note:"", color:"red" },
   reignite:      { type:"reignite",      cardClass:"action", name:"重燃引擎", speedValue:25, note:"下回合手牌 +1", drawNextHand:1, color:"green" },
   drift:         { type:"drift",         cardClass:"action", name:"甩尾過彎", speedValue:0,  note:"僅彎道：必觸 QTE，依結果調整賽道加成（成功 +60 / Good +30 / Miss -10）", driftQte:true, requireBend:true, color:"blue" },
   chill:         { type:"chill",         cardClass:"action", name:"冷靜應對", speedValue:10, note:"本動 QTE 容錯 +50%", qteForgive:0.5, color:"yellow" },
@@ -213,15 +192,13 @@ export const STAGE5_COMMAND_CARDS = {
 //     - "untilRankUp"  名次上升時消失
 //     - "thisRound"    回合結束時消失
 // 設計意圖：兩個維度獨立、可組合出例如「進牌庫但效果永久」這種卡
-export const STAGE5_TEAM_CARDS = {
+export const STAGE2_TEAM_CARDS = {
   // === 裝備類（trigger: equip）— 選了立即生效、不進牌庫 ===
-  newTireWarm:      { type:"newTireWarm",      cardClass:"team", name:"暖胎電熱絲",   note:"啟動時 -1 輪胎；之後每回合結算後保留 +10 速度",     effect:"keepSpeed",           value:10, costOnEquip:{ tire:1 }, trigger:"equip", persistence:"permanent",  persistenceLabel:"永久",      color:"team" },
+  newTireWarm:      { type:"newTireWarm",      cardClass:"team", name:"暖胎電熱絲",   note:"每回合結算後保留 +10 速度",                      effect:"keepSpeed",           value:10,                         trigger:"equip", persistence:"permanent",  persistenceLabel:"永久",      color:"team" },
   bigData:          { type:"bigData",          cardClass:"team", name:"大數據預測",   note:"預告升級：顯示對手下一招的具體內容",              effect:"showOpponent",        value:1,                          trigger:"equip", persistence:"permanent",  persistenceLabel:"永久",      color:"team" },
   backup:           { type:"backup",           cardClass:"team", name:"後援車隊",     note:"裝備後生效；防守失敗時不掉名次，觸發一次後消失",   effect:"saveOnDefeat",        value:1,                          trigger:"equip", persistence:"oneShot",    persistenceLabel:"觸發後棄",  color:"team" },
-  patch:            { type:"patch",            cardClass:"team", name:"補丁",         note:"撞坑時不扣胎、不降速(一次)",                   effect:"savePothole",         value:1,                          trigger:"equip", persistence:"oneShot",    persistenceLabel:"觸發後棄",  color:"team" },
-  tirePreservation: { type:"tirePreservation", cardClass:"team", name:"保胎策略",     note:"所有指令牌 -10 速度；無視每回合第 1 次輪胎消耗",effect:"tirePreserve",        value:1,                          trigger:"equip", persistence:"permanent",  persistenceLabel:"永久",      color:"team" },
   // === 打出類（trigger: play）— 進牌庫、需要打出才生效 ===
   fuelMaster:       { type:"fuelMaster",       cardClass:"team", name:"燃料管理大師", note:"本回合內、所有指令牌 +5 速度",                   effect:"cardBonusThisRound",  value:5,                          trigger:"play",  persistence:"thisRound",  persistenceLabel:"本回合",    color:"team" },
   rhythmCoach:      { type:"rhythmCoach",      cardClass:"team", name:"節奏教練",     note:"本回合內、連續同名指令牌：第 2 張 +10、第 3 張 +20", effect:"comboBonusThisRound", value:10,                         trigger:"play",  persistence:"thisRound",  persistenceLabel:"本回合",    color:"team" },
 };
-export const STAGE5_ALL_CARDS = { ...STAGE5_COMMAND_CARDS, ...STAGE5_TEAM_CARDS };
+export const STAGE2_ALL_CARDS = { ...STAGE2_COMMAND_CARDS, ...STAGE2_TEAM_CARDS };
