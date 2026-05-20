@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>最後車手 / Final Driver 改版說明 v0.6 ~ v0.7</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06101d;
+      --panel: rgba(8, 18, 32, 0.92);
+      --text: #e8f0ff;
+      --muted: #b7c8dd;
+      --line: rgba(105, 164, 224, 0.35);
+      --accent: #ffd94f;
+      --green: #57e585;
+      --red: #ff6b7a;
+      --orange: #ff9a6a;
+      --sand: #f5c96c;
+      --neon: #ff5cf2;
+      --cyan: #6ed7ff;
+      --code-bg: rgba(255, 217, 79, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(80, 140, 220, 0.18), transparent 36rem),
+        linear-gradient(180deg, #06101d 0%, #101b2c 54%, #05090d 100%);
+      color: var(--text);
+      font-family: system-ui, "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+      line-height: 1.75;
+    }
+
+    main {
+      width: min(960px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 72px;
+    }
+
+    article {
+      padding: clamp(24px, 4vw, 44px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+    }
+
+    h1, h2, h3, h4 { line-height: 1.25; }
+
+    h1 {
+      margin: 0 0 24px;
+      color: var(--accent);
+      font-size: clamp(2rem, 5vw, 3rem);
+      letter-spacing: 0.03em;
+    }
+
+    .version-tag {
+      display: inline-block;
+      margin-left: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(255, 92, 242, 0.18);
+      color: var(--neon);
+      font-size: 0.9rem;
+      vertical-align: middle;
+      border: 1px solid rgba(255, 92, 242, 0.4);
+    }
+
+    .companion-link {
+      display: inline-block;
+      margin-top: 12px;
+      margin-right: 8px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: rgba(105, 164, 224, 0.12);
+      color: #b7c8dd;
+      text-decoration: none;
+      font-size: 0.95rem;
+      border: 1px solid rgba(105, 164, 224, 0.3);
+    }
+
+    .companion-link:hover { background: rgba(105, 164, 224, 0.2); }
+
+    h2 {
+      margin: 48px 0 18px;
+      padding-top: 28px;
+      border-top: 1px solid var(--line);
+      color: var(--accent);
+      font-size: 1.7rem;
+      letter-spacing: 0.02em;
+    }
+
+    h2 .part-num {
+      display: inline-block;
+      margin-right: 10px;
+      padding: 2px 12px;
+      border-radius: 6px;
+      background: rgba(255, 217, 79, 0.15);
+      color: var(--accent);
+      font-size: 0.9rem;
+      font-weight: 700;
+      vertical-align: middle;
+      border: 1px solid rgba(255, 217, 79, 0.4);
+    }
+
+    h3 {
+      margin: 28px 0 10px;
+      color: var(--green);
+      font-size: 1.2rem;
+    }
+
+    h3.neon { color: var(--neon); }
+    h3.cyan { color: var(--cyan); }
+    h3.sand { color: var(--sand); }
+
+    h4 {
+      margin: 18px 0 8px;
+      color: #dfeeff;
+      font-size: 1.05rem;
+    }
+
+    p { margin: 0 0 14px; color: var(--text); }
+
+    ul, ol { margin: 0 0 16px; padding-left: 1.4rem; }
+    li { margin: 0.25rem 0; color: var(--muted); }
+    li::marker { color: var(--accent); font-weight: 800; }
+    li strong { color: var(--text); }
+
+    code {
+      padding: 0.12em 0.35em;
+      border: 1px solid rgba(255, 217, 79, 0.18);
+      border-radius: 0.45em;
+      background: var(--code-bg);
+      color: #ffe89a;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    .lead {
+      color: #f4f8ff;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .note {
+      margin: 18px 0;
+      padding: 16px 18px;
+      border-left: 4px solid var(--accent);
+      border-radius: 12px;
+      background: rgba(255, 217, 79, 0.08);
+      color: #f8e8ad;
+    }
+
+    .note.warn {
+      border-left-color: var(--red);
+      background: rgba(255, 107, 122, 0.08);
+      color: #ffb8c0;
+    }
+
+    .note.neon {
+      border-left-color: var(--neon);
+      background: rgba(255, 92, 242, 0.08);
+      color: #ffb8f5;
+    }
+
+    .note.cyan {
+      border-left-color: var(--cyan);
+      background: rgba(110, 215, 255, 0.08);
+      color: #b9e5ff;
+    }
+
+    .note.green {
+      border-left-color: var(--green);
+      background: rgba(87, 229, 133, 0.08);
+      color: #b8f0c8;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 24px;
+      font-size: 0.96rem;
+    }
+
+    table th, table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    table th {
+      color: var(--accent);
+      font-weight: 700;
+      background: rgba(255, 217, 79, 0.05);
+    }
+
+    table td { color: var(--muted); }
+    table td strong { color: var(--text); font-weight: 700; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75em;
+      font-weight: 700;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+
+    .tag.new   { background: rgba(255, 92, 242, 0.25); color: var(--neon); border: 1px solid rgba(255, 92, 242, 0.5); }
+    .tag.kept  { background: rgba(120, 120, 120, 0.25); color: #aaa; border: 1px solid rgba(120, 120, 120, 0.5); }
+    .tag.gone  { background: rgba(255, 107, 122, 0.18); color: var(--red); border: 1px solid rgba(255, 107, 122, 0.5); text-decoration: line-through; }
+
+    .pillar-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin: 16px 0 24px;
+    }
+
+    .pillar-card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .pillar-card .icon { font-size: 1.7rem; }
+    .pillar-card .name { color: var(--accent); font-weight: 800; margin: 6px 0; font-size: 1.05rem; }
+    .pillar-card .desc { color: var(--muted); font-size: 0.92rem; line-height: 1.55; }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 16px 0;
+    }
+
+    .compare-card {
+      padding: 16px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+    }
+
+    .compare-card.before {
+      background: rgba(255, 107, 122, 0.06);
+      border-color: rgba(255, 107, 122, 0.3);
+    }
+
+    .compare-card.after {
+      background: rgba(87, 229, 133, 0.06);
+      border-color: rgba(87, 229, 133, 0.3);
+    }
+
+    .compare-card h4 {
+      margin-top: 0;
+      font-size: 0.9rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .compare-card.before h4 { color: var(--red); }
+    .compare-card.after h4 { color: var(--green); }
+
+    .compare-card p:last-child { margin-bottom: 0; }
+
+    @media (max-width: 720px) {
+      .compare-grid { grid-template-columns: 1fr; }
+    }
+
+    .loop-figure {
+      margin: 24px 0;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+
+    .loop-figure svg { width: 100%; height: auto; display: block; }
+
+    .key-hint {
+      display: inline-block;
+      padding: 1px 8px;
+      margin: 0 2px;
+      border-radius: 4px;
+      background: rgba(110, 215, 255, 0.15);
+      border: 1px solid rgba(110, 215, 255, 0.4);
+      color: var(--cyan);
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.88em;
+      font-weight: 700;
+    }
+
+    .toc {
+      margin: 18px 0 28px;
+      padding: 16px 20px;
+      background: rgba(105, 164, 224, 0.06);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .toc strong { color: var(--accent); }
+    .toc a { color: #b7c8dd; text-decoration: none; }
+    .toc a:hover { color: var(--text); }
+    .toc ol { margin: 6px 0 0; padding-left: 1.5rem; }
+
+    a { color: #8ec5ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+
+      <h1>改版說明 — 從「算速度」到「踩 vs 收」<span class="version-tag">v0.6 → v0.9</span></h1>
+
+      <p>
+        <a class="companion-link" href="GAME_RULES.html">→ 完整規則（GAME_RULES）</a>
+        <a class="companion-link" href="GAME_MECHANICS.html">→ 機制細節（GAME_MECHANICS）</a>
+        <a class="companion-link" href="TRACK_DESIGN.html">→ 賽道設計（TRACK_DESIGN）</a>
+        <a class="companion-link" href="OPPONENT_DESIGN.html">→ 對手設計（OPPONENT_DESIGN）</a>
+        <a class="companion-link" href="CARD_DESIGN.html">→ 卡牌設計（CARD_DESIGN）</a>
+      </p>
+
+
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- PART 1：設計理念轉換                                              -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+
+      <h2 id="part1"><span class="part-num">PART 1</span>設計理念轉換</h2>
+
+      <p class="lead">這次我把上一版的核心張力<strong>反過來</strong>：以前是「<span style="color: var(--red)">怎麼換算手牌價值把速度湊到能超車？</span>」，現在是「<span style="color: var(--green)">我需要更多或是減少速度？</span>」</p>
+
+      <h3>團隊回饋的兩個核心點：</h3>
+      <ul>
+        <li><strong>「要有速度感」
+        <li><strong>「不要太像數學遊戲」
+      </ul>
+      <p>舊版用比較經典的卡牌遊戲思路：<strong>限制資源</strong>、要玩家仔細衡量手裡的東西換算成速度才能取得優勢。但實際遊玩會產生兩個問題——手牌很卡，以及玩家會覺得速度取得不易。這跟我們想給玩家的「速度感」是相反的。</p>
+
+      <p>所以這版我轉了個彎：讓玩家獲取速度非常容易，反而要思考的是「我現在要多一點還是少一點速度」。能量機制被移除，速度取得變得很流暢，決策點轉移到「衡量速度的多寡」上。</p>
+
+      <h3>三個系統互鎖的新核心</h3>
+
+      <div class="pillar-grid">
+        <div class="pillar-card">
+          <div class="icon">⚡</div>
+          <div class="name">速度（易得難管）</div>
+          <div class="desc">將能量系統拿掉。打牌幾乎零代價、賽道加成、尾流，速度便宜累積。但太快 QTE會變太難、太慢又會無法超過前車。</div>
+        </div>
+        <div class="pillar-card">
+          <div class="icon">🛞</div>
+          <div class="name">輪胎（血量化）</div>
+          <div class="desc">取代舊版的能量，5 層胎 = HP。主動衝速（氮氣噴射）跟 QTE 失敗都會扣胎，扣到 0 就直接被淘汰。呼應賽車氛圍。</div>
+        </div>
+        <div class="pillar-card">
+          <div class="icon">🃏</div>
+          <div class="name">失誤牌（雙向作用）</div>
+          <div class="desc">起始牌庫拿掉所有失誤牌。QTE 失敗會收失誤牌污染牌庫頂；Perfect 反而會清掉一張失誤牌。獎勵把 QTE 玩好的玩家。</div>
+        </div>
+      </div>
+
+      <h3>逐項改動清單</h3>
+
+      <h4 class="cyan">① 行動 vs 回合 — 速度感的來源</h4>
+      <p>定義兩個層次：</p>
+      <ul>
+        <li><strong>一個「行動」</strong>：打一張牌、或換一次道。<strong>每個行動都讓車子前進一個賽段</strong>。</li>
+        <li><strong>一個「回合」</strong>：發手牌開始，到玩家按超車 / Pass 結束。每回合通常會有好幾個行動。</li>
+      </ul>
+      <p>因為每打一張牌就切下一個賽段，速度不斷地在賽道間累加，速度感馬上就有了——這是這版最關鍵的視覺與節奏改動。</p>
+
+      <h4 class="cyan">② 彎道限速 + 彎道 QTE</h4>
+      <p>進到「彎道」類賽段、玩家速度超過該段限速 → 觸發新的<strong>彎道 QTE</strong>（WASD 箭頭串，仿 Helldivers stratagem 風格）。</p>
+      <ul>
+        <li><strong>內彎</strong>：速度加成大（×1.25）、但限速低（75）</li>
+        <li><strong>外彎</strong>：速度加成小或負（×0.9）、但限速高（105）</li>
+      </ul>
+      <p>QTE 失敗 → 扣 1 胎 + 抽 1 張失誤牌。直線段不檢查限速，玩家可以放心衝速——所以彎道 QTE 是<strong>玩家自己選的</strong>，不是被強加的。</p>
+
+      <h4 class="cyan">③ QTE 越快越難</h4>
+      <p>QTE 的難度跟玩家當下速度綁定——速度越快、節奏越緊、箭頭越多、計時越短。這讓「該加速還該收一點」變成貫穿整局的張力 。</p>
+
+      <h4 class="cyan">④ 失誤牌的雙向作用</h4>
+      <ul>
+        <li><strong>起始牌庫</strong>：8 張全是有效牌（turbo ×2 + tailwind ×3 + drag ×2 + laneRhythm ×1）、無失誤牌污染</li>
+        <li><strong>QTE 失敗</strong> → 失誤牌進牌庫頂、下回合一定抽到</li>
+        <li><strong>QTE 100% Perfect</strong> → 從牌庫/棄牌堆移除 1 張失誤牌</li>
+      </ul>
+      <p>這套機制讓玩家有理由<strong>主動拚 Perfect</strong>（清牌組），而不只是「不要 Miss 太多」。</p>
+
+      <h4 class="cyan">⑤ 輪胎 = 血量（取代能量）</h4>
+      <p>輪胎不再是「打某些牌要付的資源」這種無聊的能量替身——它<strong>就是 HP</strong>。</p>
+      <ul>
+        <li>5 層胎、扣完 = 車輛打滑失控、比賽淘汰</li>
+        <li>扣胎來源：氮氣噴射、換道節奏（主動）、超車 QTE 失敗、彎道 QTE 失敗</li>
+        <li>跟「<strong>紅牌捨身攻擊</strong>」設計直接對應——犧牲血量換爆發加速，呼應賽車氛圍</li>
+      </ul>
+
+      <h4 class="cyan">⑥ 多賽道 + 同道尾流</h4>
+      <p>每個賽段有幾條賽道，玩家打牌時打在哪條道就直接吃那條道的加成（加成設計大多是 +/- 號，不是複雜的乘除）。<strong>對手免疫所有賽道加成</strong>——加成只幫玩家、不幫對手；但賽道災害（c6 油污、c7 坑洞）對雙方都生效。</p>
+      <ul>
+        <li><strong>換道代價降低</strong>：不再扣能量/輪胎，改為扣 speed（公式 <code>10 + 5 × (跨道數 - 1)</code>）。打牌的代價低、換道的代價也低 → 每回合的行動數變多。</li>
+        <li><strong>尾流</strong>：每回合第一次跟對手同道時 +30 速。賽車中的標誌性行為，多賽道機制應該讓它鮮明地浮現出來。</li>
+      </ul>
+
+      <h4 class="cyan">⑦ 超車 = 必須切道、必須 QTE</h4>
+      <p>玩家必須跟對手在<strong>不同道</strong>才能超車——好比對手一定會擋你，所以每次超車都會有精彩的車手技術 QTE。</p>
+
+      <h4 class="cyan">⑧ 對手專注值（不只 Boss 有）</h4>
+      <p>我覺得「磨對手」的張力不該只在 Boss 戰才出現，所以<strong>一般對手也有 1~2 格專注值</strong>。</p>
+      <ul>
+        <li>1 專注 = 要 2 次成功超車 QTE 才能甩開</li>
+        <li>2 專注 = 要 3 次</li>
+      </ul>
+      <p>呈現上會有那種「我在左道吃尾速、切到右道要超車、進到 QTE 他來阻攔、但他的專注就渙散了、下一次我又切左道超車就成功」的感覺。</p>
+
+      <h4 class="cyan">⑨ 對手雙行動 + 意圖提示</h4>
+      <p>每個對手有<strong>弱招 + 強招</strong>兩套行為：</p>
+      <ul>
+        <li><strong>弱招</strong>：CD 短、通常跟移動有關</li>
+        <li><strong>強招</strong>：CD 長、跟角色性格綁定（破風者狂加速、清道夫鎖住道、禿鷹遠離又貼上）</li>
+      </ul>
+      <p>UI 會在名條面板顯示對手「再幾個行動後出招」+ 移動意圖 icon，但<strong>不會告訴你細節</strong>：</p>
+      <ul>
+        <li>⛔ <strong>阻擋你</strong>：對手會切到你動作前的道</li>
+        <li>💨 <strong>遠離你</strong>：對手會避開你的道（破壞尾流）</li>
+        <li>❓ <strong>不確定</strong>：看當下道路最快、或隨機切道</li>
+        <li>❗ <strong>賽道干擾</strong>：對手原本想 ⛔ / 💨、但賽段有坑洞或油污、AI 會繞開、結果偏離原意圖</li>
+      </ul>
+      <p>關鍵設計：對手用「<strong>玩家動作前所在道</strong>」當基準預測——所以玩家可以用換道閃過對手的 ⛔ 阻擋。（對手免疫賽道加成、不會被「釣進逆風道」，但對手 AI 會自動避坑、避免進入坑洞道。）</p>
+
+      <h4 class="cyan">⑩ Pass 解決舊問題</h4>
+      <p>之前團隊提過 Pass 按鈕的存在感太弱。新框架下 Pass 直接等於<strong>防守候車</strong>——按 Pass 直接進防守 QTE、失敗掉名次。這個問題就解掉了。</p>
+
+      <h4 class="cyan">⑪ 留牌補手（取代清手牌）</h4>
+      <p>回合結束<strong>不清手牌</strong>，從牌庫補到 5 張。這跟「鼓勵玩家策略性規劃後手」綁定——濾牌就變得有意義（看到下個賽段有特殊加成、可以把大牌留下來等彎道）。</p>
+
+      <h4 class="cyan">⑫ 對手免疫賽道加成</h4>
+      <p>對手不再吃任何賽道的 add / mult / speedLimit——加成只屬於玩家。對手速度的唯一來源是它自己的動作（boost / 切道 + boostAfter / stay+absBonus）。<strong>但賽道災害（c6 油污、c7 坑洞）仍對雙方有效</strong>——賽道對對手變成「中立風險」、不會幫忙、但會懲罰。</p>
+      <p>例外：清道夫光環免疫所有災害——當前對手是清道夫時、它踩坑不降速、踩油污不滑開。</p>
+      <p>這個設計解掉「對手在彎道反而加速」、「賽道機制反幫對手」的舊問題；同時讓賽道戰術完全屬於玩家、決策清晰。</p>
+
+      <h4 class="cyan">⑬ 卡池全面重設計</h4>
+      <p>指令牌從 3 張擴到 9 張，數值光譜更密、每張牌有清楚的「為什麼選它」：</p>
+      <ul>
+        <li><strong>純數值</strong>：turbo +30、tailwind +20、drag +15</li>
+        <li><strong>換道</strong>：laneRhythm +15 + 可換道 + 消耗 1 胎</li>
+        <li><strong>爆發 + 代價</strong>：nitro +60 / -1 胎、reignite +25 / 下回合手牌 +1</li>
+        <li><strong>條件 / 賭注</strong>：drift（僅彎道、必觸 QTE）、chill（QTE 容錯 +50%）、smoothOp（連發加倍）</li>
+      </ul>
+      <p>車隊牌新增 7 張、用<strong>雙維度</strong>描述（<code>trigger</code> = equip / play、<code>persistence</code> = permanent / oneShot / untilRankUp / thisRound）。打出車隊牌<strong>不算行動</strong>——不切賽段、不觸發對手、像「無線電指令 / 免費裝備」。</p>
+
+      <h4 class="cyan">⑭ 10 回合終點線</h4>
+      <p>沙盒對戰有<strong>回合上限 10</strong>。跑到第 11 回合就強制結束、依當前名次結算。這把原本「無限延伸到三人都被超過」的開放結尾改成有壓力感的競賽：每回合都重要、第 8/9/10 回合會變得緊張。HUD 上會顯示「回合 X / 10」，最後 2 回合變紅警示。</p>
+
+      <h3>實際玩起來，玩家的注意力會這樣分配：</h3>
+
+      <div class="note green">
+        <ul style="margin: 8px 0;">
+          <li>「下一個賽段是內彎還是順風？」 → 規劃手牌節奏</li>
+          <li>「我這回合是要切道吃對手尾流，純加速最大化、還是遠離準備超車？」 → 不同道戰術</li>
+          <li>「對手強招還剩幾個行動？他會阻擋還是遠離？」 → 預判博弈</li>
+          <li>「我這階段該再衝一張、還是直接超？」 → QTE 風險評估</li>
+          <li>「我胎只剩 2 層了，氮氣噴射還划算嗎？」 → HP 管理</li>
+        </ul>
+        玩家的關注點變多，<strong>而且沒有一個是「算數字能不能超過別人」</strong>——加上輪胎這個淘汰風險，玩家還會被迫思考：超太快 → QTE 失敗 → 破胎，是不是該收一點？
+      </div>
+
+      <p>當然你還是需要速度超過對手才能挑戰超車——但這已經不是計算門檻，而是<strong>在彎道、尾流、對手意圖、輪胎血量之間做動態取捨</strong>。這就是這套機制成熟的地方。</p>
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- PART 2：給企劃團隊的試玩注意事項                                   -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+
+      <h2 id="part2"><span class="part-num">PART 2</span>給企劃團隊的試玩注意事項</h2>
+      <h3>三句話總結</h3>
+      <ol style="font-size: 1.02rem;">
+        <li><strong>速度便宜，要規劃的是什麼時候收、什麼時候加?</strong>——超速會 QTE ➔ 越快QTE越難 ➔ QTE失敗會破胎。</li>
+        <li><strong>換道是博弈、不是負擔</strong>——尾流、超車、避開對手都靠它。</li>
+        <li><strong>看下一賽段預告、看對手意圖 icon</strong>——這是兩個最重要的 UI 資訊源。</li>
+      </ol>
+
+      <h3>v0.6 → v0.9 重點差異對照</h3>
+
+      <table>
+        <thead><tr><th>項目</th><th>舊版 v0.6</th><th>新版 v0.9</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>核心張力</strong></td>
+            <td>速度稀缺、算門檻</td>
+            <td>決定要現在獲得速度、或是晚一點獲得速度</td>
+          </tr>
+          <tr>
+            <td><strong>能量系統</strong></td>
+            <td>每張牌都要付能量</td>
+            <td><span class="tag gone">移除</span> 取代為輪胎血量</td>
+          </tr>
+          <tr>
+            <td><strong>輪胎</strong></td>
+            <td>無</td>
+            <td><span class="tag new">NEW</span> 5 層 = HP、扣完淘汰</td>
+          </tr>
+          <tr>
+            <td><strong>賽段</strong></td>
+            <td>無賽段概念</td>
+            <td><span class="tag new">NEW</span> 每行動切一賽段、每賽段有多賽道加成</td>
+          </tr>
+          <tr>
+            <td><strong>彎道 QTE</strong></td>
+            <td>無</td>
+            <td><span class="tag new">NEW</span> 超限速觸發（WASD 串）</td>
+          </tr>
+          <tr>
+            <td><strong>尾流</strong></td>
+            <td>無</td>
+            <td><span class="tag new">NEW</span> 同道 +30、每回合一次</td>
+          </tr>
+          <tr>
+            <td><strong>對手專注</strong></td>
+            <td>只有 Boss 有</td>
+            <td><span class="tag new">NEW</span> 一般對手 1–2 格</td>
+          </tr>
+          <tr>
+            <td><strong>對手行動</strong></td>
+            <td>固定排程、被動</td>
+            <td>弱招 + 強招、4 種意圖 icon（⛔ / 💨 / ❓ / ❗）</td>
+          </tr>
+          <tr>
+            <td><strong>對手吃賽道加成</strong></td>
+            <td>跟玩家一樣吃所有加成</td>
+            <td><span class="tag" style="background:rgba(255,154,106,0.2); color:#ff9a6a; border:1px solid rgba(255,154,106,0.5);">CHANGED</span> 免疫加成、僅受災害（c6 油污、c7 坑洞）影響；清道夫光環免疫災害</td>
+          </tr>
+          <tr>
+            <td><strong>失誤牌</strong></td>
+            <td>起始牌庫就有</td>
+            <td>起始牌庫無、QTE 失敗才收、Perfect 可清</td>
+          </tr>
+          <tr>
+            <td><strong>手牌循環</strong></td>
+            <td>回合結束清手牌</td>
+            <td>留牌補滿 5 張</td>
+          </tr>
+          <tr>
+            <td><strong>換道代價</strong></td>
+            <td>扣能量</td>
+            <td>扣 speed（10 / 15 / 20）</td>
+          </tr>
+          <tr>
+            <td><strong>Pass</strong></td>
+            <td>存在感弱、條件式觸發防守</td>
+            <td>有嚇車會觸發防守 QTE</td>
+          </tr>
+          <tr>
+            <td><strong>指令牌池</strong></td>
+            <td>3 張：加速 / 超加速 / 失誤</td>
+            <td><span class="tag new">NEW</span> 9 張：turbo / tailwind / drag / laneRhythm / nitro / reignite / drift / chill / smoothOp</td>
+          </tr>
+          <tr>
+            <td><strong>車隊牌</strong></td>
+            <td>無</td>
+            <td><span class="tag new">NEW</span> 7 張、雙維度設計（trigger = equip / play、persistence = permanent / oneShot / untilRankUp / thisRound）；打出時不算行動、不觸發對手</td>
+          </tr>
+          <tr>
+            <td><strong>初始牌組</strong></td>
+            <td>8 張：加速 ×6 + 超加速 ×2</td>
+            <td><span class="tag" style="background:rgba(255,154,106,0.2); color:#ff9a6a; border:1px solid rgba(255,154,106,0.5);">CHANGED</span> 8 張：turbo ×2 + tailwind ×3 + drag ×2 + laneRhythm ×1</td>
+          </tr>
+          <tr>
+            <td><strong>回合上限</strong></td>
+            <td>無</td>
+            <td><span class="tag new">NEW</span> 10 回合終點線、跑完依當前名次結算</td>
+          </tr>
+        </tbody>
+      </table>
+
+
+      <h3>玩前一定要知道的 8 件事</h3>
+
+      <h4>1. 一個行動 = 打一張牌或換道</h4>
+      <p>不是「我打到滿意才結束」——每打一張<strong>指令牌</strong>或<strong>換道</strong>，車子就前進一個賽段。<strong>關注賽段預告</strong>，你才知道下一段有什麼道路、合理安牌手上的牌。<br><span style="color: var(--muted); font-size: 0.92em;">例外：車隊牌打出不算行動、不切賽段、不觸發對手——它是「免費裝備」。</span></p>
+
+      <h4>2. 換道很便宜、是核心策略動作</h4>
+      <p>換道代價只有 -10 speed（跨 1 道）。<strong>不要只想直線加速</strong>——切道吃尾流、切道找順風、切道準備超車，都是這版的常態。</p>
+
+      <h4>3. 同道才有尾流（每回合一次）</h4>
+      <p>跟對手同道時 +30 速、但<strong>對手會躲</strong>。如果對手有 ⛔ 阻擋意圖、你又貼上去 → 對手會切走你就吃不到尾流（還會被嘲諷）。如果對手有 💨 遠離意圖、你可以反向預判。</p>
+
+      <h4>4. 超車必須不同道</h4>
+      <p>同道無法按超車鈕。<strong>切到不同道、speed &gt; 對手</strong> → 才能按超車鈕進 QTE。</p>
+
+      <h4>5. 對手要磨、不是一次超</h4>
+      <p>對手有 1–2 格專注。超車 QTE 成功 → 扣 1 專注；專注 = 0 後的下次成功才真的名次 +1。<strong>一場對戰會有 2–3 次超車 QTE</strong>。</p>
+
+      <h4>6. 速度太快會自找麻煩</h4>
+      <ul>
+        <li>進<strong>彎道</strong>賽段、speed &gt; 限速 → 觸發彎道 QTE（WASD 串）。失敗扣胎 + 抽失誤牌。</li>
+        <li>QTE 整體會隨速度變難——速度越快、節奏越緊。</li>
+      </ul>
+
+      <h4>7. 起始牌庫沒有失誤牌</h4>
+      <p>失誤牌只從 QTE 失敗收。所以<strong>盡量把超車 QTE 打到 Perfect</strong>——還能反向清掉之前累積的失誤牌。</p>
+
+      <h4>8. 看對手名條的意圖 icon</h4>
+      <ul>
+        <li>⛔ = 對手下次會切到你目前的道（阻擋）</li>
+        <li>💨 = 對手下次會避開你目前的道（破壞尾流）</li>
+        <li>❓ = 不確定（看當下狀況決定）</li>
+        <li>❗ = 賽道干擾（對手原本意圖被坑洞 / 油污打亂）</li>
+        <li>⚡ = 強招（會額外加速、或有特殊效果）</li>
+      </ul>
+      <p>這個 icon 顯示在名條面板 + 切道紅 banner，是<strong>你最重要的預判資訊</strong>。</p>
+
+      <h3 class="sand">操作速查</h3>
+      <table>
+        <thead><tr><th>動作</th><th>怎麼做</th><th>備註</th></tr></thead>
+        <tbody>
+          <tr><td><strong>打牌</strong></td><td>拖牌到所在道</td><td>車在哪道、車速就吃哪道的加成</td></tr>
+          <tr><td><strong>換道</strong></td><td>拖牌到非本車所在道，此牌會棄掉(不觸發)、車子切到目標道</td><td>扣 10/15/20 speed（依跨道數）</td></tr>
+          <tr><td><strong>超車</strong></td><td>不同道 + speed &gt; 對手 → 按「超車」鈕</td><td>進超車 QTE（節奏點擊）</td></tr>
+          <tr><td><strong>Pass</strong></td><td>按 PASS 鈕</td><td>後方有追車...進防守 QTE，失敗掉名次</td></tr>
+          <tr><td><strong>超車 QTE</strong></td><td>圓圈收縮到拍點時點擊</td><td>Perfect 2 分 / Good 1 分 / Miss 0 分；過關門檻 60%</td></tr>
+          <tr><td><strong>彎道 QTE</strong></td><td>依序按 <span class="key-hint">W</span><span class="key-hint">A</span><span class="key-hint">S</span><span class="key-hint">D</span></td><td>速度越快、箭頭越多，要在時間內按順序全按完</td></tr>
+          <tr><td><strong>防守 QTE</strong></td><td>滑鼠拖游標、追住綠色安全區</td><td>進度推滿 = 成功</td></tr>
+        </tbody>
+      </table>
+
+      <h3 class="sand">常見誤區</h3>
+
+      <div class="note warn">
+        <strong>誤區 1：「我只想無腦打加速牌、衝過對手」</strong><br>
+        → 速度會被干擾不夠、或是被前車阻擋。試著切道吃尾流、或切到順風道再衝。
+      </div>
+
+      <div class="note warn">
+        <strong>誤區 2：「我把所有手牌打完才超車」</strong><br>
+        → 一直打牌就一直切賽段、速度疊得很高但是 QTE 滑鐵盧，得不償失。<strong>看下一段預告</strong>，該收就收、該按超車就按。
+      </div>
+
+      <div class="note warn">
+        <strong>誤區 3：「超車 QTE 過關就算贏」</strong><br>
+        → 60% 過關只是磨對手 1 格專注。要超車成功、要先磨光對手的專注。
+      </div>
+
+      <div class="note warn">
+        <strong>誤區 4：「胎還很多、氮氣噴射隨便用」</strong><br>
+        → 氮氣噴射 -1 胎 + QTE 失敗還會再 -1。一場下來 5 層胎扣很快。
+      </div>
+
+      <div class="note warn">
+        <strong>誤區 5：「對手永遠都會擋我」</strong><br>
+        → 對手不一定阻擋。看意圖 icon——⛔ 才是阻擋、💨 是遠離。<br>
+        <span style="color: var(--muted); font-size: 0.92em;">對手免疫所有賽道加成、所以「釣對手到逆風道」沒效。但你仍可以利用閃避（換道）來破壞對手的 ⛔ 阻擋。</span>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- PART 3：CORE GAMEPLAY LOOP                                       -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+
+      <h2 id="part3"><span class="part-num">PART 3</span>Core Gameplay Loop</h2>
+
+      <p class="lead">玩家在每一個<strong>回合</strong>內、會反覆執行多個<strong>行動</strong>，最後決定按超車或 Pass 結束回合。</p>
+
+      <h3 class="neon">視覺化循環圖</h3>
+
+      <div class="loop-figure">
+        <svg viewBox="0 0 900 620" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#ffd94f"/>
+            </marker>
+            <marker id="arrow-neon" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#ff5cf2"/>
+            </marker>
+            <marker id="arrow-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#6ed7ff"/>
+            </marker>
+          </defs>
+
+          <!-- 背景區塊：回合層 -->
+          <rect x="20" y="20" width="860" height="580" rx="18" fill="rgba(255, 217, 79, 0.04)" stroke="rgba(255, 217, 79, 0.3)" stroke-width="1.5" stroke-dasharray="6 4"/>
+          <text x="40" y="48" fill="#ffd94f" font-size="14" font-weight="700" letter-spacing="0.1em">一回合（TURN）</text>
+
+          <!-- 背景區塊：行動層 -->
+          <rect x="60" y="170" width="780" height="280" rx="14" fill="rgba(110, 215, 255, 0.04)" stroke="rgba(110, 215, 255, 0.3)" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <text x="80" y="194" fill="#6ed7ff" font-size="13" font-weight="700" letter-spacing="0.1em">一個行動（ACTION） — 每個玩家動作都走完這 5 步</text>
+
+          <!-- 節點 0：回合開始 -->
+          <rect x="100" y="70" width="220" height="70" rx="10" fill="rgba(255, 217, 79, 0.12)" stroke="#ffd94f" stroke-width="2"/>
+          <text x="210" y="98" fill="#ffd94f" font-size="14" font-weight="700" text-anchor="middle">① 回合開始</text>
+          <text x="210" y="118" fill="#f8e8ad" font-size="12" text-anchor="middle">speed 重置 · 補手牌到 5 張</text>
+          <text x="210" y="134" fill="#f8e8ad" font-size="12" text-anchor="middle">看下一賽段預告 + 對手意圖</text>
+
+          <!-- 節點 1：決策 -->
+          <rect x="580" y="70" width="220" height="70" rx="10" fill="rgba(255, 217, 79, 0.12)" stroke="#ffd94f" stroke-width="2"/>
+          <text x="690" y="98" fill="#ffd94f" font-size="14" font-weight="700" text-anchor="middle">② 思考：踩 vs 收</text>
+          <text x="690" y="118" fill="#f8e8ad" font-size="12" text-anchor="middle">加速？換道吃尾流？</text>
+          <text x="690" y="134" fill="#f8e8ad" font-size="12" text-anchor="middle">換道準備超車？該收了？</text>
+
+          <!-- ① → ② -->
+          <line x1="320" y1="105" x2="580" y2="105" stroke="#ffd94f" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- 五步驟區塊 -->
+          <!-- 步驟 1 -->
+          <rect x="80" y="220" width="140" height="68" rx="8" fill="rgba(110, 215, 255, 0.1)" stroke="#6ed7ff" stroke-width="1.5"/>
+          <text x="150" y="244" fill="#6ed7ff" font-size="12" font-weight="700" text-anchor="middle">步驟 1</text>
+          <text x="150" y="262" fill="#b9e5ff" font-size="11" text-anchor="middle">玩家行動</text>
+          <text x="150" y="278" fill="#b9e5ff" font-size="10" text-anchor="middle">打牌 / 換道</text>
+
+          <!-- 步驟 2 -->
+          <rect x="234" y="220" width="140" height="68" rx="8" fill="rgba(110, 215, 255, 0.1)" stroke="#6ed7ff" stroke-width="1.5"/>
+          <text x="304" y="244" fill="#6ed7ff" font-size="12" font-weight="700" text-anchor="middle">步驟 2</text>
+          <text x="304" y="262" fill="#b9e5ff" font-size="11" text-anchor="middle">對手行動</text>
+          <text x="304" y="278" fill="#b9e5ff" font-size="10" text-anchor="middle">切道 / 加速</text>
+
+          <!-- 步驟 3 -->
+          <rect x="388" y="220" width="140" height="68" rx="8" fill="rgba(110, 215, 255, 0.1)" stroke="#6ed7ff" stroke-width="1.5"/>
+          <text x="458" y="244" fill="#6ed7ff" font-size="12" font-weight="700" text-anchor="middle">步驟 3</text>
+          <text x="458" y="262" fill="#b9e5ff" font-size="11" text-anchor="middle">檢查尾流</text>
+          <text x="458" y="278" fill="#b9e5ff" font-size="10" text-anchor="middle">同道 +30</text>
+
+          <!-- 步驟 4 -->
+          <rect x="542" y="220" width="140" height="68" rx="8" fill="rgba(110, 215, 255, 0.1)" stroke="#6ed7ff" stroke-width="1.5"/>
+          <text x="612" y="244" fill="#6ed7ff" font-size="12" font-weight="700" text-anchor="middle">步驟 4</text>
+          <text x="612" y="262" fill="#b9e5ff" font-size="11" text-anchor="middle">賽道結算</text>
+          <text x="612" y="278" fill="#b9e5ff" font-size="10" text-anchor="middle">超限速？→ 彎道 QTE</text>
+
+          <!-- 步驟 5 -->
+          <rect x="696" y="220" width="140" height="68" rx="8" fill="rgba(110, 215, 255, 0.1)" stroke="#6ed7ff" stroke-width="1.5"/>
+          <text x="766" y="244" fill="#6ed7ff" font-size="12" font-weight="700" text-anchor="middle">步驟 5</text>
+          <text x="766" y="262" fill="#b9e5ff" font-size="11" text-anchor="middle">切下個賽段</text>
+          <text x="766" y="278" fill="#b9e5ff" font-size="10" text-anchor="middle">看新預告</text>
+
+          <!-- 步驟之間箭頭 -->
+          <line x1="220" y1="254" x2="234" y2="254" stroke="#6ed7ff" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+          <line x1="374" y1="254" x2="388" y2="254" stroke="#6ed7ff" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+          <line x1="528" y1="254" x2="542" y2="254" stroke="#6ed7ff" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+          <line x1="682" y1="254" x2="696" y2="254" stroke="#6ed7ff" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+          <!-- ② → 行動區塊 -->
+          <line x1="690" y1="140" x2="690" y2="218" stroke="#ffd94f" stroke-width="2" marker-end="url(#arrow)"/>
+          <text x="710" y="180" fill="#ffd94f" font-size="11">執行行動</text>
+
+          <!-- 評估：繼續或結束回合 -->
+          <rect x="280" y="335" width="360" height="76" rx="10" fill="rgba(255, 217, 79, 0.1)" stroke="#ffd94f" stroke-width="2" stroke-dasharray="3 3"/>
+          <text x="460" y="362" fill="#ffd94f" font-size="14" font-weight="700" text-anchor="middle">③ 評估</text>
+          <text x="460" y="382" fill="#f8e8ad" font-size="11.5" text-anchor="middle">手牌還有？速度夠超車？對手意圖？輪胎還行？</text>
+          <text x="460" y="398" fill="#f8e8ad" font-size="11.5" text-anchor="middle">→ 繼續再動 一個行動 / 或按超車 / 或按 Pass</text>
+
+          <!-- 行動 → 評估 -->
+          <line x1="460" y1="290" x2="460" y2="333" stroke="#6ed7ff" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+
+          <!-- 回路：評估 → 步驟 1（再一個行動） -->
+          <path d="M 280 373 Q 130 373 130 290" fill="none" stroke="#ffd94f" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+          <text x="125" y="330" fill="#ffd94f" font-size="11" text-anchor="middle">再一動</text>
+
+          <!-- 終局分支 -->
+          <rect x="100" y="470" width="220" height="105" rx="10" fill="rgba(255, 92, 242, 0.1)" stroke="#ff5cf2" stroke-width="2"/>
+          <text x="210" y="496" fill="#ff5cf2" font-size="14" font-weight="700" text-anchor="middle">④A 按超車</text>
+          <text x="210" y="516" fill="#ffb8f5" font-size="11" text-anchor="middle">不同道 + speed &gt; 對手</text>
+          <text x="210" y="532" fill="#ffb8f5" font-size="11" text-anchor="middle">→ 超車 QTE（節奏點擊）</text>
+          <text x="210" y="548" fill="#ffb8f5" font-size="11" text-anchor="middle">扣對手 1 專注</text>
+          <text x="210" y="564" fill="#ffb8f5" font-size="11" text-anchor="middle">專注 = 0 → 名次 +1</text>
+
+          <rect x="600" y="470" width="220" height="105" rx="10" fill="rgba(255, 92, 242, 0.1)" stroke="#ff5cf2" stroke-width="2"/>
+          <text x="710" y="496" fill="#ff5cf2" font-size="14" font-weight="700" text-anchor="middle">④B 按 PASS</text>
+          <text x="710" y="516" fill="#ffb8f5" font-size="11" text-anchor="middle">不想衝、想保留資源</text>
+          <text x="710" y="532" fill="#ffb8f5" font-size="11" text-anchor="middle">→ 防守 QTE（追游標）</text>
+          <text x="710" y="548" fill="#ffb8f5" font-size="11" text-anchor="middle">失敗 → 掉名次</text>
+          <text x="710" y="564" fill="#ffb8f5" font-size="11" text-anchor="middle">（最後一名不會掉）</text>
+
+          <line x1="370" y1="411" x2="220" y2="468" stroke="#ff5cf2" stroke-width="2" marker-end="url(#arrow-neon)"/>
+          <line x1="550" y1="411" x2="700" y2="468" stroke="#ff5cf2" stroke-width="2" marker-end="url(#arrow-neon)"/>
+
+          <!-- 結束 → 新回合 -->
+          <path d="M 100 522 Q 50 522 50 105 Q 50 105 100 105" fill="none" stroke="#ffd94f" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+          <text x="36" y="320" fill="#ffd94f" font-size="11" text-anchor="middle" transform="rotate(-90 36 320)">→ 新回合</text>
+
+          <path d="M 820 522 Q 870 522 870 105 Q 870 105 800 105" fill="none" stroke="#ffd94f" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+          <text x="884" y="320" fill="#ffd94f" font-size="11" text-anchor="middle" transform="rotate(90 884 320)">→ 新回合</text>
+        </svg>
+      </div>
+
+      <h3>文字版本（給文件閱讀）</h3>
+
+      <ol style="font-size: 1.0rem;">
+        <li>
+          <strong>① 回合開始</strong>
+          <ul>
+            <li>speed 重置為起始值（預設 10）</li>
+            <li>手牌補滿 5 張（沒打完的留著）</li>
+            <li><strong>看下一賽段預告 + 對手名條的意圖 icon</strong> ← 規劃資訊源</li>
+          </ul>
+        </li>
+        <li>
+          <strong>② 思考：踩 vs 收</strong>
+          <ul>
+            <li>下一段是順風 / 彎道 / 油污 / 紅綠燈？該打哪張牌？</li>
+            <li>要切道吃尾流？還是切道準備超車？</li>
+            <li>手上的大牌要留到下一段嗎？</li>
+          </ul>
+        </li>
+        <li>
+          <strong>③ 執行一個行動 → 走完五步驟流程</strong>
+          <ol>
+            <li>玩家行動：打牌 → 加 speed；換道 → 扣 speed + 棄 1 張</li>
+            <li>對手行動：依弱招/強招冷卻、可能切道或加速</li>
+            <li>檢查尾流：同道 → +30 speed（每回合一次）；對手躲開 → 觸發嘲諷</li>
+            <li>賽道結算：套用所在道加成；玩家超限速 → 觸發彎道 QTE</li>
+            <li>切下個賽段（影響下個行動）</li>
+          </ol>
+        </li>
+        <li>
+          <strong>④ 評估：繼續再一個行動，還是結束回合？</strong>
+          <ul>
+            <li>還有手牌、還想累積 → 回到 ②</li>
+            <li>速度夠、跟對手不同道 → 走 ④A 按超車</li>
+            <li>不想衝、想下回合再來 → 走 ④B 按 Pass</li>
+          </ul>
+        </li>
+        <li>
+          <strong>④A 超車</strong> → 超車 QTE → 成功扣對手 1 專注；專注 = 0 後的下次成功才<strong>名次 +1</strong>。Perfect 還能清失誤牌、低於 60% 失敗扣胎收失誤牌。
+        </li>
+        <li>
+          <strong>④B Pass</strong> → 直接進防守 QTE。失敗掉 1 名（最後一名免疫）。
+        </li>
+        <li>
+          <strong>結算名次後進入下一回合 → 回到 ①</strong>
+        </li>
+      </ol>
+
+      <h3>勝負條件</h3>
+      <div class="pillar-grid">
+        <div class="pillar-card" style="border-color: rgba(87, 229, 133, 0.5); background: rgba(87, 229, 133, 0.06);">
+          <div class="icon">🏆</div>
+          <div class="name" style="color: var(--green);">勝利</div>
+          <div class="desc">爬到第 1 名 = 通關</div>
+        </div>
+        <div class="pillar-card" style="border-color: rgba(255, 107, 122, 0.5); background: rgba(255, 107, 122, 0.06);">
+          <div class="icon">💥</div>
+          <div class="name" style="color: var(--red);">失敗</div>
+          <div class="desc">輪胎扣到 0 = 失控淘汰</div>
+        </div>
+      </div>
+
+      <!-- 結語 -->
+      <h2>結語</h2>
+      <p>這版的目標是<strong>讓玩家在回合中的，每一個行動都要規劃</strong>——不是算價值，而是在這條彎道、這個對手、這層輪胎之間做動態取捨。試玩時請特別觀察：</p>
+      <ul>
+        <li>你的注意力大部分時間是在「算數字」還是在「做選擇」？</li>
+        <li>你是不是有種「下一段我要保留這張牌」的策略感？</li>
+        <li>對手的意圖 icon 你看了幾次？你有沒有想去釣他到差賽道？</li>
+        <li>輪胎扣到剩 2 層時、你的決策有沒有變保守？</li>
+      </ul>
+      <p>這些問題的答案會直接告訴我們，「踩 vs 收」這個張力到底有沒有真的浮現。</p>
+
+    </article>
+  </main>
+</body>
+</html>
