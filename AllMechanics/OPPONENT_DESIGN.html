@@ -404,11 +404,12 @@ function handleOpponentForceQte() {
       <ul>
         <li>常駐：B 所在道的 lane bonus 對「玩家」與「對手自己」都被清除（add=0, mult=1）</li>
         <li>玩家跟 B 同道 → 不吃尾流 +30（光環抵消）</li>
-        <li><strong>免疫所有賽道災害</strong>：清道夫站任何坑洞道、坑洞自動抵消（不降速）；站油污中道、不會 50% 滑開。預告也因此維持原意圖 ⛔ 不降級成 ❗</li>
+        <li><strong>免疫所有賽道災害</strong>：清道夫站任何坑洞道、坑洞自動抵消（不降速）；站油污道、不會 50% 滑開。預告也因此維持原意圖 ⛔ 不降級成 ❗</li>
+        <li><strong>v0.9+ 玩家也完全免疫災害</strong>：對手是清道夫時、玩家不管站哪道都不會被坑洞 / 油污 QTE 觸發。之前要「跟到清道夫所在道」才安全、現在整段都安全。<code>checkPotholeDamage</code> 中 <code>playerSafeAura = playerHit && auraActive</code>、<code>checkBendSpeedLimit</code> 對 forceCornerQte 也加判定。</li>
         <li><code>bypassAura: true</code>：B 在那一動<strong>無視自己的光環</strong>，可以吃 lane bonus（強招那一動）</li>
         <li><code>absBonus: true</code>：bypassAura 那一動套用「絕對加成」——若該道 add=-10（逆風）→ 對手反而吃 +10</li>
       </ul>
-      <p><strong>玩家對策</strong>：B 的弱點是強招前的 2 動空窗期——這時候 B 沒攻擊招、光環雖在但你可以提前到不同道。強招倒數時、不要待在 B 預測會切到的道。</p>
+      <p><strong>玩家對策</strong>：B 的弱點是強招前的 2 動空窗期——這時候 B 沒攻擊招、光環雖在但你可以提前到不同道。強招倒數時、不要待在 B 預測會切到的道。<strong>正面效應：</strong>遇到清道夫 + c6 油污 / c7 坑洞同時出現的關卡、玩家可以無視災害、把心力放在加速。</p>
 
       <h3>破風者（C）—— 獨行型</h3>
       <table>

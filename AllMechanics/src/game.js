@@ -6114,7 +6114,7 @@ function drawModalPanel(box, accent) {
 }
 
 function drawStartModal() {
-  const box = getCenteredModalBox(460, 388);
+  const box = getCenteredModalBox(460, 320);
   drawModalPanel(box);
   const cx = box.x+box.w/2;
   text("最後車手", cx, box.y+62*UI_SCALE, 36, "#dfeeff", "900", "center");
@@ -6125,8 +6125,7 @@ function drawStartModal() {
   ctx.setLineDash([]); ctx.restore();
   text("你是車隊領隊，透過打牌以指揮車手", cx, box.y+140*UI_SCALE, 16, "#e8f0ff", "700", "center");
   text("駕駛賽車超過前車。", cx, box.y+164*UI_SCALE, 16, "#e8f0ff", "700", "center");
-  button("start-game", "開始遊戲", cx-110, box.y+202*UI_SCALE, 220, 48, false, "start");
-  button("open-rules", "遊戲規則", cx-110, box.y+260*UI_SCALE, 220, 38, false, "primary");
+  button("start-game", "開始遊戲", cx-110, box.y+218*UI_SCALE, 220, 48, false, "start");
 }
 
 function drawPromptModal() {

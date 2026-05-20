@@ -291,8 +291,8 @@
           <tr><td><code>c2</code></td><td>彎道段（左）</td><td><strong>1</strong></td><td>彎道就是一個快速決策點：選內外、過、走；不適合拖長</td></tr>
           <tr><td><code>c3</code></td><td>直線段（3 道）</td><td><strong>3</strong></td><td>同上、3 道版本</td></tr>
           <tr><td><code>c4</code></td><td>急彎段（右）</td><td><strong>1</strong></td><td>同 c2、單動作彎道</td></tr>
-          <tr><td><code>c6</code></td><td>油污段</td><td><strong>2</strong></td><td>給玩家機會看一次中央的強制 QTE 結果後再決定下一步</td></tr>
-          <tr><td><code>c7</code></td><td>坑洞段</td><td><strong>2</strong></td><td>坑洞位置進關時固定、給玩家 2 動的決策窗口</td></tr>
+          <tr><td><code>c6</code></td><td>油污段</td><td><strong>2</strong></td><td>2 動內油污位置每動重抽（v0.7+）、玩家不能死記固定中道</td></tr>
+          <tr><td><code>c7</code></td><td>坑洞段</td><td><strong>2</strong></td><td>2 動內坑洞位置每動重抽（v0.7+）、玩家不能死記固定安全道</td></tr>
           <tr><td><code>c8</code></td><td>紅綠燈干擾</td><td><strong>2</strong></td><td>第一動駛過揭曉、第二動利用揭曉資訊決策</td></tr>
         </tbody>
       </table>
@@ -307,7 +307,7 @@
       </ul>
 
       <h2>§ 0.5&nbsp;&nbsp;賽道與賽段規格</h2>
-      <p>沙盒目前已實作的賽段完整定義。<strong>玩家</strong>吃當前所在道的 add / mult / speedLimit 加成。<strong>對手</strong>從 v0.8 起免疫加成，但<strong>仍會中賽道災害</strong>（c6 油污 50% 滑、c7 坑洞速度減半）——<strong>但清道夫光環免疫災害</strong>。詳見 <a href="OPPONENT_DESIGN.html">對手設計</a>。</p>
+      <p>沙盒目前已實作的賽段完整定義。<strong>玩家</strong>吃當前所在道的 add / mult / speedLimit 加成。<strong>對手</strong>從 v0.8 起免疫加成，但<strong>仍會中賽道災害</strong>（c6 油污 50% 滑、c7 坑洞速度減半）——<strong>但清道夫光環免疫災害、且 v0.9+ 玩家在清道夫場也完全免疫</strong>。詳見 <a href="OPPONENT_DESIGN.html">對手設計</a>。</p>
 
       <h3>賽道類型（per-lane）</h3>
       <p>每條賽道的加成屬性。「車子在哪條賽道，車子的速度就吃那條賽道的加成」。</p>
@@ -433,7 +433,8 @@
           <tr><td><strong>對手 AI 期望值</strong>(c6 中道加成只算一半)</td><td><code>calcOpponentSpeedAtLane</code> 對 forceCornerQte 道計算期望值</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
           <tr><td><strong>隨機坑洞道</strong>(c7 進關抽 2 道、結算 -1 胎)</td><td><code>randomPothole</code> 旗標、<code>app.stage5.potholeLanes</code> 陣列、<code>checkPotholeDamage</code></td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
           <tr><td><strong>對手 c7 避坑（AI 決策層）</strong></td><td><code>pickSmartLaneForOpponent</code>、moveTo / moveAdjacent 內排除坑洞道</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
-          <tr><td><strong>清道夫光環抵消坑洞</strong></td><td><code>checkPotholeDamage</code> 內判斷光環道</td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
+          <tr><td><strong>清道夫光環抵消坑洞 / 油污（v0.9+ 玩家也免疫）</strong></td><td><code>checkPotholeDamage</code> + <code>checkBendSpeedLimit</code> 內判斷光環、不再要求玩家在光環道</td><td><span class="ok-icon">✓</span> v0.7 / 擴大 v0.9</td></tr>
+          <tr><td><strong>多賽段內災害位置 reroll（v0.7+）</strong></td><td><code>rerollCircuitHazards()</code> 函式、<code>_pendingHazardReroll</code> flag、<code>endBendQte</code> 切回 playing 時消化</td><td><span class="ok-icon">✓</span> v0.7+</td></tr>
           <tr><td><strong>laneBonuses 從機率分布動態生成</strong>(c8)</td><td><code>laneBonusDistribution</code> + <code>generateLaneBonusesFromDistribution</code></td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
           <tr><td><strong>駛過揭曉</strong>(c8 紅綠燈干擾)</td><td><code>hideLaneBonusUntilVisited</code>、<code>app.stage5.revealedC8Lanes</code> Set、<code>revealC8CurrentLane</code></td><td><span class="ok-icon">✓</span> v0.7 已實作</td></tr>
         </tbody>
@@ -453,30 +454,41 @@
             <tr><td><strong>id</strong></td><td><code>c6</code></td></tr>
             <tr><td><strong>name</strong></td><td>油污段</td></tr>
             <tr><td><strong>lanes</strong></td><td>3</td></tr>
+            <tr><td><strong>length</strong></td><td>2 動</td></tr>
             <tr><td><strong>bendCurve</strong></td><td>0</td></tr>
-            <tr><td><strong>加成類型</strong></td><td>add（中央 +10、邊緣 -10）</td></tr>
+            <tr><td><strong>加成類型</strong></td><td>add（油污道 +10、其餘 -10）</td></tr>
             <tr><td><strong>QTE 難度</strong></td><td>整段 +1 級（速度檔位 +1）</td></tr>
-            <tr><td><strong>lane bonuses</strong></td><td>
-              左道（lane 0）：add -10（外緣，安全）<br>
-              中道（lane 1）：add +10（油污中央，<strong>強制彎道 QTE</strong>）<br>
-              右道（lane 2）：add -10（外緣，安全）
+            <tr><td><strong>lane bonuses（基準）</strong></td><td>
+              油污道（隨機 1 道）：add +10、<strong>強制彎道 QTE</strong><br>
+              其餘 2 道：add -10（外緣、安全）<br>
+              <em>每動作之間重新隨機指定哪道是油污</em>
             </td></tr>
           </tbody>
         </table>
 
-        <p><strong>玩家在中道（lane 1）：</strong></p>
+        <p><strong>v0.7+ 多賽段重抽：</strong></p>
         <ul>
-          <li>結算後在中道 → <strong>強制觸發彎道 QTE</strong>（不看速度、無視 speedLimit）。</li>
-          <li>QTE 成功：正常吃 +10、不位移。</li>
-          <li>QTE 失敗：<strong>-1 輪胎</strong> + <strong>+1 張失誤牌</strong>（沿用既有副作用）+ <strong>滑到隨機鄰道</strong>（左道或右道、50/50）。</li>
+          <li>進入 c6 時隨機抽一道掛 <code>forceCornerQte</code>、其餘道用 fallback（-10）。</li>
+          <li>賽段 length=2 動、<strong>第 1 動結算後立即重抽油污位置</strong>、第 2 動進來時玩家看到的就是新位置。</li>
+          <li>若第 1 動觸發了 QTE、reroll 會延後到 QTE 結束（<code>endBendQte</code> 切回 playing 時）再執行、避免 QTE 結算讀到錯位的 laneBonuses。</li>
+          <li>實作：<code>rerollCircuitHazards()</code> 函式、<code>app.stage5._pendingHazardReroll</code> flag。</li>
         </ul>
 
-        <p><strong>對手在中道（lane 1）：</strong></p>
+        <p><strong>玩家在油污道：</strong></p>
+        <ul>
+          <li>結算後在油污道 → <strong>強制觸發彎道 QTE</strong>（不看速度、無視 speedLimit）。</li>
+          <li>QTE 成功：正常吃 +10、不位移。</li>
+          <li>QTE 失敗：<strong>-1 輪胎</strong> + <strong>+1 張失誤牌</strong>（沿用既有副作用）+ <strong>滑到隨機鄰道</strong>（50/50）。</li>
+          <li><strong>清道夫光環抵消（v0.9+）：</strong>對手是清道夫 B 時、玩家踏入油污道<strong>完全免疫</strong>強制 QTE、不觸發。<code>checkBendSpeedLimit</code> 內判斷。</li>
+        </ul>
+
+        <p><strong>對手在油污道：</strong></p>
         <ul>
           <li>對手不打 QTE、改用 <strong>50% 機率失敗</strong>判定（在 <code>resolveOpponentCircuit</code> 之前判定）。</li>
-          <li>成功（50%）：留在中道、結算用 +10。</li>
-          <li>失敗（50%）：滑到隨機鄰道、結算改用該鄰道 -10（不是雙重懲罰，是把加成從 +10 變 -10）。</li>
-          <li><strong>AI 期望值</strong>：對手評估中道時，期望加成 = 0.5 × (+10) + 0.5 × (鄰道平均 -10) = 0。所以對手仍會傾向中央（兩邊真實 -10 比 0 差），但不會誤把中央當純好處。</li>
+          <li>成功（50%）：留在油污道、結算用 +10。</li>
+          <li>失敗（50%）：滑到隨機鄰道、結算改用該鄰道 -10。</li>
+          <li><strong>AI 期望值</strong>：對手評估油污道時、期望加成 = 0.5 × (+10) + 0.5 × (鄰道 -10) = 0。所以對手仍會傾向、但不會誤判為純好處。</li>
+          <li><strong>清道夫光環：</strong>對手自己是清道夫時、自家光環免疫油污。</li>
         </ul>
 
         <p><strong>整段 QTE 難度 +1 級：</strong></p>
@@ -486,7 +498,7 @@
           <li>UI 提示：每條道頂部都顯示「⚠ QTE 難度 +1 級」（橙色、所有道）。</li>
         </ul>
 
-        <p><strong>視覺：</strong>中道（lane 1）道格遠方有紫色油污 sprite（橢圓 + 光澤 + 「油」字）。</p>
+        <p><strong>視覺：</strong>當下被指定為油污的那道、道格遠方有紫色油污 sprite（橢圓 + 光澤 + 「油」字）。位置隨機抽的、跟著賽段每動 reroll 變化。</p>
 
         <p><strong>跟既有牌互動：</strong></p>
         <ul>
@@ -515,19 +527,20 @@
       <!-- c7 -->
       <div class="circuit-card">
         <h4>c7&nbsp;&nbsp;坑洞段 🕳️ <span class="tag" style="background:rgba(87,229,133,0.2); color:#57e585; border:1px solid rgba(87,229,133,0.5);">已實作 v0.7</span></h4>
-        <p class="tension"><strong>核心張力：</strong>3 道 add 都 +5，但其中 <strong>2 道有坑、1 道安全</strong>。坑洞位置玩家可見、對手會自動避——但對手沒 action 那回合避不了。</p>
+        <p class="tension"><strong>核心張力：</strong>3 道 add 都 +5，但其中 <strong>2 道有坑、1 道安全</strong>。坑洞位置玩家可見、對手會自動避。<strong>v0.7+ 多賽段內每動位置會重抽</strong>、玩家不能死記。</p>
 
         <table>
           <tbody>
             <tr><td><strong>id</strong></td><td><code>c7</code></td></tr>
             <tr><td><strong>name</strong></td><td>坑洞段</td></tr>
             <tr><td><strong>lanes</strong></td><td>3</td></tr>
+            <tr><td><strong>length</strong></td><td>2 動</td></tr>
             <tr><td><strong>bendCurve</strong></td><td>0.1（微彎）</td></tr>
             <tr><td><strong>加成類型</strong></td><td>add（三道相同 +5）+ 隨機坑洞傷害</td></tr>
             <tr><td><strong>QTE 難度</strong></td><td>普通</td></tr>
             <tr><td><strong>lane bonuses</strong></td><td>
               左道 / 中道 / 右道：全部 add +5<br>
-              <strong>2 道隨機有坑</strong>（進關時抽 1 道為安全道、其他全是坑），玩家可見
+              <strong>2 道隨機有坑</strong>、玩家可見、<strong>每動作之間重抽位置</strong>
             </td></tr>
           </tbody>
         </table>
@@ -535,6 +548,7 @@
         <p><strong>坑洞規則：</strong></p>
         <ul>
           <li>進入 c7 時（<code>applyCircuit</code>）隨機抽 0-2 之一為安全道、其他兩道為坑洞道。</li>
+          <li><strong>v0.7+ 多賽段重抽：</strong>賽段 length=2 動、第 1 動結算後立即重抽坑洞位置、第 2 動進來時玩家看到的就是新位置。實作：<code>rerollCircuitHazards()</code> 在 <code>advanceCircuitOnCard</code> 內 <code>stepsLeft &gt; 0</code> 時觸發。若該動作觸發 QTE、reroll 會延後到 <code>endBendQte</code> 切回 playing 時執行（避免 QTE 結算讀錯位 laneBonuses）。</li>
           <li>坑洞道在 UI 上有明顯 sprite（黑橢圓 + 紅外框 + 「坑」字）—— <strong>玩家可見</strong>。</li>
           <li>結算後人在坑洞道：
             <ul>
@@ -553,14 +567,14 @@
           <li><strong>例外：清道夫</strong>不需要避坑（光環免疫）、AI 不對清道夫做避坑處理。</li>
         </ul>
 
-        <p><strong>清道夫(B)光環互動：</strong></p>
+        <p><strong>清道夫 (B) 光環互動 — v0.9+ 擴大保護：</strong></p>
         <ul>
-          <li><strong>清道夫光環免疫所有賽道災害</strong>：當前對手是清道夫時、踩到任何坑洞道 → <strong>不降速</strong>；踩到油污中道 → 不會 50% 滑開。</li>
-          <li>玩家在「清道夫所在道」踩坑 → 也免疫（光環延伸到玩家）。</li>
-          <li>玩家可以主動跟到清道夫所在道避坑——多了一個戰術層。</li>
+          <li><strong>清道夫光環免疫所有賽道災害</strong>：對手是清道夫時、踩到任何坑洞道 → <strong>不降速</strong>；踩到油污道 → 不會 50% 滑開。</li>
+          <li><strong>玩家也完全免疫（v0.9+ 新增）：</strong>之前只在「玩家踩到清道夫所在道」才被光環保護、現在 <strong>不需要在光環道、整段都安全</strong>。<code>checkPotholeDamage</code> 中 <code>playerSafeAura = playerHit && auraActive</code>（移除 lane 條件）、<code>checkBendSpeedLimit</code> 中 c6 油污 forceCornerQte 也直接 return 不觸發 QTE。</li>
+          <li>設計意圖：清道夫的賣點是「賽道災害免疫」、要強到讓玩家覺得這對手場「不一樣」、值得改打法。</li>
         </ul>
 
-        <p><strong>視覺：</strong>坑洞道頂部畫黑橢圓 sprite + 紅色警告外框 + 「坑」字。</p>
+        <p><strong>視覺：</strong>坑洞道頂部畫黑橢圓 sprite + 紅色警告外框 + 「坑」字。位置隨著賽段 reroll 變化。</p>
 
 <pre><code>{
   id:"c7", name:"坑洞段", icon:"🕳", lanes:3, bendCurve:0.1, roadWidthScale:1.0,
