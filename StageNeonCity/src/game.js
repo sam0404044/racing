@@ -564,11 +564,42 @@ function dealStage2Initial() {
 //                 "canOvertake"  — 超車/Pass 提示出現（事件）
 //                 "auto"         — 時間到自動推進（autoDelay ms）
 //   autoDelay    "auto" 用：延遲多久才推進（毫秒）
-//   fallbackTimeout 事件型用：等了這麼久還沒觸發 → 顯示「略過」按鈕（毫秒）
+
+// ─── Spotlight 動態工具 ─────────────────────────────────────────────────
+// 對手名條的實際位置（每 frame 變化、跟隨對手車）
+// 名條畫在對手車頂上方、用 app._lastOpponentRenderX/Y/W 緩存值計算
+function spotlightAroundOpponentPlate() {
+  const x = app._lastOpponentRenderX;
+  const y = app._lastOpponentRenderY;
+  const w = app._lastOpponentRenderW;
+  if (x == null || y == null) {
+    // 還沒 render 過、用 fallback
+    return { x: 0, y: app.h * 0.30, w: app.w, h: app.h * 0.18 };
+  }
+  // 對手車寬 ~82、高 ~40。名條畫在頂上方、約 100px 高
+  // spotlight 從車頂上方 110px、寬約 250px、高約 130px（涵蓋名條+對手車）
+  const padX = 120, plateH = 130;
+  return {
+    x: x - padX,
+    y: y - 20 - plateH,
+    w: padX * 2,
+    h: plateH + 50,
+  };
+}
+
+// 教學卡放在對手下方（離開對手 spotlight）
+function textPosBelowOpponent() {
+  const y = app._lastOpponentRenderY ?? app.h * 0.6;
+  // 卡放在對手車下方一段距離（避免擋住對手）
+  // 對手通常在 0.62~0.72h、所以卡放在 0.85h 附近
+  return { x: app.w * 0.5, y: Math.min(app.h * 0.85, y + 160) };
+}
+
 const TUTORIAL_STEPS = [
   // 1: 賽段（概念介紹）
   {
     id: "segments",
+    group: "賽段",
     title: "賽段",
     body: "比賽由多個賽段組成、每個賽段由多條賽道組成。",
     spotlight: null,
@@ -578,15 +609,26 @@ const TUTORIAL_STEPS = [
   // 2: 賽段（右上角預告位置）
   {
     id: "segmentsPanel",
+    group: "賽段",
     title: "賽段",
     body: "這裡會顯示當前賽段，以及預告下一個賽段。",
-    spotlight: () => ({ x: app.w - 318, y: 8, w: 312, h: 200 }),
-    textPos: () => ({ x: app.w * 0.4, y: app.h * 0.3 }),
+    spotlight: () => {
+      const r = app._nextCircuitPanelRect;
+      if (!r) return { x: app.w - 318, y: 8, w: 312, h: 200 };
+      return { x: r.x - 4, y: r.y - 4, w: r.w + 8, h: r.h + 8 };
+    },
+    textPos: () => {
+      const r = app._nextCircuitPanelRect;
+      const panelLeft = r ? r.x : (app.w - 314);
+      const cardW = 440;
+      return { x: panelLeft - 16 - cardW / 2, y: app.h * 0.25 };
+    },
     advance: "continue",
   },
   // 3: 賽道
   {
     id: "lanes",
+    group: "賽道",
     title: "賽道",
     body: "當前賽段有三條賽道。",
     spotlight: () => {
@@ -599,6 +641,7 @@ const TUTORIAL_STEPS = [
   // 4: 賽道加成
   {
     id: "bonuses",
+    group: "賽道",
     title: "賽道加成",
     body: "上方告示牌顯示各道的加成（+10 / -10 / 0）。",
     spotlight: () => {
@@ -608,18 +651,37 @@ const TUTORIAL_STEPS = [
     textPos: () => ({ x: app.w * 0.5, y: app.h * 0.62 }),
     advance: "continue",
   },
-  // 3: 打牌到自己道（互動）
+  // 5: 打牌——概念
+  {
+    id: "playCardConcept",
+    group: "打牌",
+    title: "打牌",
+    body: "將想要結算的手牌、移動到當前的道，\n指示車手做出行動。",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+  },
+  // 6: 打牌——拖看看（互動：要丟到自己道）
   {
     id: "playCard",
-    title: "打牌",
-    body: "拖一張牌到「自己現在的道」、結算速度加成。",
+    group: "打牌",
+    title: "試試看",
+    body: "拖牌時、上方會預估在此道行動後的最終速度。",
     spotlight: () => {
       if (app.drag) {
         const z = app.zones?.lanes?.[app.playerLane];
         if (z) {
           const horizon = app.h * 0.38;
-          const top = horizon - 90;
-          return { x: z.x - 10, y: top, w: z.w + 20, h: (z.y + z.h) - top };
+          // 兩個獨立框：上方速度告示牌 + 路面玩家當前道
+          // 速度告示在 horizon - 40 附近、高度約 36px
+          const labelTop = horizon - 64;
+          const labelH = 48;
+          return [
+            // 速度告示框（窄、只包此道告示牌）
+            { x: z.x - 6, y: labelTop, w: z.w + 12, h: labelH },
+            // 路面框
+            { x: z.x - 10, y: horizon - 6, w: z.w + 20, h: (z.y + z.h) - horizon + 6 },
+          ];
         }
       }
       return { x: 0, y: app.h - 220, w: app.w, h: 220 };
@@ -627,11 +689,387 @@ const TUTORIAL_STEPS = [
     textPos: () => ({ x: app.w * 0.5, y: app.h * 0.22 }),
     advance: "playCard",
   },
+  // 7: 打牌——結算順序（玩家剛打完、飛字結算給他看）
+  //   waitForAnimation: true → 教學卡先隱藏、等飛字 + inputLocked 結束才出現
+  //   noOverlay: true → 卡片出現時不暗化背景（讓玩家持續看到場上動畫）
+  {
+    id: "playCardOrder",
+    group: "打牌",
+    title: "結算順序",
+    body: "有注意到嗎？卡牌效果先結算、再結算道路加成。",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.4 }),
+    advance: "continue",
+    waitForAnimation: true,
+    noOverlay: true,
+  },
   // 4: 換道（互動）
   {
     id: "changeLane",
+    group: "換道",
     title: "換道",
     body: "拖到「不同道」就是換道——牌會棄掉、效果不結算。",
+    spotlight: () => {
+      // 拿牌中：高光「沒有對手、也不是玩家」的道（drop 也只接受這些道）
+      if (app.drag) {
+        const rects = [];
+        const horizon = app.h * 0.38;
+        const top = horizon - 90;
+        for (let i = 0; i < app.laneCount; i++) {
+          if (i === app.playerLane) continue;
+          if (i === app.opponentLane) continue;
+          const z = app.zones?.lanes?.[i];
+          if (z) rects.push({ x: z.x - 10, y: top, w: z.w + 20, h: (z.y + z.h) - top });
+        }
+        if (rects.length > 0) return rects;
+      }
+      // 沒拿牌：高光手牌區
+      return { x: 0, y: app.h - 220, w: app.w, h: 220 };
+    },
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.22 }),
+    advance: "laneChange",
+  },
+  // 5: 換道代價（auto）
+  {
+    id: "laneCost",
+    group: "換道",
+    title: "換道扣速",
+    body: "注意！跨道會扣速度。\n跨越多道扣越多速度。",
+    spotlight: () => ({ x: app.w - 300, y: app.h - 220, w: 280, h: 100 }),
+    textPos: () => ({ x: app.w * 0.4, y: app.h * 0.5 }),
+    advance: "auto",
+    autoDelay: 3500,
+    noOverlay: true,
+  },
+  // 6: 行動——兩種類型
+  {
+    id: "actionsTypes",
+    group: "行動",
+    title: "兩種行動",
+    body: "行動分打牌與換道：\n把牌打在自己賽道上（結算卡牌效果）\n把牌打在其他賽道上（棄牌不結算效果、但換到指定賽道）",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+  },
+  // 7: 行動——推進賽段
+  {
+    id: "actionsAdvance",
+    group: "行動",
+    title: "每行動進一段",
+    body: "每一個行動、車子都會往前一個賽段格。",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+  },
+  // 8: 行動——賽段倒數（高光右上面板的當前賽段區）
+  {
+    id: "actionsSegmentCount",
+    group: "行動",
+    title: "賽段長度",
+    body: "右上方倒數當前賽段剩幾格。\n跑完就進入下一賽段。",
+    spotlight: () => {
+      // 右上面板的「當前賽段」一行（從黃框底到面板底）
+      const r = app._nextCircuitPanelRect;
+      if (!r) return { x: app.w - 318, y: 174, w: 312, h: 70 };  // fallback
+      return {
+        x: r.x - 4,
+        y: r.currentRowTop - 4,
+        w: r.w + 8,
+        h: (r.y + r.h) - r.currentRowTop + 8,
+      };
+    },
+    textPos: () => {
+      // 卡放在面板左側
+      const r = app._nextCircuitPanelRect;
+      const panelLeft = r ? r.x : (app.w - 314);
+      const cardW = 440;
+      // 卡的右緣貼面板左緣 - 16
+      return { x: panelLeft - 16 - cardW / 2, y: app.h * 0.3 };
+    },
+    advance: "continue",
+  },
+  // 對手——目標
+  {
+    id: "opponentGoal",
+    group: "超車",
+    title: "超對手車",
+    body: "接下來我們要想辦法超對手車。",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+  },
+  // 對手——超車三條件
+  {
+    id: "overtakeConditions",
+    group: "超車",
+    title: "超車條件",
+    body: "超車必須同時滿足三項：\n・車速大於前車\n・與前車不同道\n・對手缺乏專注度",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+  },
+  //   onEnter: 降對手速 + 強制玩家換到非對手道（保證條件達成）
+  {
+    id: "tryOvertakeReadyLane",
+    group: "超車",
+    title: "條件 1：不同道",
+    body: "我們目前與前車不同道。",
+    spotlight: () => {
+      // 高光玩家車道 + 對手車道（兩個 rect）
+      const rects = [];
+      const horizon = app.h * 0.38;
+      const top = horizon - 90;
+      for (const li of [app.playerLane, app.opponentLane]) {
+        if (li == null) continue;
+        const z = app.zones?.lanes?.[li];
+        if (z) rects.push({ x: z.x - 10, y: top, w: z.w + 20, h: (z.y + z.h) - top });
+      }
+      return rects.length > 0 ? rects : null;
+    },
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.16 }),
+    advance: "continue",
+    onEnter: () => {
+      // 降對手車速到玩家 -5、確保「車速大於前車」條件
+      app.opponentSpeed = Math.max(10, (app.playerSpeed ?? 30) - 5);
+    },
+  },
+  // 對手——試試超車 (條件 2: 速度)
+  {
+    id: "tryOvertakeReadySpeed",
+    group: "超車",
+    title: "條件 2：車速",
+    body: "且速度快於前車。",
+    spotlight: () => {
+      // 高光右下角玩家速度區（statusHudRect y+60~y+114）
+      const x = app.w - 300, y = app.h - 224;
+      return { x, y: y + 56, w: 276, h: 60 };
+    },
+    textPos: () => ({ x: app.w - 480, y: app.h - 350 }),
+    advance: "continue",
+  },
+  // 超車——丟牌到穩定區（降 QTE 難度）
+  //   要丟 2 張才推進（requireCount: 2）
+  //   dropToStabilityOnly: 玩家可拖牌、但只能丟到穩定區（其他地方都擋）
+  {
+    id: "tryOvertakeStability",
+    group: "超車",
+    title: "降低難度",
+    body: "既然現在已經準備好超車了、\n那就額外增加車子的穩定度。\n把 2 張牌丟到左下穩定區、\n可以降低本回合 QTE 難度。",
+    spotlight: () => {
+      const rects = [];
+      // 穩定區
+      const z = app.zones?.stabilityZone;
+      if (z) rects.push({ x: z.x - 6, y: z.y - 6, w: z.w + 12, h: z.h + 12 });
+      // 手牌：計算實際手牌的 bbox（避免整條底部都亮）
+      const cards = app.zones?.cards;
+      if (cards && cards.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const c of cards) {
+          minX = Math.min(minX, c.rect.x);
+          minY = Math.min(minY, c.rect.y);
+          maxX = Math.max(maxX, c.rect.x + c.rect.w);
+          maxY = Math.max(maxY, c.rect.y + c.rect.h);
+        }
+        rects.push({ x: minX - 12, y: minY - 12, w: maxX - minX + 24, h: maxY - minY + 24 });
+      }
+      return rects;
+    },
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.35 }),
+    advance: "stabilityDrop",
+    requireCount: 2,
+    dropToStabilityOnly: true,
+    strictGate: true,  // 擋超車鈕、Pass 鈕
+  },
+  {
+    id: "tryOvertakePress",
+    group: "超車",
+    title: "嘗試超車",
+    body: "請嘗試超車。",
+    spotlight: () => {
+      const r = app._overtakeBtnRect;
+      if (!r) return { x: app.w * 0.5, y: app.h - 290, w: 200, h: 80 };
+      return { x: r.x - 8, y: r.y - 8, w: r.w + 16, h: r.h + 16 };
+    },
+    // 卡片下移、貼到超車鈕上方
+    textPos: () => {
+      const r = app._overtakeBtnRect;
+      const btnY = r ? r.y : (app.h - 260);
+      return { x: app.w * 0.5, y: btnY - 100 };
+    },
+    advance: "overtakeButton",
+    strictGate: true,
+  },
+  // 超車——QTE 難度說明（玩家看完按繼續）
+  {
+    id: "tryOvertakeQteWarn",
+    group: "超車",
+    title: "QTE 難度",
+    body: "速度越快、車體越難控制、QTE 難度越高。\n所以速度不是越快越好。",
+    spotlight: () => {
+      const r = app._qteDifficultyPanelRect;
+      if (!r) return null;
+      return { x: r.x - 6, y: r.y - 6, w: r.w + 12, h: r.h + 12 };
+    },
+    // 卡片下移、貼難度面板上緣
+    textPos: () => {
+      const r = app._qteDifficultyPanelRect;
+      const panelTop = r ? r.y : app.h * 0.42;
+      return { x: app.w * 0.5, y: panelTop - 70 };
+    },
+    advance: "continue",
+  },
+  // 超車——穩定區降階回饋（呼應 tryOvertakeStability）
+  {
+    id: "tryOvertakeStabilityPaid",
+    group: "超車",
+    title: "穩定區生效",
+    body: "我們剛剛把牌丟到穩定區、\n讓本回合 QTE 變得更容易、\n更容易超過對手。",
+    spotlight: () => {
+      // 高光難度面板「空力區」那一行
+      const r = app._qteDifficultyPanelRect;
+      if (!r) return null;
+      // 空力區是面板倒數第 2 列、約 panel bottom - 50
+      return { x: r.x + 16, y: r.y + r.h - 56, w: r.w - 32, h: 26 };
+    },
+    textPos: () => {
+      const r = app._qteDifficultyPanelRect;
+      const panelTop = r ? r.y : app.h * 0.42;
+      return { x: app.w * 0.5, y: panelTop - 90 };
+    },
+    advance: "continue",
+  },
+  // 超車——按開始 QTE
+  {
+    id: "tryOvertakeQteStart",
+    group: "超車",
+    title: "開始挑戰",
+    body: "準備好了就開始超車 QTE。",
+    spotlight: () => {
+      const r = app._qteStartBtnRect;
+      if (!r) return null;
+      return { x: r.x - 8, y: r.y - 8, w: r.w + 16, h: r.h + 16 };
+    },
+    // 卡片下移、貼難度面板上緣
+    textPos: () => {
+      const r = app._qteDifficultyPanelRect;
+      const panelTop = r ? r.y : app.h * 0.42;
+      return { x: app.w * 0.5, y: panelTop - 70 };
+    },
+    advance: "overtakeStart",
+    noOverlayInQte: true,
+  },
+  // 超車——新回合補牌
+  {
+    id: "roundResetDealt",
+    group: "超車",
+    title: "回合結束",
+    body: "新的回合開始、會補到 5 張手牌。",
+    spotlight: () => ({ x: 0, y: app.h - 220, w: app.w, h: 220 }),
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+    showHand: true,
+    waitForAnimation: true,
+  },
+  // 超車——保留手牌策略
+  {
+    id: "roundResetKeep",
+    group: "超車",
+    title: "保留手牌",
+    body: "上回合沒打的牌會留在手上。\n好好思考要留什麼牌到下一手、\n是能持續穩定超車的關鍵！",
+    spotlight: () => {
+      // 高光 hand 中的舊牌（index < handOldSize）
+      const oldSize = app.stage2?.handOldSize ?? 0;
+      if (oldSize === 0) {
+        // 沒舊牌（玩家上回合手牌全打光了）→ 高光整個 hand 區
+        return { x: 0, y: app.h - 220, w: app.w, h: 220 };
+      }
+      const rects = [];
+      for (const z of (app.zones.cards || [])) {
+        if (z.index < oldSize) {
+          rects.push({ x: z.rect.x - 4, y: z.rect.y - 4, w: z.rect.w + 8, h: z.rect.h + 8 });
+        }
+      }
+      return rects.length > 0 ? rects : { x: 0, y: app.h - 220, w: app.w, h: 220 };
+    },
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.4 }),
+    advance: "continue",
+    showHand: true,
+  },
+  // 對手——開始阻擋（陪跑員從這步開始每回合都動）
+  //   onEnter：把陪跑員 behavior cooldown 從 3 改成 1、重置 lastTriggeredAt 讓下一動就 ready
+  {
+    id: "opponentBlocking",
+    group: "對手",
+    title: "對手開始阻擋",
+    body: "對手開始要來阻擋我們了。",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+    onEnter: () => {
+      // 改陪跑員 cooldown=1（每回合都動）
+      if (app.opponentBehaviors) {
+        for (const b of app.opponentBehaviors) {
+          if (b.id === "p-block") {
+            b.cooldown = 1;
+          }
+        }
+      }
+      // 重置 lastTriggeredAt 讓陪跑員下一個玩家動作就 ready 切道
+      if (app.opponentBehaviorLastTriggered) {
+        app.opponentBehaviorLastTriggered["p-block"] = -1;
+      }
+    },
+  },
+  // 對手——先判斷對手行動
+  {
+    id: "opponentJudge",
+    group: "對手",
+    title: "判斷對手",
+    body: "在我們做出下一個決策前、\n先來判斷對手的行動。",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+  },
+  // 對手——名條 spotlight
+  {
+    id: "opponentName",
+    group: "對手",
+    title: "對手名條",
+    body: "我們可以看到對手車頂的名條。",
+    spotlight: () => spotlightAroundOpponentPlate(),
+    textPos: () => textPosBelowOpponent(),
+    advance: "continue",
+  },
+
+  // 對手——專注度
+  {
+    id: "opponentFocus",
+    group: "對手",
+    title: "專注度",
+    body: "對手名條上的圓點為專注度。\n每當車手成功超過對手時、\n對手便會磨滅掉一點專注阻擋超車。\n趁對手缺乏專注時超車、便能順利超過對手的車。",
+    spotlight: () => spotlightAroundOpponentPlate(),
+    textPos: () => textPosBelowOpponent(),
+    advance: "continue",
+  },
+
+  // 對手——下一動意圖
+  {
+    id: "opponentIntent",
+    group: "對手",
+    title: "下一動意圖",
+    body: "對手車頂預告下一動的意圖：\n⛔ 阻擋你　💨 遠離你　❓ 不確定\n\n可以隨時把滑鼠移到敵人名條上、\n查看詳細資訊。",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+  },
+
+  // 對手——試做一動觀察反應（引導玩家「換道躲避」）
+  //   拖牌時動態高光非玩家當前道（指示玩家可以換到哪）
+  {
+    id: "opponentTryAction",
+    group: "對手",
+    title: "切到別道",
+    body: "對手要來阻擋你、\n我們切到別道躲避他。",
     spotlight: () => {
       if (app.drag) {
         const rects = [];
@@ -644,55 +1082,66 @@ const TUTORIAL_STEPS = [
         }
         if (rects.length > 0) return rects;
       }
+      // 沒拿牌時：高光手牌區
       return { x: 0, y: app.h - 220, w: app.w, h: 220 };
     },
-    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.22 }),
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.4 }),
     advance: "laneChange",
   },
-  // 5: 換道代價（auto）
+
+  // 對手——回應（等動畫播完、解釋博弈）
   {
-    id: "laneCost",
-    title: "換道扣速",
-    body: "跨愈多道扣愈多。",
-    spotlight: () => ({ x: app.w - 300, y: app.h - 220, w: 280, h: 100 }),
-    textPos: () => ({ x: app.w * 0.4, y: app.h * 0.5 }),
-    advance: "auto",
-    autoDelay: 3500,
-  },
-  // 6: 對手名條
-  {
-    id: "opponentName",
-    title: "對手名條",
-    body: "對手車頂的就是名條。",
-    spotlight: () => ({ x: 0, y: app.h * 0.30, w: app.w, h: app.h * 0.18 }),
-    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.72 }),
+    id: "opponentResponded",
+    group: "對手",
+    title: "博弈",
+    body: "看！對手切到你剛剛的位置。\n對手如果意圖是要阻擋你、\n就會切到你行動前的位置。",
+    spotlight: () => spotlightAroundOpponentPlate(),
+    textPos: () => textPosBelowOpponent(),
     advance: "continue",
+    waitForAnimation: true,
   },
-  // 7: 專注度
-  {
-    id: "opponentFocus",
-    title: "專注度",
-    body: "圓點是對手的專注度。\n超車 QTE 成功磨掉 1 點、磨光才真的超過。",
-    spotlight: () => ({ x: 0, y: app.h * 0.30, w: app.w, h: app.h * 0.18 }),
-    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.72 }),
-    advance: "continue",
-  },
-  // 8: 意圖 icon
-  {
-    id: "opponentIntent",
-    title: "下一動意圖",
-    body: "⛔ 阻擋你　💨 閃開你　❓ 不確定",
-    spotlight: () => ({ x: 0, y: app.h * 0.30, w: app.w, h: app.h * 0.18 }),
-    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.72 }),
-    advance: "continue",
-  },
-  // 9: 尾流（事件、陪跑員此步起解凍）
+
+  // 對手——尾流前置（事件：玩家在原道打牌就會跟對手同道）
+  //   spotlight：玩家當前道 + 手牌（兩個 rect）
   {
     id: "slipstream",
+    group: "對手",
     title: "尾流",
-    body: "陪跑員開始動了！\n跟對手同道吃尾流 +30、每回合只能一次。",
+    body: "對手又想要切到我們面前阻擋我們！\n正好、我們可以等他過來吃他的尾流！",
     spotlight: () => {
-      const z = app.zones?.lanes?.[app.opponentLane];
+      const rects = [];
+      const z = app.zones?.lanes?.[app.playerLane];
+      if (z) {
+        const horizon = app.h * 0.38;
+        const top = horizon - 90;
+        rects.push({ x: z.x - 10, y: top, w: z.w + 20, h: (z.y + z.h) - top });
+      }
+      // 手牌實際 bbox
+      const cards = app.zones?.cards;
+      if (cards && cards.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const c of cards) {
+          minX = Math.min(minX, c.rect.x);
+          minY = Math.min(minY, c.rect.y);
+          maxX = Math.max(maxX, c.rect.x + c.rect.w);
+          maxY = Math.max(maxY, c.rect.y + c.rect.h);
+        }
+        rects.push({ x: minX - 12, y: minY - 12, w: maxX - minX + 24, h: maxY - minY + 24 });
+      }
+      return rects;
+    },
+    // 卡片放上方、不擋手牌
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.22 }),
+    advance: "slipstream",
+  },
+  // 對手——尾流取得（事件後反饋、等動畫播完）
+  {
+    id: "slipstreamGained",
+    group: "對手",
+    title: "尾流 +30",
+    body: "這時候我們就會跟對手同道、吃到尾流 +30。",
+    spotlight: () => {
+      const z = app.zones?.lanes?.[app.playerLane];
       if (z) {
         const horizon = app.h * 0.38;
         const top = horizon - 90;
@@ -700,43 +1149,243 @@ const TUTORIAL_STEPS = [
       }
       return null;
     },
-    textPos: () => {
-      // 對手在左 → 卡放右；對手在右 → 卡放左；中間 → 卡放底部
-      if (app.opponentLane === 0) return { x: app.w * 0.72, y: app.h * 0.5 };
-      if (app.opponentLane >= app.laneCount - 1) return { x: app.w * 0.28, y: app.h * 0.5 };
-      return { x: app.w * 0.5, y: app.h * 0.82 };
-    },
-    advance: "slipstream",
-    fallbackTimeout: 12000,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.2 }),
+    advance: "continue",
+    waitForAnimation: true,
   },
-  // 10: 對手免疫加成
+  // 對手——策略思考
   {
-    id: "opponentImmune",
-    title: "對手免疫加成",
-    body: "對手不吃賽道加成——賽道是給你的工具。",
+    id: "slipstreamStrategy",
+    group: "對手",
+    title: "策略思考",
+    body: "要思考目前的狀況、決定要留在此道、還是換道。\n要加速還是要吃尾流。",
     spotlight: null,
-    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.6 }),
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
     advance: "continue",
   },
-  // 11: 彎道限速（事件）
+
+  // 11: 彎道——介紹（onEnter 直接快轉到 c2 彎道賽段）
+  {
+    id: "bendIntro",
+    group: "彎道",
+    title: "彎道",
+    body: "彎道通常會有內彎跟外彎。\n內彎加速快、但容易出彎。\n外彎降速、但容易過彎。",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
+    onEnter: () => {
+      // 直接快轉到 c2 彎道賽段、不等玩家走完當前直線段
+      const s2 = app.stage2;
+      if (!s2 || !s2.circuitOrder) return;
+      const C2_IDX = STAGE2_CIRCUITS.findIndex(c => c.id === "c2");
+      if (C2_IDX < 0) return;
+      // 把 circuitIndex 跳到 c2、applyCircuit 套用彎道資料
+      s2.circuitIndex = C2_IDX;
+      applyCircuit(STAGE2_CIRCUITS[C2_IDX]);
+    },
+  },
+  // 12: 彎道——速限說明（事件：bendEntry 觸發、玩家進入彎道）
   {
     id: "bendLimit",
-    title: "彎道限速",
-    body: "彎道有限速、超速會觸發 QTE。\n內彎快但限嚴、外彎慢但寬。",
-    spotlight: null,
-    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.55 }),
-    advance: "bendEntry",
-    fallbackTimeout: 12000,
+    group: "彎道",
+    title: "彎道速限",
+    body: "彎道有速限。\n過彎時吃完彎道加成、若速度仍超過速限、\n就要進入過彎 QTE 檢定是否成功過彎。",
+    spotlight: () => {
+      // 高光左右限速圈（畫面上方天空區、橫跨路面寬度）
+      const horizon = app.h * 0.38;
+      const yEdge = horizon + 30 * UI_SCALE;
+      const bounds = roadLaneBoundsAt(yEdge);
+      return {
+        x: bounds.left - 70,
+        y: yEdge - 80,
+        w: (bounds.right - bounds.left) + 140,
+        h: 90,
+      };
+    },
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.7 }),
+    advance: "continue",
   },
-  // 12: 超車 / Pass（事件）
+  // 13: 彎道——挑戰 QTE（引導玩家把牌打到內彎、保證觸發 QTE）
+  //   onEnter：把玩家設到外彎、speed 設高、保證換道到內彎結算後超速
+  //   拖牌 gate：只允許丟到內彎（lane 0）
+  //   advance：等彎道 QTE 完成
+  {
+    id: "bendTry",
+    group: "彎道",
+    title: "挑戰過彎",
+    body: "把任一張牌打到內彎、感受過彎 QTE。",
+    spotlight: () => {
+      if (app.drag) {
+        // 拖牌中：兩個 rect
+        //   1. 上方告示牌（彎道路面在 horizon 處的 lane 0 位置）
+        //   2. 下方拖牌判定區 lane 0
+        const rects = [];
+        const horizon = app.h * 0.38;
+        const bounds = roadLaneBoundsAt(horizon);
+        const laneCount = app.laneCount || 2;
+        const laneWAtHorizon = (bounds.right - bounds.left) / laneCount;
+        const cxLabel = bounds.left + 0.5 * laneWAtHorizon;
+        rects.push({ x: cxLabel - 70, y: horizon - 64, w: 140, h: 56 });
+        const z = app.zones?.lanes?.[0];
+        if (z) {
+          rects.push({ x: z.x - 10, y: z.y - 10, w: z.w + 20, h: z.h + 20 });
+        }
+        return rects;
+      }
+      // 沒拿牌：高光手牌區
+      const cards = app.zones?.cards;
+      if (cards && cards.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const c of cards) {
+          minX = Math.min(minX, c.rect.x);
+          minY = Math.min(minY, c.rect.y);
+          maxX = Math.max(maxX, c.rect.x + c.rect.w);
+          maxY = Math.max(maxY, c.rect.y + c.rect.h);
+        }
+        return { x: minX - 12, y: minY - 12, w: maxX - minX + 24, h: maxY - minY + 24 };
+      }
+      return { x: 0, y: app.h - 220, w: app.w, h: 220 };
+    },
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.22 }),
+    advance: "bendAttempt",
+    noOverlayInQte: true,
+    onEnter: () => {
+      app.playerLane = 1;
+      app.playerSpeed = 80;
+    },
+  },
+  // 14: 超車 / Pass（continue、按鈕顯示但鎖住）
   {
     id: "overtakePass",
+    group: "結束回合",
     title: "超車 / Pass",
-    body: "手牌空時超車/Pass 提示出現。\n速度 > 對手 + 不同道 → 超車；否則 Pass。",
-    spotlight: () => ({ x: app.w * 0.45, y: app.h - 290, w: 360, h: 80 }),
-    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.28 }),
-    advance: "canOvertake",
-    fallbackTimeout: 15000,
+    body: "在做出任何行動前都可以 Pass。\n符合超車條件時、才能選擇超車。",
+    spotlight: () => {
+      const r = app._overtakeBtnRect;
+      if (!r) return { x: app.w * 0.45, y: app.h - 290, w: 360, h: 80 };
+      return { x: r.x - 8, y: r.y - 8, w: r.w + 125, h: r.h + 16 };
+    },
+    textPos: () => {
+      const r = app._overtakeBtnRect;
+      const btnY = r ? r.y : (app.h - 260);
+      return { x: app.w - 240, y: btnY - 120 };
+    },
+    advance: "continue",
+    strictGate: true,  // 顯示按鈕但鎖住（tryOvertakePress 例外、此步不會放行）
+    waitForAnimation: true,
+  },
+  // 15a-pre1: 回顧——速度更快
+  //   onEnter：把當前對手 focus 強制歸 0、敘述才符合「對手缺乏專注」
+  {
+    id: "recapSpeed",
+    group: "完成超車",
+    title: "速度更快",
+    body: "你的速度比對手快、\n滿足超車條件之一。",
+    spotlight: () => {
+      const x = app.w - 300, y = app.h - 224;
+      return { x, y: y + 56, w: 276, h: 60 };
+    },
+    textPos: () => ({ x: app.w - 480, y: app.h - 350 }),
+    advance: "continue",
+    strictGate: true,
+    onEnter: () => {
+      const s2 = app.stage2;
+      if (!s2 || !s2.opponentFocusMap || !s2.ahead) return;
+      const oppId = s2.ahead[s2.ahead.length - 1];
+      if (oppId) s2.opponentFocusMap[oppId] = 0;
+    },
+  },
+  // 15a-pre2: 回顧——不同道
+  {
+    id: "recapLane",
+    group: "完成超車",
+    title: "不同道",
+    body: "你跟對手在不同道、\n滿足超車條件之二。",
+    spotlight: () => {
+      const rects = [];
+      const horizon = app.h * 0.38;
+      const top = horizon - 6;
+      const z1 = app.zones?.lanes?.[app.playerLane];
+      const z2 = app.zones?.lanes?.[app.opponentLane];
+      if (z1) rects.push({ x: z1.x - 10, y: top, w: z1.w + 20, h: (z1.y + z1.h) - top });
+      if (z2 && app.opponentLane !== app.playerLane) {
+        rects.push({ x: z2.x - 10, y: top, w: z2.w + 20, h: (z2.y + z2.h) - top });
+      }
+      return rects;
+    },
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.18 }),
+    advance: "continue",
+    strictGate: true,
+  },
+  // 15a-pre3: 回顧——對手缺乏專注
+  {
+    id: "recapFocus",
+    group: "完成超車",
+    title: "對手缺乏專注",
+    body: "對手已經缺乏專注、\n是超過他的好機會！",
+    spotlight: () => spotlightAroundOpponentPlate(),
+    textPos: () => textPosBelowOpponent(),
+    advance: "continue",
+    strictGate: true,
+  },
+  // 15a-pre4: 按超車鈕、完成 QTE
+  //   advance: overtakeAttempt（QTE 成功/失敗都推進）
+  //   noOverlayInQte: QTE 期間不畫黑幕
+  {
+    id: "recapPress",
+    group: "完成超車",
+    title: "超過前車吧！",
+    body: "按超車鈕、超過對手！",
+    spotlight: () => {
+      const r = app._overtakeBtnRect;
+      if (!r) return null;
+      return { x: r.x - 8, y: r.y - 8, w: r.w + 16, h: r.h + 16 };
+    },
+    textPos: () => {
+      // splash-overtake / rhythm-formal 階段：卡片移到頂部偏右、不擋難度面板跟 QTE 按鈕
+      if (app.mode === "splash-overtake" || app.mode === "rhythm-formal") {
+        return { x: app.w - 240, y: 80 };
+      }
+      // playing 階段：卡片放超車鈕上方
+      const r = app._overtakeBtnRect;
+      const btnY = r ? r.y : (app.h - 260);
+      return { x: app.w * 0.5, y: btnY - 100 };
+    },
+    advance: "overtakeAttempt",
+    strictGate: true,
+    noOverlayInQte: true,
+  },
+  // 15a: 對手介紹（高光左上名次面板的對手列表區）
+  //   waitForAnimation: 等超車成功 + 獎勵牌挑選完成、回到 playing
+  {
+    id: "rivalsIntro",
+    group: "目標",
+    title: "前方對手",
+    body: "你前方有對手。\n要一個一個超過他們。",
+    spotlight: () => ({ x: 8, y: 130, w: 252, h: 130 }),
+    textPos: () => ({ x: 480, y: 200 }),
+    advance: "continue",
+    waitForAnimation: true,
+  },
+  // 15b: 回合限制（高光標題列的「回合 X / 10」）
+  {
+    id: "rankingIntro",
+    group: "目標",
+    title: "10 回合內奪冠",
+    body: "要在 10 個回合內、\n超過所有對手、奪得第一！",
+    spotlight: () => ({ x: 8, y: 72, w: 252, h: 50 }),
+    textPos: () => ({ x: 480, y: 130 }),
+    advance: "continue",
+  },
+  // 16: 教學結束、儀式感（玩家正式開始的一刻）
+  {
+    id: "tutorialEnd",
+    group: "出發",
+    title: "教學結束",
+    body: "看來你已經了解基本規則。\n現在開始請相信身為領隊的直覺跟判斷。\n指揮車手拿下此次比賽的第一吧！",
+    spotlight: null,
+    textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
+    advance: "continue",
   },
 ];
 
@@ -749,30 +1398,52 @@ function drawTutorialOverlay(time) {
   if (!step) return;
   const ctx = app.ctx;
 
-  // 1. 暗化背景、用 evenodd 挖出 spotlight
-  // step.spotlight 可回傳：null | 單一 rect | 多個 rect 陣列
-  ctx.save();
-  ctx.fillStyle = "rgba(2,8,16,0.72)";
-  ctx.beginPath();
-  ctx.rect(0, 0, app.w, app.h);
-  const spotResult = step.spotlight ? step.spotlight() : null;
-  const spotRects = spotResult
-    ? (Array.isArray(spotResult) ? spotResult : [spotResult])
-    : [];
-  for (const r of spotRects) {
-    if (r) ctx.rect(r.x, r.y, r.w, r.h);
-  }
-  ctx.fill("evenodd");
-  // spotlight 邊框微光
-  if (spotRects.length > 0) {
-    const pulse = 0.55 + 0.45 * Math.sin(time * 0.005);
-    ctx.strokeStyle = `rgba(255, 220, 80, ${0.45 * pulse})`;
-    ctx.lineWidth = 2;
-    for (const r of spotRects) {
-      if (r) ctx.strokeRect(r.x, r.y, r.w, r.h);
+  // waitForAnimation：此步要等動畫播完才出現
+  //   條件：(a) 沒有 pendingAction、(b) 沒有 input lock、(c) 速度飛字閘門清空
+  //   playing 跟 prompt-overtake-or-pass 都算「玩家可操作」狀態、可以顯示教學
+  if (step.waitForAnimation) {
+    const anyGate = app._speedPopGates && app._speedPopGates.length > 0;
+    const anyPop = (app.speedPopsActive && app.speedPopsActive.length > 0)
+                || (app.speedPopsQueue && app.speedPopsQueue.length > 0);
+    const modeOk = (app.mode === "playing" || app.mode === "prompt-overtake-or-pass");
+    if (app.pendingAction || app.inputLocked || anyGate || anyPop || !modeOk) {
+      return;  // 還沒等到、這 frame 不畫教學
     }
   }
-  ctx.restore();
+
+  // 1. 暗化背景、用 evenodd 挖出 spotlight
+  // step.spotlight 可回傳：null | 單一 rect | 多個 rect 陣列
+  // noOverlay: true → 不暗化、只畫教學卡（讓玩家持續看到場上）
+  // noOverlayInQte: 在 QTE 進行中（rhythm-formal）也不暗化
+  const inQteMode = (app.mode === "rhythm-formal" || app.mode === "defense"
+    || app.mode === "bend-qte" || app.mode === "splash-bend"
+    || app.mode === "splash-overtake" || app.mode === "splash-defense"
+    || !!app._pendingBendQteTrigger);
+  const skipOverlay = step.noOverlay || (step.noOverlayInQte && inQteMode);
+  if (!skipOverlay) {
+    ctx.save();
+    ctx.fillStyle = "rgba(2,8,16,0.72)";
+    ctx.beginPath();
+    ctx.rect(0, 0, app.w, app.h);
+    const spotResult = step.spotlight ? step.spotlight() : null;
+    const spotRects = spotResult
+      ? (Array.isArray(spotResult) ? spotResult : [spotResult])
+      : [];
+    for (const r of spotRects) {
+      if (r) ctx.rect(r.x, r.y, r.w, r.h);
+    }
+    ctx.fill("evenodd");
+    // spotlight 邊框微光
+    if (spotRects.length > 0) {
+      const pulse = 0.55 + 0.45 * Math.sin(time * 0.005);
+      ctx.strokeStyle = `rgba(255, 220, 80, ${0.45 * pulse})`;
+      ctx.lineWidth = 2;
+      for (const r of spotRects) {
+        if (r) ctx.strokeRect(r.x, r.y, r.w, r.h);
+      }
+    }
+    ctx.restore();
+  }
 
   // 2. 教學卡片（高度依內文行數動態、單行 140px、每多一行 +22px）
   const bodyLines = (step.body || "").split("\n");
@@ -782,8 +1453,16 @@ function drawTutorialOverlay(time) {
   const cardX = pos.x - cardW/2;
   const cardY = pos.y - cardH/2;
   roundPanel(cardX, cardY, cardW, cardH, 14, "rgba(8,16,30,0.98)", "rgba(255,220,80,0.65)", 2);
-  // 進度
-  text(`新手教學  ${t.stepIndex + 1} / ${TUTORIAL_STEPS.length}`,
+  // 進度（顯示當前分組 + 組內位置；若無 group 退回全域進度）
+  let progressLabel;
+  if (step.group) {
+    const groupSteps = TUTORIAL_STEPS.filter(s => s.group === step.group);
+    const groupIdx = groupSteps.findIndex(s => s.id === step.id);
+    progressLabel = `${step.group}  ${groupIdx + 1} / ${groupSteps.length}`;
+  } else {
+    progressLabel = `新手教學  ${t.stepIndex + 1} / ${TUTORIAL_STEPS.length}`;
+  }
+  text(progressLabel,
     cardX + cardW/2, cardY + 22, 11, "rgba(255,220,80,0.8)", "800", "center");
   // 標題
   text(step.title, cardX + cardW/2, cardY + 52, 20, "#ffd980", "1000", "center");
@@ -808,16 +1487,22 @@ function drawTutorialOverlay(time) {
       tutorialAdvance();
     }
   } else if (step.advance === "continue") {
-    button("tutorial-continue", "繼續 →",
+    button("tutorial-continue", "繼續",
       cardX + cardW/2 - 60, cardY + cardH - 36, 120, 28, false, "start");
   } else {
     // 事件型：顯示對應提示文字
     const hintMap = {
-      playCard:    "↓ 拖任一張牌到「自己現在的道」",
-      laneChange:  "↓ 拖任一張牌到「不同道」",
-      slipstream:  "↓ 打牌或換道、把車手切到陪跑員的道",
-      bendEntry:   "↓ 繼續打牌或換道、直到進入下個彎道段",
-      canOvertake: "↓ 打完所有手牌、超車/Pass 提示就會出現",
+      playCard:        "↓ 拖任一張牌到「自己現在的道」",
+      laneChange:      "↓ 拖任一張牌到「不同道」",
+      playerAction:    "↓ 打牌或換道、做任何一個行動",
+      stabilityDrop:   "↓ 拖牌到左下車體面板（穩定區）",
+      slipstream:      "↓ 打牌在此道",
+      bendEntry:       "↓ 繼續打牌或換道、直到進入下個彎道段",
+      bendAttempt:     "↓ 繼續行動、完成彎道 QTE",
+      canOvertake:     "↓ 打完所有手牌、超車/Pass 提示就會出現",
+      overtakeButton:  "↓ 按超車鈕",
+      overtakeStart:   "↓ 按開始 QTE",
+      overtakeAttempt: "↓ 按開始 QTE、按 WASD 完成挑戰",
     };
     // 條件「已滿足」檢查：玩家可能在進入這步前就已經滿足條件、避免卡住
     const circ = currentCircuit();
@@ -837,12 +1522,7 @@ function drawTutorialOverlay(time) {
     } else {
       const hint = hintMap[step.advance];
       if (hint) {
-        text(hint, cardX + cardW/2, cardY + cardH - 38, 13, "rgba(140,255,160,0.95)", "900", "center");
-      }
-      // fallbackTimeout：等了 timeout 還沒觸發 → 顯示「略過」按鈕當保險絲
-      if (step.fallbackTimeout && elapsed >= step.fallbackTimeout) {
-        button("tutorial-continue", "略過 →",
-          cardX + cardW/2 - 50, cardY + cardH - 18, 100, 22, false, "primary");
+        text(hint, cardX + cardW/2, cardY + cardH - 18, 13, "rgba(140,255,160,0.95)", "900", "center");
       }
     }
   }
@@ -854,8 +1534,15 @@ function tutorialAdvance() {
   if (!t || !t.active) return;
   t.stepIndex += 1;
   t.stepShownAt = performance.now();
+  t.eventCount = 0;  // 重置事件計數（給 requireCount 用）
   if (t.stepIndex >= TUTORIAL_STEPS.length) {
     t.active = false;
+    return;
+  }
+  // 新 step 的 onEnter callback（用於降對手速、強制對手換道等 side effects）
+  const newStep = TUTORIAL_STEPS[t.stepIndex];
+  if (newStep && typeof newStep.onEnter === "function") {
+    try { newStep.onEnter(); } catch (e) { console.warn("tutorial onEnter:", e); }
   }
 }
 
@@ -867,30 +1554,57 @@ function tutorialNotify(event) {
   const step = TUTORIAL_STEPS[t.stepIndex];
   if (!step) return;
   if (step.advance === event) {
-    tutorialAdvance();
+    // 支援 step.requireCount：要這個 event 觸發 N 次才推進
+    const need = step.requireCount || 1;
+    if (need > 1) {
+      t.eventCount = (t.eventCount || 0) + 1;
+      if (t.eventCount >= need) {
+        t.eventCount = 0;
+        tutorialAdvance();
+      }
+    } else {
+      tutorialAdvance();
+    }
   }
 }
 
 // 當前教學步驟是否該擋住遊戲互動
 // 「繼續」/「auto」步：純資訊、要擋拖牌/超車鈕/Pass 鈕（玩家只能按 continue 或等 auto）
+// 「strictGate」步：擋拖牌跟 Pass，**但放行超車鈕**（用於 tryOvertakePress）
 // 事件步（playCard/laneChange/slipstream 等）：要讓玩家做指定動作，不擋
 function tutorialBlocksGameplay() {
   const t = app.stage2?.tutorial;
   if (!t || !t.active) return false;
   const step = TUTORIAL_STEPS[t.stepIndex];
   if (!step) return false;
-  return step.advance === "continue" || step.advance === "auto";
+  return step.advance === "continue" || step.advance === "auto" || !!step.strictGate;
+}
+
+// 嚴格 gate 步驟、超車鈕仍要可按（其他互動全擋）
+// 只有 tryOvertakePress / recapPress 步允許超車鈕、其他 strictGate 步驟一律鎖
+function tutorialAllowsOvertakeButton() {
+  const t = app.stage2?.tutorial;
+  if (!t || !t.active) return false;
+  const step = TUTORIAL_STEPS[t.stepIndex];
+  if (!step) return false;
+  return step.id === "tryOvertakePress" || step.id === "recapPress";
+}
+
+// 當前步驟是否要「顯示手牌但不能拖」（用 step.showHand: true 標記）
+// 範例：playCardOrder 步要讓玩家看到卡牌上的數字、但還不到拖牌時機
+function tutorialShowsHandReadonly() {
+  const t = app.stage2?.tutorial;
+  if (!t || !t.active) return false;
+  const step = TUTORIAL_STEPS[t.stepIndex];
+  if (!step) return false;
+  return !!step.showHand;
 }
 
 // 教學早期是否擋住對手實際行動
-// 在「教尾流」（id: "slipstream"）之前、陪跑員都不真的移動（保持原道）
-// 預告 icon（⛔）仍然顯示，讓玩家有機會看到對手意圖、但壓力先放低
+// 目前不擋（保留函式供未來需要時開啟）
+// 陪跑員從第一動就照 cooldown 倒數、第 3 動才真的切過來阻擋
 function tutorialBlocksOpponent() {
-  const t = app.stage2?.tutorial;
-  if (!t || !t.active) return false;
-  const slipstreamIdx = TUTORIAL_STEPS.findIndex(s => s.id === "slipstream");
-  if (slipstreamIdx < 0) return false;
-  return t.stepIndex < slipstreamIdx;
+  return false;
 }
 
 // 從 stage2 牌庫（base + permanent）發 N 張
@@ -904,6 +1618,8 @@ function dealStage2Hand() {
     s2.penaltyNextHand = 0;
   }
   handSize = Math.max(2, handSize);
+  // 記錄補牌前的 hand 大小（教學用：識別「上回合留下來的牌」）
+  s2.handOldSize = app.hand ? app.hand.length : 0;
   const toDraw = Math.max(0, handSize - (app.hand ? app.hand.length : 0));
   // 從 drawPile 抽，不夠時把 discardPile 洗進 drawPile
   for (let i = 0; i < toDraw; i++) {
@@ -1263,15 +1979,11 @@ function initStage2State() {
   };
   // 第一回合抽當前對手（→ "P" 陪跑員）
   app.stage2.currentOpponentId = pickNextOpponent();
-  // 教學版：賽段順序強制 [c3 → c2 → ...其他洗牌]
+  // 教學版：賽段順序全部直線（c3）、直到 bendLimit step 動態注入彎道
   //   c3：3 道直線（讓玩家學換道）
-  //   c2：彎道（讓 bendEntry trigger 必觸發）
-  //   其他賽段洗牌排在後面
+  //   彎道用 bendLimit step 的 onEnter 強制注入到下一段
   const C3_IDX = STAGE2_CIRCUITS.findIndex(c => c.id === "c3");
-  const C2_IDX = STAGE2_CIRCUITS.findIndex(c => c.id === "c2");
-  const restOfPool = STAGE2_NORMAL_CIRCUITS_POOL.filter(i => i !== C3_IDX && i !== C2_IDX);
-  shuffleArrayInPlace(restOfPool);
-  app.stage2.circuitOrder = [C3_IDX, C2_IDX, ...restOfPool];
+  app.stage2.circuitOrder = [C3_IDX, C3_IDX, C3_IDX, C3_IDX, C3_IDX, C3_IDX];
   app.stage2.circuitIndex = C3_IDX;
   applyCircuit(STAGE2_CIRCUITS[C3_IDX]);
   // 初始化各對手「起始專注度」（給 UI 當 max 用）
@@ -1406,6 +2118,8 @@ function dropCardToStability(cardIdx) {
   app.stabilityCharges += 1;
   app.stabilityDropFx = { until: performance.now() + 520 };
   pushSpeedPop("player", "🛡 空力 -1 階", "rgba(110,255,140,0.95)");
+  // 教學：通知有丟一張到穩定區
+  tutorialNotify("stabilityDrop");
   // 不算行動、不觸發對手、不重置 lastCard 連擊鏈
   // 玩家還在自己的動作中、繼續等下一個操作
   return true;
@@ -1480,6 +2194,7 @@ function playCardToLane(cardIdx, targetLane) {
       app.pendingAction = { kind: "lane", card, wasSameLane };
       // 教學：通知換道事件（如果當前步在等這個就推進）
       tutorialNotify("laneChange");
+      tutorialNotify("playerAction");
     } else {
       app.playerSpeed = Math.max(0, app.playerSpeed - 1);
     }
@@ -1560,6 +2275,7 @@ function playCardToLane(cardIdx, targetLane) {
     app.pendingAction = { kind: "card", card, wasSameLane };
     // 教學：通知打牌（在自己道）事件
     tutorialNotify("playCard");
+    tutorialNotify("playerAction");
   } else {
     app.playerSpeed += card.speedValue;
   }
@@ -2035,6 +2751,8 @@ function doOvertakeQTE() {
   app.message = "極限超車 QTE";
   app.qteStart = performance.now();
   carMotion = createCarMotion();  // 每次 QTE 都重生擺動參數、不可預測
+  // 教學：玩家按超車鈕後、QTE 確認視窗出現 → 推進 tryOvertakePress 步
+  tutorialNotify("overtakeButton");
   // 等玩家按「開始 QTE」確認鍵才進 rhythm-formal（按鈕在 drawSplash 顯示）
 }
 
@@ -2237,6 +2955,8 @@ function stage2StartNewRound() {
 function stage2OnOvertakeSuccess() {
   const s2 = app.stage2;
   if (!s2) return;
+  // 教學：超車 QTE 成功（不論真的超過或只是磨掉專注）→ 推進 tryOvertake 步
+  tutorialNotify("overtakeAttempt");
   const oppId = s2.currentOpponentId;
 
   if (oppId) {
@@ -2278,6 +2998,8 @@ function stage2OnOvertakeSuccess() {
 function stage2OnOvertakeFail() {
   const s2 = app.stage2;
   if (!s2) return;
+  // 教學：超車 QTE 失敗也算嘗試 → 推進 tryOvertake 步
+  tutorialNotify("overtakeAttempt");
   // v0.9：玩家沒掉名次、面對的對手不變（ahead 最後一個保留）
   //   但其他前方對手 + 所有後方對手的名次可以重新洗
   shuffleStage2Ranks();
@@ -2764,6 +3486,7 @@ function setupInput() {
     if (laneIdx >= 0) {
       const zone = app.zones.lanes && app.zones.lanes[laneIdx];
       if (zone && zone.droppable) {
+        if (tutorialBlocksDropOnLane(laneIdx)) { app.drag = null; return; }
         playCardToLane(app.drag.from, laneIdx);
       }
     }
@@ -2796,6 +3519,7 @@ function setupInput() {
     if (laneIdx >= 0) {
       const zone = app.zones.lanes && app.zones.lanes[laneIdx];
       if (zone && zone.droppable) {
+        if (tutorialBlocksDropOnLane(laneIdx)) { app.drag = null; return; }
         playCardToLane(app.drag.from, laneIdx);
       }
     }
@@ -2852,8 +3576,32 @@ function point(e) {
   return SCV.screenToWorld(cssPoint, app.viewport);
 }
 
+// 教學限制：是否要禁止丟到這個道？
+// playCard 步：只能丟自己道
+// changeLane 步：只能丟「沒對手、也不是玩家」的道（避開對手 + 演示換道）
+// opponentTryAction 步：只能丟到非玩家當前道（任一換道都行）
+// stabilityDrop / dropToStabilityOnly：任何 lane 都擋（玩家只能丟到穩定區）
+function tutorialBlocksDropOnLane(laneIdx) {
+  const t = app.stage2?.tutorial;
+  if (!t?.active) return false;
+  const step = TUTORIAL_STEPS[t.stepIndex];
+  if (!step) return false;
+  const stepId = step.id;
+  if (step.dropToStabilityOnly) return true;
+  if (stepId === "playCard" && laneIdx !== app.playerLane) return true;
+  if (stepId === "changeLane"
+      && (laneIdx === app.playerLane || laneIdx === app.opponentLane)) return true;
+  if (stepId === "opponentTryAction" && laneIdx === app.playerLane) return true;
+  if (stepId === "bendTry" && laneIdx !== 0) return true;  // 只允許丟到內彎
+  return false;
+}
+
 function canDragCards() {
   if (app.inputLocked) return false;
+  // 教學特例：dropToStabilityOnly 步、允許拖牌（drop gate 會擋掉非穩定區的目標）
+  const t = app.stage2?.tutorial;
+  const step = t?.active ? TUTORIAL_STEPS[t.stepIndex] : null;
+  if (step?.dropToStabilityOnly) return app.mode === "playing";
   if (tutorialBlocksGameplay()) return false;
   return app.mode === "playing";
 }
@@ -2916,29 +3664,40 @@ function handleButton(id) {
     return;
   }
   // 打牌階段
-  if (id === "btn-overtake" && app.mode === "playing" && !app.inputLocked && !tutorialBlocksGameplay()) {
+  if (id === "btn-overtake" && app.mode === "playing" && !app.inputLocked
+      && (!app.stage2?.tutorial?.active || tutorialAllowsOvertakeButton())) {
     if (canDirectOvertake()) pressOvertake();
     return;
   }
-  if (id === "btn-pass" && app.mode === "playing" && !app.inputLocked && !tutorialBlocksGameplay()) {
+  if (id === "btn-pass" && app.mode === "playing" && !app.inputLocked
+      && !app.stage2?.tutorial?.active) {
     pressPass();
     return;
   }
   // 詢問超車或 Pass
-  if (id === "prompt-overtake" && app.mode === "prompt-overtake-or-pass") {
+  if (id === "prompt-overtake" && app.mode === "prompt-overtake-or-pass"
+      && (!app.stage2?.tutorial?.active || tutorialAllowsOvertakeButton())) {
     app.mode = "playing";
     pressOvertake();
     return;
   }
-  if (id === "prompt-pass" && app.mode === "prompt-overtake-or-pass") {
+  if (id === "prompt-pass" && app.mode === "prompt-overtake-or-pass"
+      && !app.stage2?.tutorial?.active) {
     app.mode = "playing";
     pressPass();
     return;
   }
   // QTE 確認鍵：玩家看完難度面板按下、開始 QTE
+  //   教學中：只有 tryOvertakeQteStart / recapPress 步才放行
   if (id === "qte-confirm-overtake" && app.mode === "splash-overtake") {
+    const t = app.stage2?.tutorial;
+    if (t?.active) {
+      const stepId = TUTORIAL_STEPS[t.stepIndex]?.id;
+      if (stepId !== "tryOvertakeQteStart" && stepId !== "recapPress") return;
+    }
     app.mode = "rhythm-formal";
     resetRhythmState();
+    tutorialNotify("overtakeStart");
     return;
   }
   if (id === "qte-confirm-defense" && app.mode === "splash-defense") {
@@ -3108,7 +3867,11 @@ function drawInner(time) {
   if (m === "playing" || m === "prompt-overtake-or-pass") {
     drawLanes(time);
     // 飛字播放期間（閘門等待中）隱藏手牌，讓玩家專注看結算
-    if (!app.inputLocked && !tutorialBlocksGameplay()) drawHand(time);
+    // 教學特例：dropToStabilityOnly 步、要顯示手牌讓玩家拖到穩定區
+    const t = app.stage2?.tutorial;
+    const tStep = t?.active ? TUTORIAL_STEPS[t.stepIndex] : null;
+    const dropToStab = !!tStep?.dropToStabilityOnly;
+    if (!app.inputLocked && (!tutorialBlocksGameplay() || tutorialShowsHandReadonly() || dropToStab)) drawHand(time);
     if (m === "prompt-overtake-or-pass") drawPromptModal();
   }
 
@@ -5165,7 +5928,15 @@ function drawLanes(time) {
 
   // 自由打牌階段：超車按鈕跟 Pass 按鈕都永遠顯示
   // 飛字播放期間（閘門等待中）也要隱藏，跟手牌一起讓玩家專注看結算
-  const isFreePlayPhase = (app.mode === "playing" || app.mode === "prompt-overtake-or-pass") && !app.inputLocked && !tutorialBlocksGameplay();
+  // 教學期間：除了 tryOvertakePress 步、所有按鈕都鎖（防止 event 步玩家亂按）
+  const allowsOvertake = tutorialAllowsOvertakeButton();
+  const t_ = app.stage2?.tutorial;
+  const inTutorial = !!t_?.active;
+  const tStep_ = inTutorial ? TUTORIAL_STEPS[t_.stepIndex] : null;
+  const inStrictGate = !!tStep_?.strictGate;
+  const isFreePlayPhase = (app.mode === "playing" || app.mode === "prompt-overtake-or-pass")
+    && !app.inputLocked
+    && (!tutorialBlocksGameplay() || inStrictGate);
 
   if (isFreePlayPhase) {
     const laneSpd = currentLaneSpeed();
@@ -5173,11 +5944,19 @@ function drawLanes(time) {
     const lbl = sameLane ? "先換道才能超車"
               : canDirectOvertake() ? "✓ 超車 QTE"
               : `超車（差 ${app.opponentSpeed - laneSpd}）`;
+    // 教學期間：除了 tryOvertakePress、超車鈕都 disabled
+    const overtakeDisabled = !canDirectOvertake() || (inTutorial && !allowsOvertake);
     button("btn-overtake", lbl, actualBtnX0, btnY, overtakeW, btnH,
-      !canDirectOvertake(),
-      canDirectOvertake() ? "start" : "primary");
+      overtakeDisabled,
+      (canDirectOvertake() && !overtakeDisabled) ? "start" : "primary");
+    // 緩存超車鈕 rect 給教學 spotlight 用
+    app._overtakeBtnRect = { x: actualBtnX0, y: btnY, w: overtakeW, h: btnH };
 
-    button("btn-pass", "Pass →", actualBtnX0 + overtakeW + btnGap, btnY, passW, btnH, false, "gray");
+    // 教學期間：Pass 鈕一律 disabled
+    button("btn-pass", "Pass →", actualBtnX0 + overtakeW + btnGap, btnY, passW, btnH,
+      inTutorial, "gray");
+  } else {
+    app._overtakeBtnRect = null;
   }
 
   // 對手行動倒數圖示
@@ -6280,6 +7059,11 @@ function drawLaneBonusLabels(time) {
         mainText = `${add}`;
         color = "rgba(255,150,150,0.9)";
         glow = "rgba(255,120,120,0.5)";
+      } else {
+        // add === 0：標準道顯示「+0」、灰色低調
+        mainText = "+0";
+        color = "rgba(200,210,225,0.75)";
+        glow = "rgba(180,200,220,0.3)";
       }
       // 光環抑制：用灰色 + 加副文「光環抑制」、繪製時會加刪除線
       if (auraSuppressed && mainText) {
@@ -6897,6 +7681,13 @@ function drawStage2NextCircuit(time) {
   const h = 8 + innerHCalc + 60 + 8;
   const x = app.w - w - 14;
   const y = 14;
+  // 緩存面板 rect 給教學 spotlight 用
+  // currentRowY 是「當前賽段」那行的中心 y、依 innerH 動態
+  app._nextCircuitPanelRect = {
+    x, y, w, h,
+    innerBottom: y + 8 + innerHCalc,  // 黃框底（下一賽段區結束）
+    currentRowTop: y + 8 + innerHCalc, // 當前賽段區的頂
+  };
   roundPanel(x, y, w, h, 14, "rgba(10,18,28,0.92)", "rgba(120,170,220,0.4)", 1.5);
 
   if (next) {
@@ -6947,17 +7738,28 @@ function drawStage2NextCircuit(time) {
     text("當前賽段", x + 20, cy, 10, "rgba(160,180,210,0.5)", "700");
     text(`${cur?.icon ?? ""} ${cur?.name ?? ""}`, x + 90, cy, 15, "rgba(180,200,230,0.75)", "800");
     // 當前賽段剩餘動作：右側顯示剩餘數字
+    // 教學「賽段長度」步驟時放大 + 變顯眼青藍
     if (cur) {
       const stepsLeft = Math.max(0, s2.circuitStepsLeft ?? (cur.length ?? 2));
-      text(`${stepsLeft}`, x + w - 28, cy, 14,
-        "rgba(160,180,210,0.65)", "800", "right");
+      const tStepId = s2.tutorial?.active ? TUTORIAL_STEPS[s2.tutorial.stepIndex]?.id : null;
+      const highlight = tStepId === "actionsSegmentCount";
+      const size = highlight ? 22 : 14;
+      const color = highlight ? "rgba(140,210,255,0.95)" : "rgba(160,180,210,0.65)";
+      const weight = highlight ? "900" : "800";
+      const yOffset = highlight ? 2 : 0;
+      text(`${stepsLeft}`, x + w - 28, cy + yOffset, size, color, weight, "right");
     }
   } else if (cur) {
     text("當前賽段", x + 20, y + 30, 10, "rgba(160,180,210,0.5)", "700");
     text(`${cur.icon} ${cur.name}`, x + 90, y + 30, 15, "rgba(180,200,230,0.75)", "800");
     const stepsLeft = Math.max(0, s2.circuitStepsLeft ?? (cur.length ?? 2));
-    text(`${stepsLeft}`, x + w - 28, y + 30, 14,
-      "rgba(160,180,210,0.65)", "800", "right");
+    const tStepId = s2.tutorial?.active ? TUTORIAL_STEPS[s2.tutorial.stepIndex]?.id : null;
+    const highlight = tStepId === "actionsSegmentCount";
+    const size = highlight ? 22 : 14;
+    const color = highlight ? "rgba(140,210,255,0.95)" : "rgba(160,180,210,0.65)";
+    const weight = highlight ? "900" : "800";
+    const yOffset = highlight ? 2 : 0;
+    text(`${stepsLeft}`, x + w - 28, y + 30 + yOffset, size, color, weight, "right");
   }
 }
 
@@ -7066,6 +7868,8 @@ function endBendQte(success) {
   }
   app.bendQteResult = { success, mistakeCount, slippedTo: null };
   app.mode = "bend-qte-result";
+  // 教學：彎道 QTE 完成（成功/失敗）→ 推進
+  tutorialNotify("bendAttempt");
   // 1.5 秒後自動繼續
   setTimeout(() => {
     if (app.mode === "bend-qte-result") {
@@ -7433,7 +8237,20 @@ function drawSplash() {
   const btnH = 48 * UI_SCALE;
   const btnX = (app.w - btnW) / 2;
   const btnY = app.h * 0.42 + 240 * UI_SCALE;
-  button(btnId, "開始 QTE", btnX, btnY, btnW, btnH, false, "start");
+  // 教學中：只在 tryOvertakeQteStart / recapPress 步開放「開始 QTE」按鈕
+  let confirmDisabled = false;
+  if (isOvertake) {
+    const t = app.stage2?.tutorial;
+    if (t?.active) {
+      const stepId = TUTORIAL_STEPS[t.stepIndex]?.id;
+      if (stepId !== "tryOvertakeQteStart" && stepId !== "recapPress") confirmDisabled = true;
+    }
+  }
+  button(btnId, "開始 QTE", btnX, btnY, btnW, btnH, confirmDisabled, "start");
+  // 緩存「開始 QTE」鈕 rect 給教學 spotlight 用（只在 splash-overtake 時）
+  if (isOvertake) {
+    app._qteStartBtnRect = { x: btnX, y: btnY, w: btnW, h: btnH };
+  }
 }
 
 // 三種 QTE 共用的難度面板（splash 階段顯示）
@@ -7481,6 +8298,8 @@ function drawQteDifficultyPanel(qteType) {
   const panelH = (baseH + (showStability ? 24 : 0)) * UI_SCALE;
   const panelX = (app.w - panelW) / 2;
   const panelY = app.h * 0.42;
+  // 緩存難度面板 rect 給教學 spotlight 用
+  app._qteDifficultyPanelRect = { x: panelX, y: panelY, w: panelW, h: panelH };
   roundPanel(panelX, panelY, panelW, panelH, 12,
     "rgba(12,18,30,0.92)", "rgba(255,217,79,0.5)", 2);
 
@@ -7864,8 +8683,18 @@ function button(id,label,x,y,w,h,disabled=false,variant="primary") {
     ctx.restore();
   }
   roundPanel(x,y,w,h,10,fill,stroke);
-  // 文字位置：用 h 的比例自適應、不寫死、避免 FONT_SCALE 變大時跑位
-  text(label,x+w/2,y+h*0.66,16,disabled?"rgba(216,236,255,0.55)":start?"#fff4d6":"#d8ecff",start?"1000":"800","center");
+  // 文字真正垂直置中：用 textBaseline="middle"、對中文字較準（alphabetic 對中文會偏上）
+  const ctx2 = app.ctx;
+  const fontSize = 16;
+  ctx2.save();
+  ctx2.fillStyle = disabled ? "rgba(216,236,255,0.55)" : (start ? "#fff4d6" : "#d8ecff");
+  ctx2.font = `${start ? "1000" : "800"} ${fontSize * FONT_SCALE}px system-ui,"Microsoft JhengHei",sans-serif`;
+  ctx2.textAlign = "center";
+  ctx2.textBaseline = "middle";
+  ctx2.shadowColor = "rgba(0,0,0,0.55)";
+  ctx2.shadowBlur = 6;
+  ctx2.fillText(label, x + w/2, y + h/2);
+  ctx2.restore();
 }
 
 function hitButton(p) {

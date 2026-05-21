@@ -51,12 +51,11 @@ export const STAGES = [
 //   設計意圖：賽道是玩家的工具，對手只受自己的動作（切道/boost/absBonus）影響。
 export const STAGE2_OPPONENTS = {
   P: {
-    id: "P", name: "陪跑員", speed: 40, chaserSpeed: 40, focus: 0,
+    id: "P", name: "陪跑員", speed: 40, chaserSpeed: 40, focus: 1,
     behaviors: [
-      // 唯一招（cd 1、weak）：切到玩家道、阻擋。
-      // weight: "weak" → 初始 lastTriggeredAt = -cooldown → 第 1 動就 ready
-      // 用於教學：玩家第一動前就會看到 ⛔ 阻擋意圖
-      { id:"p-block", cooldown: 1, weight: "weak", action: "moveTo", target: "playerLane" },
+      // cd 3、strong：lastTriggeredAt 初始為 0、要等滿 3 動才觸發
+      // → 名條顯示「3 動後 ⛔」倒數、第 3 動結束才切過來阻擋
+      { id:"p-block", cooldown: 3, weight: "strong", action: "moveTo", target: "playerLane" },
     ],
     flavor: "陪跑員 — 你的訓練夥伴、總是切到你的道上阻擋",
   },
