@@ -135,3 +135,82 @@ input[type="range"] {
   background: #d8c7a4;
   font-weight: 900;
 }
+
+.chapter-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chapter-picker button {
+  min-height: 66px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  color: #f3f0ea;
+  background: rgba(255, 255, 255, 0.08);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chapter-picker button.active {
+  color: #151515;
+  background: #d8c7a4;
+  border-color: #d8c7a4;
+}
+
+.chapter-picker span,
+.chapter-picker small {
+  display: block;
+}
+
+.chapter-picker span {
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.chapter-picker small {
+  margin-top: 3px;
+  font-size: 13px;
+  opacity: 0.72;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chapter-loading {
+  grid-column: 1 / -1;
+  color: rgba(243, 240, 234, 0.68);
+  font-size: 18px;
+  animation: chapter-loading-drift 2.8s ease-in-out infinite;
+}
+
+@keyframes chapter-loading-drift {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translateY(3px);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-page {
+    width: min(100% - 28px, 1120px);
+    padding: 34px 0;
+  }
+
+  .setting-row {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .chapter-picker {
+    grid-template-columns: 1fr;
+  }
+}

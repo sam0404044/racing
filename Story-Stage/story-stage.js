@@ -1,5 +1,6 @@
 const canvas = document.querySelector("#storyCanvas");
 const ctx = canvas.getContext("2d");
+const loadingOverlay = document.querySelector("#loadingOverlay");
 
 /** 畫布用黑體系：正黑／雅黑／PingFang／Noto TC */
 const FONT_STACK = "Microsoft JhengHei, Microsoft YaHei, PingFang TC, Noto Sans TC, sans-serif";
@@ -8,7 +9,7 @@ const DEFAULT_BACKGROUND_SRC = "assets/BG/xiaoman-supply-station-bg.png";
 
 const BLACK_BACKGROUND_KEY = "__black_background__";
 
-/** 試算表「背景CG」留空表示沿用上一張；play_test_2 填 none 表示純黑背景 */
+/** 試算表「背景CG」留空表示沿用上一張；填 none 表示純黑背景 */
 function isSheetBackgroundUnsetToken(raw) {
   const s = (raw || "").trim();
   if (!s) {
@@ -32,40 +33,73 @@ const FIXED_ROLE_PORTRAITS = {
   烏爾: "normal.png"
 };
 
-const PORTRAIT_PATH_OVERRIDES = {};
+const PORTRAIT_PATH_OVERRIDES = {
+  "小滿|灰色": "assets/character/xiaoman/xiaoman-gray.png",
+  "藍司|灰色": "assets/character/藍司/GRAY.png",
+  "烏爾|灰色": "assets/character/烏爾/gray.png"
+};
 
 const STORY_SHEET_ID = "1rIkC3ev81wGDyU9ItyMH0nO9jI22cvdofbNtk_QpSu0";
-const STORY_SHEET_GID_PLAY_TEST_1 = "1983279972";
-const STORY_SHEET_GID_PLAY_TEST_2 = "1747829090";
+const MAX_PLAY_TEST_CHAPTERS = 30;
+const STORY_CHAPTERS = Array.from({ length: MAX_PLAY_TEST_CHAPTERS }, (_, index) => {
+  const sheetName = `play_test_${index + 1}`;
+  return {
+    id: sheetName,
+    label: sheetName,
+    sheetName,
+    stopIfMissing: index > 0
+  };
+});
 const SETTINGS_STORAGE_KEY = "storyStageSettings";
 const READ_LINES_STORAGE_KEY = "storyStageReadLines";
 const defaultStorySettings = {
   textSpeed: 10,
   autoInterval: 0,
-  skipMode: "all"
+  skipMode: "all",
+  startChapter: "play_test_1"
 };
 
-function storySheetCsvUrl(gid) {
-  return `https://docs.google.com/spreadsheets/d/${STORY_SHEET_ID}/export?format=csv&gid=${gid}`;
+function storySheetCsvUrl(chapter) {
+  if (chapter.gid) {
+    const params = new URLSearchParams({ format: "csv", gid: chapter.gid });
+    return `https://docs.google.com/spreadsheets/d/${STORY_SHEET_ID}/export?${params.toString()}`;
+  }
+  const params = new URLSearchParams({
+    tqx: "out:csv",
+    sheet: chapter.sheetName || chapter.id
+  });
+  return `https://docs.google.com/spreadsheets/d/${STORY_SHEET_ID}/gviz/tq?${params.toString()}`;
 }
 
-async function fetchStorySheetCsv(gid) {
-  const url = `${storySheetCsvUrl(gid)}&cacheBust=${Date.now()}`;
+async function fetchStorySheetCsv(chapter) {
+  const url = `${storySheetCsvUrl(chapter)}&cacheBust=${Date.now()}`;
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Story sheet gid=${gid} request failed: ${response.status}`);
+    const error = new Error(`Story sheet ${chapter.id} request failed: ${response.status}`);
+    error.status = response.status;
+    throw error;
   }
   return (await response.text()).replace(/^\uFEFF/, "");
 }
 
 const transitionKey = "__black_transition__";
 let storyLines = [["旁白", ""]];
-let storyPart1Length = 0;
+let storyChapterLengths = [];
+let storyLoading = true;
+
+function syncLoadingOverlay() {
+  if (!loadingOverlay) {
+    return;
+  }
+  loadingOverlay.hidden = !storyLoading;
+}
 
 /** 無 iframe 時改開新頁傳遞里程碑 */
 const STORY_GUIDE_HANDOFF_KEY = "storyGuideMilestoneHandoff";
 /** 舊版曾寫入 localStorage，載入劇情表時清除以免與新邏輯混淆 */
 const LEGACY_STORY_STORAGE_KEYS = ["storyMaxLineIndex", "storyPart1Length", "storyGuideMilestone"];
+const STORY_GUIDE_MATH_POINT = { chapterId: "play_test_3", rowNum: 33 };
+const STORY_GUIDE_ELIMINATION_POINT = { chapterId: "play_test_4", rowNum: 1 };
 
 function archiveFrameEl() {
   return document.getElementById("archiveFrame");
@@ -154,8 +188,10 @@ const atlasOpenBtn = document.getElementById("atlasOpenBtn");
 const typeStep = 2;
 const PORTRAIT_FADE_MS = 420;
 const BACKGROUND_TRANSITION_MS = 980;
+const SKIP_FORWARD_INTERVAL_MS = 58;
 let autoAdvanceReadyAt = 0;
 let skipHeld = false;
+let skipForwardReadyAt = 0;
 
 function loadStorySettings() {
   try {
@@ -182,6 +218,32 @@ function skipMode() {
   return loadStorySettings().skipMode === "read" ? "read" : "all";
 }
 
+function startChapterSetting() {
+  const chapter = String(loadStorySettings().startChapter || "play_test_1").trim();
+  return /^play_test_\d+$/.test(chapter) ? chapter : "play_test_1";
+}
+
+function findChapterStartIndex(chapterId) {
+  const index = storyLines.findIndex((line) => line?.[2]?.chapterId === chapterId);
+  return index >= 0 ? index : 0;
+}
+
+function jumpToChapter(chapterId) {
+  if (!storyLines.length) {
+    return;
+  }
+  lineIndex = findChapterStartIndex(chapterId);
+  storySessionMaxLineIndex = Math.max(storySessionMaxLineIndex, lineIndex);
+  typedChars = 0;
+  lastTypeAt = 0;
+  transition = null;
+  backgroundTransition = null;
+  resetAutoAdvanceTimer();
+  resetPortraitSlotAnimations();
+  syncStoryGuideMilestone();
+  needsRedraw = true;
+}
+
 function readLineSet() {
   try {
     return new Set(JSON.parse(localStorage.getItem(READ_LINES_STORAGE_KEY) || "[]"));
@@ -200,8 +262,8 @@ function saveReadLineSet(set) {
 
 function lineReadKey(index = lineIndex) {
   const [speaker, text, meta] = storyLines[index] || [];
-  if (meta?.sheetPart && meta?.rowNum) {
-    return `${meta.sheetPart}:${meta.rowNum}`;
+  if (meta?.chapterId && meta?.rowNum) {
+    return `${meta.chapterId}:${meta.rowNum}`;
   }
   return `${index}:${speaker || ""}:${text || ""}`;
 }
@@ -222,6 +284,10 @@ function isLineRead(index = lineIndex) {
 
 function resetAutoAdvanceTimer() {
   autoAdvanceReadyAt = 0;
+}
+
+function resetSkipForwardTimer(now = 0) {
+  skipForwardReadyAt = now;
 }
 
 function easeInOut(value) {
@@ -268,13 +334,16 @@ function ensureImage(src) {
 }
 
 ensureImage(DEFAULT_BACKGROUND_SRC);
-ensureImage("assets/character/xiaoman/xiaoman-normal.png");
+ensureImage("assets/character/xiaoman/xiaoman-nornmal.png");
 ensureImage("assets/character/xiaoman/xiaoman-angry.png");
 ensureImage("assets/character/xiaoman/xiaoman-sad.png");
 ensureImage("assets/character/xiaoman/xiaoman-happy.png");
 ensureImage("assets/character/xiaoman/xiaoman-surprised.png");
+ensureImage("assets/character/xiaoman/xiaoman-gray.png");
 ensureImage("assets/character/藍司/normal.png");
+ensureImage("assets/character/藍司/GRAY.png");
 ensureImage("assets/character/烏爾/normal.png");
+ensureImage("assets/character/烏爾/gray.png");
 ensureImage("assets/BG/race-results-screen.png");
 ensureImage("assets/BG/pit-lounge.png");
 
@@ -290,7 +359,7 @@ function portraitSrc(role, expr) {
     file = FIXED_ROLE_PORTRAITS[role];
   } else if (folder === "xiaoman") {
     if (ex === "日常") {
-      file = "xiaoman-normal.png";
+      file = "xiaoman-nornmal.png";
     } else if (ex === "生氣") {
       file = "xiaoman-angry.png";
     } else if (ex === "沮喪") {
@@ -323,6 +392,40 @@ function backgroundSrc(backgroundKey) {
   return `assets/BG/${base}.png`;
 }
 
+function eventCgSrcCandidates(eventCgKey) {
+  const key = (eventCgKey || "").trim();
+  if (!key) {
+    return [];
+  }
+  if (key.startsWith("assets/")) {
+    return [key];
+  }
+  const withExt = key.match(/\.(png|jpg|jpeg|webp)$/i);
+  const base = withExt ? key.replace(/\.(png|jpg|jpeg|webp)$/i, "") : key;
+  const ext = withExt ? key.match(/\.(png|jpg|jpeg|webp)$/i)[0] : ".png";
+  return [
+    `assets/event-cg/${base}${ext}`,
+    `assets/CG/${base}${ext}`,
+    `assets/character/xiaoman/${base}${ext}`,
+    `assets/BG/${base}${ext}`,
+    `assets/green-screen/${base}${ext}`
+  ];
+}
+
+function resolvedEventCgImage(eventCgKey) {
+  for (const src of eventCgSrcCandidates(eventCgKey)) {
+    const image = ensureImage(src);
+    if (image && image.complete && image.naturalWidth && !image._loadFailed) {
+      return image;
+    }
+  }
+  return null;
+}
+
+function isBannerLine(index = lineIndex) {
+  return storyLines[index]?.[2]?.presentationType === "橫幅演出";
+}
+
 function syncViewFromViewport() {
   dpr = viewport.dpr;
 }
@@ -349,9 +452,9 @@ function maybeStartBackgroundTransition(fromIndex, toIndex) {
   if (fromLine[0] === transitionKey || toLine[0] === transitionKey) {
     return;
   }
-  const fromPart = fromLine[2]?.sheetPart ?? 0;
-  const toPart = toLine[2]?.sheetPart ?? 0;
-  if (fromPart !== toPart) {
+  const fromChapter = fromLine[2]?.chapterId || "";
+  const toChapter = toLine[2]?.chapterId || "";
+  if (fromChapter !== toChapter) {
     return;
   }
   const fromStage = resolveStageState(fromIndex);
@@ -386,25 +489,42 @@ function resetPortraitSlotAnimations() {
   }
 }
 
+function chapterNumberFromId(chapterId) {
+  const match = /^play_test_(\d+)$/.exec(String(chapterId || ""));
+  return match ? Number.parseInt(match[1], 10) : 0;
+}
+
+function isAtOrPastStoryPoint(meta, point) {
+  if (!meta) {
+    return false;
+  }
+  const chapterIndex = meta.chapterIndex || chapterNumberFromId(meta.chapterId);
+  const pointChapterIndex = chapterNumberFromId(point.chapterId);
+  if (chapterIndex !== pointChapterIndex) {
+    return chapterIndex > pointChapterIndex;
+  }
+  return (meta.rowNum || 0) >= point.rowNum;
+}
+
 function syncStoryGuideMilestone() {
   if (!storyLines.length) {
     storyGuideMilestoneLive = 0;
     return;
   }
-  const maxIdx = Math.min(Math.max(0, storySessionMaxLineIndex), storyLines.length - 1);
-  const p1 = storyPart1Length > 0 ? storyPart1Length : 0;
+  const previousLevel = storyGuideMilestoneLive;
+  const idx = Math.min(Math.max(0, lineIndex), storyLines.length - 1);
+  const meta = storyLines[idx]?.[2];
   let lvl = 0;
-  if (p1 > 0 && maxIdx >= p1) {
+  if (isAtOrPastStoryPoint(meta, STORY_GUIDE_MATH_POINT)) {
     lvl = 1;
   }
-  for (let i = Math.max(0, p1); i <= maxIdx; i += 1) {
-    const meta = storyLines[i]?.[2];
-    if (meta && meta.sheetPart === 2 && meta.rowNum >= 29) {
-      lvl = 2;
-      break;
-    }
+  if (isAtOrPastStoryPoint(meta, STORY_GUIDE_ELIMINATION_POINT)) {
+    lvl = 2;
   }
   storyGuideMilestoneLive = lvl;
+  if (previousLevel !== storyGuideMilestoneLive) {
+    postGuideLevelToArchiveFrame();
+  }
 }
 
 function bumpStoryMaxLine() {
@@ -418,22 +538,49 @@ function bumpStoryMaxLine() {
 }
 
 async function loadStoryLinesFromSheet() {
+  storyLoading = true;
+  syncLoadingOverlay();
+  needsRedraw = true;
   try {
-    const csvPlay1 = await fetchStorySheetCsv(STORY_SHEET_GID_PLAY_TEST_1);
-    const part1 = rowsToStoryLines(parseCsv(csvPlay1), 1);
-    if (part1.length === 0) {
-      throw new Error("play_test_1 has no playable rows");
+    const loadedChapters = [];
+    let firstChapterCsv = "";
+    for (const [index, chapter] of STORY_CHAPTERS.entries()) {
+      let csv = "";
+      try {
+        csv = await fetchStorySheetCsv(chapter);
+      } catch (error) {
+        if (chapter.stopIfMissing && (error.status === 400 || error.status === 404)) {
+          break;
+        }
+        throw error;
+      }
+      if (index === 0) {
+        firstChapterCsv = csv;
+      } else if (chapter.stopIfMissing && firstChapterCsv && csv === firstChapterCsv) {
+        break;
+      }
+      const lines = rowsToStoryLines(parseCsv(csv), {
+        ...chapter,
+        chapterIndex: index + 1
+      });
+      if (lines.length === 0) {
+        if (chapter.stopIfMissing) {
+          break;
+        }
+        throw new Error(`${chapter.id} has no playable rows`);
+      }
+      loadedChapters.push({
+        chapter,
+        lines
+      });
     }
 
-    const csvPlay2 = await fetchStorySheetCsv(STORY_SHEET_GID_PLAY_TEST_2);
-    const part2 = rowsToStoryLines(parseCsv(csvPlay2), 2);
-    if (part2.length === 0) {
-      throw new Error("play_test_2 has no playable rows");
-    }
-
-    storyLines = [...part1, ...part2];
-    storyPart1Length = part1.length;
-    storySessionMaxLineIndex = 0;
+    storyLines = loadedChapters.flatMap(({ lines }) => lines);
+    storyChapterLengths = loadedChapters.map(({ lines }) => lines.length);
+    console.info(
+      "Story chapters loaded:",
+      loadedChapters.map(({ chapter, lines }) => `${chapter.id}:${lines.length}`).join(", ")
+    );
     try {
       for (const k of LEGACY_STORY_STORAGE_KEYS) {
         localStorage.removeItem(k);
@@ -441,19 +588,22 @@ async function loadStoryLinesFromSheet() {
     } catch {
       /* ignore */
     }
+    lineIndex = findChapterStartIndex(startChapterSetting());
+    storySessionMaxLineIndex = lineIndex;
     syncStoryGuideMilestone();
-    lineIndex = 0;
     typedChars = 0;
     lastTypeAt = 0;
     transition = null;
     backgroundTransition = null;
     resetAutoAdvanceTimer();
     resetPortraitSlotAnimations();
+    storyLoading = false;
+    syncLoadingOverlay();
     needsRedraw = true;
   } catch (error) {
     console.error("Story sheet load failed:", error);
     storyLines = [["旁白", "載入失敗"]];
-    storyPart1Length = 0;
+    storyChapterLengths = [];
     storySessionMaxLineIndex = 0;
     storyGuideMilestoneLive = 0;
     lineIndex = 0;
@@ -463,6 +613,8 @@ async function loadStoryLinesFromSheet() {
     backgroundTransition = null;
     resetAutoAdvanceTimer();
     resetPortraitSlotAnimations();
+    storyLoading = false;
+    syncLoadingOverlay();
     needsRedraw = true;
   }
 }
@@ -480,6 +632,7 @@ function buildStageMeta(row, columnIndex) {
     rightRole: cell("右側角色"),
     rightExpr: cell("右側表情"),
     backgroundKey: cell("背景CG"),
+    eventCgKey: cell("事件圖／CG"),
     rowNum:
       columnIndex.行號 >= 0
         ? Number.parseInt(String(row[columnIndex.行號] ?? "").trim(), 10) || 0
@@ -487,7 +640,7 @@ function buildStageMeta(row, columnIndex) {
   };
 }
 
-function rowsToStoryLines(rows, sheetPart) {
+function rowsToStoryLines(rows, chapter) {
   const headers = rows.shift() || [];
   const indexOf = (name) => headers.indexOf(name);
   const columnIndex = {
@@ -502,7 +655,8 @@ function rowsToStoryLines(rows, sheetPart) {
     中間表情: indexOf("中間表情"),
     右側角色: indexOf("右側角色"),
     右側表情: indexOf("右側表情"),
-    背景CG: indexOf("背景CG")
+    背景CG: indexOf("背景CG"),
+    "事件圖／CG": indexOf("事件圖／CG")
   };
   const typeIndex = columnIndex.文本類型;
   const textIndex = columnIndex.文本內容;
@@ -527,12 +681,21 @@ function rowsToStoryLines(rows, sheetPart) {
       const type = (row[typeIndex] || "").trim();
       const text = (row[textIndex] || "").trim();
       const speaker = speakerIndex >= 0 ? (row[speakerIndex] || "").trim() : "";
-      const meta = { ...buildStageMeta(row, columnIndex), sheetPart };
-      if (!text) {
+      const meta = {
+        ...buildStageMeta(row, columnIndex),
+        presentationType: type,
+        chapterId: chapter.id,
+        chapterLabel: chapter.label || chapter.id,
+        chapterIndex: chapter.chapterIndex
+      };
+      if (!text && !(type === "橫幅演出" && meta.eventCgKey)) {
         return null;
       }
       if (type === "演出指示" && text.includes("黑色")) {
         return [transitionKey, "數日後", meta];
+      }
+      if (type === "橫幅演出") {
+        return ["旁白", text, meta];
       }
       if (type === "旁白") {
         return ["旁白", text, meta];
@@ -682,19 +845,41 @@ function skipForward() {
   advanceLine();
 }
 
+function completeTransition() {
+  transition = null;
+  lineIndex = Math.min(storyLines.length - 1, lineIndex + 1);
+  typedChars = 0;
+  lastTypeAt = 0;
+  backgroundTransition = null;
+  resetAutoAdvanceTimer();
+  bumpStoryMaxLine();
+}
+
+function updateSkipForward(now) {
+  if (!skipHeld || storyLoading) {
+    return;
+  }
+  if (!skipForwardReadyAt) {
+    skipForwardReadyAt = now;
+  }
+  if (now < skipForwardReadyAt) {
+    return;
+  }
+  if (transition) {
+    completeTransition();
+  } else {
+    skipForward();
+  }
+  skipForwardReadyAt = now + SKIP_FORWARD_INTERVAL_MS;
+}
+
 function updateTransition(now) {
   if (!transition) {
     return;
   }
   const elapsed = now - transition.start;
   if (elapsed >= transition.duration) {
-    transition = null;
-    lineIndex = Math.min(storyLines.length - 1, lineIndex + 1);
-    typedChars = 0;
-    lastTypeAt = 0;
-    backgroundTransition = null;
-    resetAutoAdvanceTimer();
-    bumpStoryMaxLine();
+    completeTransition();
   }
   needsRedraw = true;
 }
@@ -728,14 +913,26 @@ function resolveStageState(upToLineIndex) {
     }
     if (i > 0) {
       const prevMeta = storyLines[i - 1]?.[2];
-      const prevPart = prevMeta?.sheetPart ?? 0;
-      const part = meta.sheetPart ?? 0;
-      if (part > prevPart) {
+      const prevChapterIndex = prevMeta?.chapterIndex ?? 0;
+      const chapterIndex = meta.chapterIndex ?? 0;
+      if (chapterIndex > prevChapterIndex) {
         state.backgroundKey = "";
         state.left = null;
         state.center = null;
         state.right = null;
       }
+    }
+    if (meta.presentationType === "橫幅演出") {
+      state.left = null;
+      state.center = null;
+      state.right = null;
+      const bg = (meta.backgroundKey || "").trim();
+      if (isSheetBackgroundBlackToken(bg)) {
+        state.backgroundKey = BLACK_BACKGROUND_KEY;
+      } else if (bg && !isSheetBackgroundUnsetToken(bg) && !isSheetBackgroundBlackToken(bg)) {
+        state.backgroundKey = bg;
+      }
+      continue;
     }
     const applySlot = (side, roleKey, exprKey) => {
       const role = (meta[roleKey] || "").trim();
@@ -751,7 +948,7 @@ function resolveStageState(upToLineIndex) {
     applySlot("center", "centerRole", "centerExpr");
     applySlot("right", "rightRole", "rightExpr");
     const bg = (meta.backgroundKey || "").trim();
-    if (meta.sheetPart === 2 && isSheetBackgroundBlackToken(bg)) {
+    if (isSheetBackgroundBlackToken(bg)) {
       state.backgroundKey = BLACK_BACKGROUND_KEY;
     } else if (bg && !isSheetBackgroundUnsetToken(bg) && !isSheetBackgroundBlackToken(bg)) {
       state.backgroundKey = bg;
@@ -851,6 +1048,13 @@ function draw() {
   const vh = viewport.height;
 
   ctx.clearRect(0, 0, vw, vh);
+  if (storyLoading) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, vw, vh);
+    syncAtlasButtonVisibility();
+    needsRedraw = true;
+    return;
+  }
 
   if (blackChapterBreak) {
     ctx.fillStyle = "#080d12";
@@ -863,6 +1067,7 @@ function draw() {
 
   StoryCanvasViewport.applyDesignTransform(ctx, viewport);
   if (!blackChapterBreak) {
+    drawBannerEventCg();
     drawPortraits();
   }
   drawDialogue();
@@ -958,9 +1163,77 @@ function drawPortraits() {
   }
 }
 
+function drawBannerEventCg() {
+  if (!isBannerLine()) {
+    return;
+  }
+  const [, text, meta] = currentLine();
+  const eventCgKey = (meta?.eventCgKey || "").trim();
+  const bannerW = DESIGN_WIDTH;
+  const bannerH = Math.round(DESIGN_HEIGHT * 0.29);
+  const x = 0;
+  const y = Math.round(DESIGN_HEIGHT * 0.24);
+  const image = resolvedEventCgImage(eventCgKey);
+
+  ctx.save();
+  const topFade = ctx.createLinearGradient(0, y - 58, 0, y + 18);
+  topFade.addColorStop(0, "rgba(0, 0, 0, 0)");
+  topFade.addColorStop(1, "rgba(0, 0, 0, 0.92)");
+  ctx.fillStyle = topFade;
+  ctx.fillRect(0, y - 58, DESIGN_WIDTH, 76);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.92)";
+  ctx.fillRect(0, y, DESIGN_WIDTH, bannerH);
+  const bottomFade = ctx.createLinearGradient(0, y + bannerH - 18, 0, y + bannerH + 62);
+  bottomFade.addColorStop(0, "rgba(0, 0, 0, 0.92)");
+  bottomFade.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = bottomFade;
+  ctx.fillRect(0, y + bannerH - 18, DESIGN_WIDTH, 80);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, bannerW, bannerH);
+  ctx.clip();
+  if (image) {
+    const targetH = bannerH * 1.18;
+    const scale = targetH / image.naturalHeight;
+    const drawW = image.naturalWidth * scale;
+    const drawH = image.naturalHeight * scale;
+    const drawX = DESIGN_WIDTH * 0.18;
+    const drawY = y + (bannerH - drawH) / 2 - bannerH * 0.03;
+    ctx.drawImage(image, drawX, drawY, drawW, drawH);
+  } else {
+    ctx.fillStyle = "rgba(46, 35, 31, 0.78)";
+    ctx.fillRect(0, y, DESIGN_WIDTH, bannerH);
+  }
+  ctx.restore();
+
+  const lineGradient = ctx.createLinearGradient(0, y, DESIGN_WIDTH, y);
+  lineGradient.addColorStop(0, "rgba(255, 255, 255, 0)");
+  lineGradient.addColorStop(0.2, "rgba(255, 255, 255, 0.22)");
+  lineGradient.addColorStop(0.82, "rgba(255, 255, 255, 0.18)");
+  lineGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = lineGradient;
+  ctx.fillRect(0, y - 2, DESIGN_WIDTH, 2);
+  ctx.fillRect(0, y + bannerH, DESIGN_WIDTH, 2);
+
+  if (text.trim()) {
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.font = `700 54px ${FONT_STACK}`;
+    ctx.fillStyle = "#f5eddf";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.72)";
+    ctx.shadowBlur = 16;
+    ctx.fillText(text, DESIGN_WIDTH * 0.45, y + bannerH * 0.5);
+  }
+  ctx.restore();
+}
+
 function drawDialogue() {
   const [speaker, text] = currentLine();
   if (speaker === transitionKey) {
+    return;
+  }
+  if (isBannerLine()) {
     return;
   }
   const raw = dialogueBoxRect();
@@ -1191,6 +1464,7 @@ function roundRect(context, x, y, width, height, radius) {
 
 function loop(now) {
   updateTyping(now);
+  updateSkipForward(now);
   updateAutoPlay(now);
   updateTransition(now);
   updateBackgroundTransition(now);
@@ -1227,13 +1501,17 @@ window.addEventListener("keydown", (event) => {
     advanceLine();
   } else if (event.key === "Control" || event.ctrlKey) {
     event.preventDefault();
-    skipHeld = true;
-    skipForward();
+    if (!skipHeld) {
+      skipHeld = true;
+      resetSkipForwardTimer(performance.now());
+      skipForward();
+    }
   }
 });
 window.addEventListener("keyup", (event) => {
   if (event.key === "Control") {
     skipHeld = false;
+    resetSkipForwardTimer();
     resetAutoAdvanceTimer();
   }
 });
@@ -1250,6 +1528,7 @@ StoryCanvasViewport.bindCanvasResize(
 window.addEventListener("storage", (event) => {
   if (event.key === SETTINGS_STORAGE_KEY) {
     resetAutoAdvanceTimer();
+    jumpToChapter(startChapterSetting());
   }
 });
 window.addEventListener("message", (event) => {
