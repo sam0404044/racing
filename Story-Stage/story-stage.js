@@ -333,6 +333,23 @@ function ensureImage(src) {
   return image;
 }
 
+function waitForImage(src) {
+  const image = ensureImage(src);
+  if (!image || image.complete || image._loadFailed) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const finish = () => resolve();
+    image.addEventListener("load", finish, { once: true });
+    image.addEventListener("error", finish, { once: true });
+  });
+}
+
+async function preloadImageSources(sources) {
+  const uniqueSources = [...new Set(sources.filter(Boolean))];
+  await Promise.all(uniqueSources.map((src) => waitForImage(src)));
+}
+
 ensureImage(DEFAULT_BACKGROUND_SRC);
 ensureImage("assets/character/xiaoman/xiaoman-nornmal.png");
 ensureImage("assets/character/xiaoman/xiaoman-angry.png");
@@ -424,6 +441,34 @@ function resolvedEventCgImage(eventCgKey) {
 
 function isBannerLine(index = lineIndex) {
   return storyLines[index]?.[2]?.presentationType === "橫幅演出";
+}
+
+async function preloadStoryAssets() {
+  const sources = [DEFAULT_BACKGROUND_SRC];
+  for (const line of storyLines) {
+    const meta = Array.isArray(line) ? line[2] : null;
+    if (!meta) {
+      continue;
+    }
+    const bgSrc = backgroundSrc(meta.backgroundKey);
+    if (bgSrc && bgSrc !== BLACK_BACKGROUND_KEY) {
+      sources.push(bgSrc);
+    }
+    for (const [roleKey, exprKey] of [
+      ["leftRole", "leftExpr"],
+      ["centerRole", "centerExpr"],
+      ["rightRole", "rightExpr"]
+    ]) {
+      const role = (meta[roleKey] || "").trim();
+      if (role) {
+        sources.push(portraitSrc(role, meta[exprKey] || "日常"));
+      }
+    }
+    if (meta.presentationType === "橫幅演出" && meta.eventCgKey) {
+      sources.push(...eventCgSrcCandidates(meta.eventCgKey));
+    }
+  }
+  await preloadImageSources(sources);
 }
 
 function syncViewFromViewport() {
@@ -591,6 +636,7 @@ async function loadStoryLinesFromSheet() {
     lineIndex = findChapterStartIndex(startChapterSetting());
     storySessionMaxLineIndex = lineIndex;
     syncStoryGuideMilestone();
+    await preloadStoryAssets();
     typedChars = 0;
     lastTypeAt = 0;
     transition = null;
