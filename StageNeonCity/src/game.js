@@ -729,7 +729,7 @@ const TUTORIAL_STEPS = [
     textPos: () => ({ x: app.w * 0.5, y: app.h * 0.22 }),
     advance: "laneChange",
   },
-  // 5: 換道代價（auto）
+  // 5: 換道代價（先倒數、結束後顯示繼續鈕）
   {
     id: "laneCost",
     group: "換道",
@@ -737,7 +737,7 @@ const TUTORIAL_STEPS = [
     body: "注意！跨道會扣速度。\n跨越多道扣越多速度。",
     spotlight: () => ({ x: app.w - 300, y: app.h - 220, w: 280, h: 100 }),
     textPos: () => ({ x: app.w * 0.4, y: app.h * 0.5 }),
-    advance: "auto",
+    advance: "countdownThenContinue",
     autoDelay: 3500,
     noOverlay: true,
   },
@@ -803,7 +803,7 @@ const TUTORIAL_STEPS = [
     id: "overtakeConditions",
     group: "超車",
     title: "超車條件",
-    body: "超車必須同時滿足三項：\n・車速大於前車\n・與前車不同道\n・對手缺乏專注度",
+    body: "超車必須同時滿足以下兩點：\n・車速大於前車\n・與前車不同道",
     spotlight: null,
     textPos: () => ({ x: app.w * 0.5, y: app.h * 0.5 }),
     advance: "continue",
@@ -1361,7 +1361,7 @@ const TUTORIAL_STEPS = [
     id: "rivalsIntro",
     group: "目標",
     title: "前方對手",
-    body: "你前方有對手。\n要一個一個超過他們。",
+    body: "這些車手的順序是目前賽道上的名次。\n我們的目標就是要一個一個超過他們。",
     spotlight: () => ({ x: 8, y: 130, w: 252, h: 130 }),
     textPos: () => ({ x: 480, y: 200 }),
     advance: "continue",
@@ -1489,6 +1489,17 @@ function drawTutorialOverlay(time) {
   } else if (step.advance === "continue") {
     button("tutorial-continue", "繼續",
       cardX + cardW/2 - 60, cardY + cardH - 36, 120, 28, false, "start");
+  } else if (step.advance === "countdownThenContinue") {
+    // 先倒數、結束後變繼續鈕
+    const delay = step.autoDelay ?? 3000;
+    const remain = Math.max(0, delay - elapsed);
+    if (remain > 0) {
+      text(`... ${(remain/1000).toFixed(1)}s`,
+        cardX + cardW/2, cardY + cardH - 18, 12, "rgba(180,200,230,0.65)", "700", "center");
+    } else {
+      button("tutorial-continue", "繼續",
+        cardX + cardW/2 - 60, cardY + cardH - 36, 120, 28, false, "start");
+    }
   } else {
     // 事件型：顯示對應提示文字
     const hintMap = {
@@ -3895,6 +3906,51 @@ function drawInner(time) {
   // 拖曳中的牌
   if (app.drag) {
     drawCard(app.drag.card, app.drag.x, app.drag.y, app.drag.w, app.drag.h, true);
+    // 換道時(拖到非當前道):在卡片上覆蓋「棄牌 / 卡牌效果不觸發」提示
+    if (isStage2() && app.mode === "playing") {
+      const _dCx = app.drag.x + app.drag.w/2;
+      const _dCy = app.drag.y + app.drag.h/2;
+      const _isTeam = app.drag.card?.cardClass === "team";
+      const _handTop = app.h - 190 - 60;
+      const _handBottom = app.h - 190 + 164 + 30;
+      const _onCancel = _dCy >= _handTop && _dCy <= _handBottom;
+      const _stabZ = app.zones?.stabilityZone;
+      const _onStab = !_isTeam && _stabZ && inRect({ x: _dCx, y: _dCy }, _stabZ);
+      if (!_isTeam && !_onCancel && !_onStab) {
+        const _hL = laneAtPoint({ x: _dCx, y: _dCy });
+        if (_hL >= 0 && _hL !== app.playerLane) {
+          const ctx2 = app.ctx;
+          const _pulse = 0.78 + Math.sin(time * 0.005) * 0.22;
+          ctx2.save();
+          // 暗色遮罩蓋滿牌面、保留圓角
+          ctx2.fillStyle = "rgba(6,14,28,0.86)";
+          ctx2.beginPath();
+          ctx2.roundRect(app.drag.x, app.drag.y, app.drag.w, app.drag.h, 10);
+          ctx2.fill();
+          // 黃色強調邊框
+          ctx2.strokeStyle = `rgba(255,210,90,${0.85 * _pulse})`;
+          ctx2.lineWidth = 2;
+          ctx2.stroke();
+          // 文字
+          ctx2.globalAlpha = _pulse;
+          ctx2.textAlign = "center";
+          ctx2.textBaseline = "middle";
+          // 上行:棄牌(亮黃、強調)
+          ctx2.shadowColor = "rgba(255, 180, 60, 0.7)";
+          ctx2.shadowBlur = 14;
+          ctx2.fillStyle = "rgba(255, 210, 90, 0.98)";
+          ctx2.font = `900 38px system-ui, "Microsoft JhengHei", sans-serif`;
+          ctx2.fillText("棄牌", _dCx, _dCy - 22);
+          // 下行:卡牌效果不觸發
+          ctx2.shadowColor = "rgba(255, 220, 180, 0.5)";
+          ctx2.shadowBlur = 8;
+          ctx2.fillStyle = "rgba(240, 240, 240, 0.95)";
+          ctx2.font = `800 16px system-ui, "Microsoft JhengHei", sans-serif`;
+          ctx2.fillText("卡牌效果不觸發", _dCx, _dCy + 22);
+          ctx2.restore();
+        }
+      }
+    }
     // 拖到非當前道：在牌正上方顯示「換道（棄此牌）」
     if (isStage2() && app.mode === "playing") {
       const dragCx = app.drag.x + app.drag.w/2;
@@ -4152,51 +4208,573 @@ function drawCar(x, y, w, h, color, opts={}) {
 
 function skylineHash01(n) { const x = Math.sin(n*12.9898)*43758.5453; return x-Math.floor(x); }
 
-function drawCitySkyline(ctx, w, h, horizon, time) {
-  const twinkle = 0.08 + 0.06*Math.sin(time*0.0022);
-  const drawLayer = (layer, count) => {
-    const far = layer===0;
-    const alphaM = far?0.62:1, hMul = far?0.78:1, xShift = far?w*0.03:0;
-    for (let i = 0; i < count; i++) {
-      const seed=i*2.17+layer*19.1, sa=skylineHash01(seed), sb=skylineHash01(seed*1.9+1), sc2=skylineHash01(seed*3.3+2);
-      const bw=(far?28:34)+sa*(far?22:34), bh=(horizon*(0.26+sb*0.34))*hMul;
-      const topY=horizon-bh, baseX=(i/count)*(w+bw*0.5)-bw*0.35+xShift+(sc2-0.5)*16-layer*6;
-      ctx.save(); ctx.globalAlpha=alphaM;
-      const g=ctx.createLinearGradient(baseX,topY,baseX+bw,topY+bh);
-      if(far){g.addColorStop(0,"rgba(52,72,98,0.55)");g.addColorStop(0.5,"rgba(36,52,74,0.62)");g.addColorStop(1,"rgba(20,30,48,0.68)");}
-      else{g.addColorStop(0,"rgba(42,58,82,0.96)");g.addColorStop(0.45,"rgba(26,38,58,0.98)");g.addColorStop(1,"rgba(10,16,28,1)");}
-      ctx.fillStyle=g; ctx.fillRect(baseX,topY,bw,bh);
-      const crownH=far?2:3+(sa>0.55?3:0);
-      ctx.fillStyle=far?"rgba(30,44,64,0.75)":"rgba(18,28,44,0.95)";
-      ctx.fillRect(baseX+bw*0.08,topY-crownH,bw*0.84,crownH);
-      const padT=12+sb*10, winW=far?4:5, winH=far?6:8, gapX=far?5:7, gapY=far?9:11;
-      let row=0;
-      for(let py=topY+padT;py+winH<horizon-7;py+=gapY,row++){
-        let col=0;
-        for(let px=baseX+5;px+winW<baseX+bw-5;px+=gapX,col++){
-          const lit=skylineHash01(seed*11+row*5.3+col*2.1)>(far?0.88:0.74);
-          const warm=0.35+twinkle*(lit?1:0);
-          ctx.fillStyle=lit?`rgba(255,224,170,${0.28+warm*0.35})`:`rgba(110,140,180,${far?0.12:0.2})`;
-          ctx.fillRect(px,py,winW,winH);
-        }
-      }
-      ctx.strokeStyle="rgba(255,255,255,0.06)"; ctx.lineWidth=1;
-      ctx.strokeRect(baseX+0.5,topY+0.5,bw-1,bh-1);
-      ctx.restore();
+// ═══════ 賽博龐克天際線 v5 ═══════════════════════════════════════════════
+// 5 層深度 + 13 棟個性近景樓 + 3 招牌 + 3 多燈天線 + 4 霓虹邊條
+// + 飛行載具(Spinner 風格) + 2 道掃射探照燈 + 地平線霾光
+
+function cycleText(time, texts, periodMs) {
+  if (!texts || !texts.length) return '';
+  return texts[Math.floor((time / periodMs) % texts.length)];
+}
+
+function drawHorizonHaze(ctx, w, horizon) {
+  const yS = horizon / 200;
+  const yTop = 138 * yS;
+  const grad = ctx.createLinearGradient(0, yTop, 0, horizon);
+  grad.addColorStop(0,    "rgba(255,48,144,0)");
+  grad.addColorStop(0.55, "rgba(255,58,152,0.45)");
+  grad.addColorStop(1,    "rgba(255,112,184,0.62)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, yTop, w, horizon - yTop);
+}
+
+function drawAvLight(ctx, cx, cy, r, time, freqMs, phaseMs) {
+  const t = ((time + phaseMs) % freqMs) / freqMs;
+  const wave = 0.5 - 0.5*Math.cos(t * Math.PI * 2);
+  const alpha = 0.3 + 0.7*wave;
+  ctx.fillStyle = "rgba(255,48,48,0.22)";
+  ctx.beginPath(); ctx.arc(cx, cy, r*2.2, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = `rgba(255,80,80,${alpha})`;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+}
+
+function drawCityFarLayer(ctx, w, horizon, layerIdx, time) {
+  const xS = w / 680, yS = horizon / 200;
+  const cfgs = [
+    { count: 33, opacity: 0.55, yTopMin: 180, yTopMax: 195, wMin: 10, wMax: 22,
+      gradTop: "#5a2058", gradBot: "#48184a", polyChance: 0.12, windowsChance: 0 },
+    { count: 21, opacity: 0.7,  yTopMin: 162, yTopMax: 178, wMin: 18, wMax: 30,
+      gradTop: "#3e1850", gradBot: "#2e1245", polyChance: 0.25, windowsChance: 0 },
+    { count: 17, opacity: 0.82, yTopMin: 130, yTopMax: 168, wMin: 28, wMax: 46,
+      gradTop: "#2a1240", gradBot: "#180828", polyChance: 0.30, windowsChance: 0.55 },
+  ];
+  const cfg = cfgs[layerIdx];
+  const grad = ctx.createLinearGradient(0, cfg.yTopMin*yS, 0, horizon);
+  grad.addColorStop(0, cfg.gradTop);
+  grad.addColorStop(1, cfg.gradBot);
+
+  ctx.save();
+  ctx.globalAlpha = cfg.opacity;
+  ctx.fillStyle = grad;
+
+  for (let i = 0; i < cfg.count; i++) {
+    const s = i*2.17 + layerIdx*19.1;
+    const sa = skylineHash01(s),
+          sb = skylineHash01(s*1.9+1),
+          sc = skylineHash01(s*3.3+2),
+          sd = skylineHash01(s*4.7+3);
+    const bw = (cfg.wMin + sa*(cfg.wMax-cfg.wMin)) * xS;
+    const bx = ((i/cfg.count)*680 + (sc-0.5)*8) * xS;
+    const ty = (cfg.yTopMin + sb*(cfg.yTopMax-cfg.yTopMin)) * yS;
+
+    if (sd < cfg.polyChance) {
+      const tilt = (skylineHash01(s*5)-0.5) * 6 * yS;
+      ctx.beginPath();
+      ctx.moveTo(bx, horizon);
+      ctx.lineTo(bx+bw, horizon);
+      ctx.lineTo(bx+bw, ty + tilt);
+      ctx.lineTo(bx, ty - tilt);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.fillRect(bx, ty, bw, horizon - ty);
     }
+  }
+
+  if (cfg.windowsChance > 0) {
+    ctx.globalAlpha = cfg.opacity * 0.55;
+    const wColors = ["#ffb84d", "#00e8ff", "#ff2da3", "#a64dff"];
+    for (let i = 0; i < cfg.count; i++) {
+      const s = i*2.17 + layerIdx*19.1 + 50;
+      if (skylineHash01(s*7) > cfg.windowsChance) continue;
+      const bw = (cfg.wMin + skylineHash01(s)*(cfg.wMax-cfg.wMin)) * xS;
+      const bx = ((i/cfg.count)*680) * xS;
+      const ty = (cfg.yTopMin + skylineHash01(s*1.9+1)*(cfg.yTopMax-cfg.yTopMin)) * yS;
+      const wx = bx + bw * (0.25 + skylineHash01(s*17)*0.5);
+      const wy = ty + (horizon - ty) * (0.2 + skylineHash01(s*19)*0.6);
+      ctx.fillStyle = wColors[Math.floor(skylineHash01(s*13)*4)];
+      if (skylineHash01(s*23) > 0.5) ctx.fillRect(wx, wy, 1.2*xS, 8*yS);
+      else                            ctx.fillRect(wx, wy, 2*xS, 3*yS);
+    }
+  }
+  ctx.restore();
+}
+
+function drawCityMidLayer(ctx, w, horizon, time) {
+  const xS = w/680, yS = horizon/200;
+  const X = mx => mx*xS, Y = my => my*yS;
+
+  const grad = ctx.createLinearGradient(0, Y(95), 0, horizon);
+  grad.addColorStop(0, "#231038");
+  grad.addColorStop(1, "#150828");
+
+  ctx.save();
+  ctx.globalAlpha = 0.92;
+  ctx.fillStyle = grad;
+
+  const polys = [
+    [[3,200],[45,200],[45,118],[40,112],[3,112]],
+    [[52,200],[84,200],[84,130],[52,130]],
+    [[88,200],[134,200],[134,108],[128,102],[96,102],[88,108]],
+    [[140,200],[168,200],[168,125],[140,125]],
+    [[200,200],[248,200],[248,105],[222,100],[200,105]],
+    [[254,200],[290,200],[290,118],[254,118]],
+    [[266,118],[290,118],[278,108]],
+    [[368,200],[405,200],[405,116],[400,110],[368,110]],
+    [[411,200],[441,200],[441,135],[411,135]],
+    [[448,200],[482,200],[482,118],[448,118]],
+    [[455,118],[463,118],[463,108],[455,108]],
+    [[488,200],[538,200],[538,112],[530,104],[496,104],[488,112]],
+    [[568,200],[600,200],[600,124],[568,124]],
+    [[606,200],[650,200],[650,108],[645,102],[611,102],[606,108]],
+    [[656,200],[678,200],[678,125],[656,125]],
+  ];
+  for (const p of polys) {
+    ctx.beginPath();
+    ctx.moveTo(X(p[0][0]), Y(p[0][1]));
+    for (let i = 1; i < p.length; i++) ctx.lineTo(X(p[i][0]), Y(p[i][1]));
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  const midWin = [
+    [20,125,'s','#00e8ff'],[30,140,'s','#ff2da3'],[62,138,'s','#ffb84d'],
+    [74,155,'w','#00e8ff'],[100,115,'s','#ff2da3'],[115,130,'s','#00e8ff'],
+    [148,135,'s','#ffb84d'],[158,150,'s','#a64dff'],[210,115,'s','#ff2da3'],
+    [225,130,'w','#00e8ff'],[265,125,'s','#ffb84d'],[278,145,'s','#00e8ff'],
+    [380,120,'s','#a64dff'],[395,135,'s','#ff2da3'],[420,145,'s','#00e8ff'],
+    [458,128,'s','#ffb84d'],[470,145,'s','#ff2da3'],[498,120,'s','#00e8ff'],
+    [515,135,'w','#a64dff'],[575,135,'s','#ff2da3'],[590,150,'s','#00e8ff'],
+    [615,118,'s','#ffb84d'],[635,135,'s','#ff2da3'],[660,140,'s','#00e8ff'],
+  ];
+  ctx.save();
+  ctx.globalAlpha = 0.6;
+  for (const [wx, wy, k, c] of midWin) {
+    ctx.fillStyle = c;
+    if (k === 'w') ctx.fillRect(X(wx), Y(wy), X(20), Y(1.2));
+    else           ctx.fillRect(X(wx), Y(wy), X(2),  Y(3));
+  }
+  ctx.restore();
+}
+
+function drawCityNearLayer(ctx, w, horizon, time) {
+  const xS = w/680, yS = horizon/200;
+  const X = mx => mx*xS, Y = my => my*yS;
+
+  const grad = ctx.createLinearGradient(0, Y(40), 0, horizon);
+  grad.addColorStop(0, "#1f0c30");
+  grad.addColorStop(1, "#0a0418");
+  ctx.fillStyle = grad;
+
+  // ─── 13 棟近景樓 ─────────────────────────────────
+  ctx.beginPath();
+  ctx.moveTo(X(20), Y(200)); ctx.lineTo(X(62), Y(200)); ctx.lineTo(X(62), Y(95));
+  ctx.lineTo(X(55), Y(85)); ctx.lineTo(X(20), Y(85)); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(X(70), Y(200)); ctx.lineTo(X(100), Y(200)); ctx.lineTo(X(100), Y(138));
+  ctx.lineTo(X(96), Y(130)); ctx.lineTo(X(74), Y(130)); ctx.lineTo(X(70), Y(138));
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(X(110), Y(82), X(55), Y(118));
+  ctx.fillRect(X(120), Y(58), X(35), Y(24));
+  ctx.fillRect(X(131), Y(42), X(13), Y(16));
+  ctx.fillRect(X(172), Y(125), X(35), Y(75));
+  ctx.beginPath();
+  ctx.moveTo(X(172), Y(125)); ctx.lineTo(X(207), Y(125)); ctx.lineTo(X(189.5), Y(105));
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(X(215), Y(200)); ctx.lineTo(X(260), Y(200)); ctx.lineTo(X(260), Y(80));
+  ctx.lineTo(X(240), Y(80));  ctx.lineTo(X(240), Y(68));  ctx.lineTo(X(215), Y(68));
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(X(268), Y(200)); ctx.lineTo(X(298), Y(200)); ctx.lineTo(X(298), Y(130));
+  ctx.lineTo(X(268), Y(140)); ctx.closePath(); ctx.fill();
+  ctx.fillRect(X(305), Y(70), X(58), Y(130));
+  ctx.beginPath();
+  ctx.moveTo(X(305), Y(70)); ctx.lineTo(X(363), Y(70)); ctx.lineTo(X(348), Y(52)); ctx.lineTo(X(320), Y(52));
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(X(372), Y(200)); ctx.lineTo(X(404), Y(200)); ctx.lineTo(X(404), Y(128));
+  ctx.lineTo(X(388), Y(118)); ctx.lineTo(X(372), Y(128)); ctx.closePath(); ctx.fill();
+  ctx.fillRect(X(412), Y(110), X(48), Y(90));
+  ctx.fillRect(X(420), Y(82),  X(22), Y(28));
+  ctx.fillRect(X(468), Y(125), X(35), Y(75));
+  ctx.beginPath();
+  ctx.moveTo(X(468), Y(125));
+  ctx.quadraticCurveTo(X(485.5), Y(108), X(503), Y(125));
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(X(512), Y(80), X(52), Y(120));
+  ctx.fillRect(X(520), Y(62), X(36), Y(18));
+  ctx.beginPath();
+  ctx.moveTo(X(520), Y(62));
+  ctx.quadraticCurveTo(X(538), Y(53), X(556), Y(62));
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(X(572), Y(128), X(30), Y(72));
+  ctx.beginPath();
+  ctx.moveTo(X(572), Y(128)); ctx.lineTo(X(602), Y(128)); ctx.lineTo(X(602), Y(118));
+  ctx.lineTo(X(588), Y(114)); ctx.lineTo(X(572), Y(120)); ctx.closePath(); ctx.fill();
+  ctx.fillRect(X(610), Y(100), X(45), Y(100));
+  ctx.beginPath();
+  ctx.moveTo(X(610), Y(100)); ctx.lineTo(X(655), Y(100)); ctx.lineTo(X(650), Y(92)); ctx.lineTo(X(615), Y(92));
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(X(628), Y(74), X(6), Y(18));
+
+  // ─── 4 條垂直霓虹邊條 ─────────────────────────────
+  const neonStrips = [
+    [59,92,'255,45,163', 108],
+    [214,70,'0,232,255', 130],
+    [457,110,'255,45,163',90],
+    [609,100,'0,232,255',100],
+  ];
+  for (const [sx, sy, rgb, sh] of neonStrips) {
+    ctx.fillStyle = `rgba(${rgb},0.25)`;
+    ctx.fillRect(X(sx-1), Y(sy), X(4), Y(sh));
+    ctx.fillStyle = `rgba(${rgb},0.9)`;
+    ctx.fillRect(X(sx), Y(sy), X(2), Y(sh));
+  }
+
+  // ─── 窗光 ────────────────────────────────────────
+  const NEAR_WINDOWS = [
+    [26,105,3,4,'#00e8ff'],[36,105,3,4,'#ff2da3'],[46,115,3,4,'#ffb84d'],
+    [26,125,1.5,10,'#a64dff'],[36,138,3,4,'#00e8ff'],[46,152,3,4,'#ff2da3'],
+    [26,170,18,2,'#ffb84d'],[46,178,3,4,'#00e8ff'],[36,190,3,3,'#ff2da3'],
+    [76,146,3,4,'#ff2da3'],[74,160,22,1.5,'#00e8ff'],[88,174,3,4,'#ffb84d'],[76,186,3,3,'#00e8ff'],
+    [135,48,6,3,'#ffb84d'],
+    [124,64,28,1.5,'#ff2da3'],
+    [124,72,8,4,'#00e8ff'],[136,72,5,4,'#a64dff'],[145,72,8,4,'#ffb84d'],
+    [116,92,3,4,'#ff2da3'],[127,92,3,4,'#00e8ff'],[139,92,3,4,'#ffb84d'],[151,92,3,4,'#a64dff'],
+    [116,106,3,4,'#ffb84d'],[139,106,3,4,'#00e8ff'],[151,106,3,4,'#ff2da3'],
+    [116,120,3,4,'#ff2da3'],[127,120,3,4,'#00e8ff'],[151,120,3,4,'#ffb84d'],
+    [120,134,33,1.5,'#00e8ff'],
+    [116,144,3,4,'#a64dff'],[127,144,3,4,'#ff2da3'],[139,144,3,4,'#00e8ff'],[151,144,3,4,'#ff2da3'],
+    [116,158,3,4,'#00e8ff'],[139,158,3,4,'#ffb84d'],[151,158,3,4,'#a64dff'],
+    [116,172,3,4,'#ff2da3'],[139,172,3,4,'#00e8ff'],
+    [116,186,3,4,'#ffb84d'],[139,186,3,4,'#a64dff'],[151,186,3,4,'#ff2da3'],
+    [186,118,2,3,'#ffb84d'],
+    [178,135,1.5,12,'#00e8ff'],[186,135,1.5,12,'#ff2da3'],[194,135,1.5,12,'#ffb84d'],[202,135,1.5,12,'#00e8ff'],
+    [178,158,1.5,14,'#a64dff'],[194,158,1.5,14,'#ff2da3'],
+    [178,180,3,4,'#ffb84d'],[200,182,3,4,'#00e8ff'],[186,190,3,3,'#ff2da3'],
+    [222,73,14,1.5,'#00e8ff'],
+    [220,86,38,2,'#ffb84d'],[220,98,38,1.5,'#00e8ff'],[220,112,38,2,'#ff2da3'],
+    [220,124,38,1.5,'#a64dff'],[220,138,38,2,'#00e8ff'],[220,152,38,1.5,'#ffb84d'],
+    [220,166,38,2,'#ff2da3'],[220,182,38,1.5,'#00e8ff'],
+    [274,148,3,4,'#ffb84d'],[286,148,3,4,'#00e8ff'],
+    [272,162,22,1.5,'#ff2da3'],[280,175,3,4,'#00e8ff'],[288,188,3,3,'#ffb84d'],
+    [318,60,28,1.5,'#ffb84d'],[320,82,40,2,'#ff2da3'],
+    [316,92,8,5,'#ff2da3'],[330,92,14,5,'#00e8ff'],[350,92,8,5,'#a64dff'],
+    [312,118,3,4,'#ffb84d'],[324,118,3,4,'#ff2da3'],[336,118,3,4,'#00e8ff'],[348,118,3,4,'#a64dff'],
+    [312,132,3,4,'#00e8ff'],[336,132,3,4,'#ff2da3'],[348,132,3,4,'#ffb84d'],
+    [312,146,44,1.5,'#ff2da3'],
+    [312,158,3,4,'#a64dff'],[324,158,3,4,'#00e8ff'],[336,158,3,4,'#ffb84d'],[348,158,3,4,'#ff2da3'],
+    [312,172,3,4,'#00e8ff'],[336,172,3,4,'#a64dff'],
+    [312,186,3,4,'#ffb84d'],[324,186,3,4,'#00e8ff'],[348,186,3,4,'#ff2da3'],
+    [386,123,3,3,'#ffb84d'],
+    [378,138,1.5,10,'#ff2da3'],[388,138,3,4,'#00e8ff'],[398,138,3,4,'#ffb84d'],
+    [376,158,24,1.5,'#a64dff'],[386,172,3,4,'#ff2da3'],[378,184,3,3,'#00e8ff'],
+    [424,92,1.5,14,'#00e8ff'],[432,92,1.5,14,'#ff2da3'],[438,92,1.5,14,'#ffb84d'],
+    [418,120,1.5,14,'#ff2da3'],[438,120,1.5,14,'#00e8ff'],[448,120,1.5,14,'#a64dff'],
+    [418,144,1.5,14,'#ffb84d'],[428,144,1.5,14,'#00e8ff'],[448,144,1.5,14,'#ff2da3'],
+    [416,168,40,1.5,'#a64dff'],
+    [428,180,3,4,'#00e8ff'],[448,186,3,3,'#ff2da3'],
+    [481,117,9,5,'#ffb84d'],
+    [474,130,6,4,'#ff2da3'],[488,130,3,4,'#a64dff'],[498,130,3,4,'#00e8ff'],
+    [474,146,3,4,'#00e8ff'],[490,146,3,4,'#ff2da3'],
+    [472,160,28,1.5,'#ffb84d'],[486,172,3,4,'#ff2da3'],[476,186,3,4,'#00e8ff'],
+    [528,58,20,1.5,'#ffb84d'],
+    [524,68,12,6,'#ff2da3'],[540,68,12,6,'#00e8ff'],
+    [518,92,42,1.5,'#a64dff'],
+    [520,132,3,4,'#00e8ff'],[534,132,3,4,'#ff2da3'],[546,132,3,4,'#ffb84d'],[558,132,3,4,'#a64dff'],
+    [520,146,3,4,'#ffb84d'],[546,146,3,4,'#00e8ff'],[558,146,3,4,'#ff2da3'],
+    [518,160,44,1.5,'#00e8ff'],
+    [520,172,3,4,'#ff2da3'],[534,172,3,4,'#a64dff'],[546,172,3,4,'#00e8ff'],
+    [520,186,3,4,'#00e8ff'],[546,186,3,4,'#ff2da3'],[558,186,3,3,'#ffb84d'],
+    [578,138,1.5,10,'#ffb84d'],[588,138,3,4,'#00e8ff'],
+    [578,158,3,4,'#ff2da3'],[588,172,3,4,'#00e8ff'],[578,186,3,3,'#ffb84d'],
+    [630,78,2,3,'#ff2da3'],
+    [618,106,1.5,12,'#ff2da3'],[628,106,1.5,12,'#00e8ff'],[638,106,1.5,12,'#ffb84d'],[648,106,1.5,12,'#a64dff'],
+    [618,128,1.5,12,'#00e8ff'],[638,128,1.5,12,'#ff2da3'],
+    [616,148,36,1.5,'#ffb84d'],[628,158,3,4,'#00e8ff'],
+    [618,172,3,4,'#a64dff'],[648,172,3,4,'#ff2da3'],[628,186,3,3,'#00e8ff'],
+  ];
+  for (const [wx, wy, ww, wh, c] of NEAR_WINDOWS) {
+    ctx.fillStyle = c;
+    ctx.fillRect(X(wx), Y(wy), X(ww), Y(wh));
+  }
+
+  // ─── 3 招牌 ─────────────────────────────────────
+  ctx.fillStyle = "#15081f";
+  ctx.fillRect(X(156), Y(82), X(3), Y(58));
+  ctx.fillStyle = "rgba(0,232,255,0.82)";
+  ctx.fillRect(X(159), Y(78), X(22), Y(62));
+  ctx.strokeStyle = "rgba(128,244,255,0.85)";
+  ctx.lineWidth = Math.max(1, 0.5*yS);
+  ctx.strokeRect(X(159), Y(78), X(22), Y(62));
+  ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = Math.max(0.5, 0.5*yS);
+  ctx.beginPath();
+  ctx.moveTo(X(159),Y(92));  ctx.lineTo(X(181),Y(92));
+  ctx.moveTo(X(159),Y(110)); ctx.lineTo(X(181),Y(110));
+  ctx.moveTo(X(159),Y(128)); ctx.lineTo(X(181),Y(128));
+  ctx.stroke();
+  const verTexts = ["新宿","渋谷","秋葉","池袋"];
+  const verCurrent = cycleText(time, verTexts, 9000);
+  ctx.font = `700 ${Math.round(14*yS)}px sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "#0a0418";
+  ctx.fillText(verCurrent[0], X(170), Y(98));
+  ctx.fillText(verCurrent[1], X(170), Y(120));
+
+  ctx.fillStyle = "#15081f";
+  ctx.fillRect(X(361), Y(62), X(4), Y(14));
+  ctx.fillStyle = "#3a1f48";
+  ctx.fillRect(X(363), Y(66), X(15), Y(2));
+  ctx.fillStyle = "#15081f";
+  ctx.fillRect(X(376), Y(63), X(3), Y(10));
+  ctx.fillStyle = "rgba(255,45,163,0.82)";
+  ctx.fillRect(X(378), Y(56), X(46), Y(24));
+  ctx.strokeStyle = "rgba(255,112,192,0.85)"; ctx.lineWidth = Math.max(1, 0.5*yS);
+  ctx.strokeRect(X(378), Y(56), X(46), Y(24));
+  ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = Math.max(0.5, 0.6*yS);
+  ctx.beginPath();
+  ctx.moveTo(X(378),Y(64)); ctx.lineTo(X(424),Y(64));
+  ctx.moveTo(X(378),Y(73)); ctx.lineTo(X(424),Y(73));
+  ctx.stroke();
+  const proTexts = ["霓虹","電脳","不夜","機甲"];
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `700 ${Math.round(14*yS)}px sans-serif`;
+  ctx.fillText(cycleText(time, proTexts, 9000), X(401), Y(69));
+
+  ctx.fillStyle = "rgba(255,184,77,0.85)";
+  ctx.fillRect(X(518), Y(100), X(40), Y(22));
+  ctx.strokeStyle = "rgba(255,214,128,0.85)"; ctx.lineWidth = Math.max(1, 0.5*yS);
+  ctx.strokeRect(X(518), Y(100), X(40), Y(22));
+  ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = Math.max(0.5, 0.6*yS);
+  ctx.beginPath();
+  ctx.moveTo(X(518),Y(107)); ctx.lineTo(X(558),Y(107));
+  ctx.moveTo(X(518),Y(115)); ctx.lineTo(X(558),Y(115));
+  ctx.stroke();
+  const horTexts = ["神龍","夜城","賽博","光速"];
+  ctx.fillStyle = "#3a1500";
+  ctx.font = `700 ${Math.round(14*yS)}px sans-serif`;
+  ctx.fillText(cycleText(time, horTexts, 9000), X(538), Y(111));
+
+  // ─── 3 天線塔 + 多燈 ─────────────────────────────
+  ctx.strokeStyle = "#3a1f48"; ctx.lineWidth = Math.max(1, 0.8*yS);
+  ctx.beginPath(); ctx.moveTo(X(137), Y(42)); ctx.lineTo(X(137), Y(12)); ctx.stroke();
+  drawAvLight(ctx, X(137), Y(12), 1.5*yS, time, 1400, 0);
+  drawAvLight(ctx, X(137), Y(22), 1.3*yS, time, 1700, 400);
+  drawAvLight(ctx, X(137), Y(32), 1.3*yS, time, 2000, 900);
+  ctx.beginPath(); ctx.moveTo(X(334), Y(52)); ctx.lineTo(X(334), Y(22)); ctx.stroke();
+  ctx.lineWidth = Math.max(0.7, 0.6*yS);
+  ctx.beginPath(); ctx.moveTo(X(326), Y(34)); ctx.lineTo(X(342), Y(34)); ctx.stroke();
+  drawAvLight(ctx, X(334), Y(22), 1.5*yS, time, 1500, 0);
+  drawAvLight(ctx, X(326), Y(34), 1.2*yS, time, 1800, 300);
+  drawAvLight(ctx, X(342), Y(34), 1.2*yS, time, 2100, 600);
+  ctx.lineWidth = Math.max(1, 0.8*yS);
+  ctx.beginPath(); ctx.moveTo(X(538), Y(57)); ctx.lineTo(X(538), Y(24)); ctx.stroke();
+  ctx.lineWidth = Math.max(0.7, 0.6*yS);
+  ctx.beginPath(); ctx.moveTo(X(532), Y(38)); ctx.lineTo(X(544), Y(38)); ctx.stroke();
+  drawAvLight(ctx, X(538), Y(24), 1.5*yS, time, 1600, 0);
+  drawAvLight(ctx, X(532), Y(38), 1.2*yS, time, 2000, 500);
+  drawAvLight(ctx, X(544), Y(38), 1.2*yS, time, 1900, 1000);
+}
+
+function drawCitySkyline(ctx, w, h, horizon, time) {
+  drawCityFarLayer(ctx, w, horizon, 0, time);
+  drawCityFarLayer(ctx, w, horizon, 1, time);
+  drawCityFarLayer(ctx, w, horizon, 2, time);
+  drawCityMidLayer(ctx, w, horizon, time);
+  drawCityNearLayer(ctx, w, horizon, time);
+}
+
+function drawFlyingVehicle(ctx, w, horizon, time) {
+  const yS = horizon / 200;
+  const period = 14000;
+  const restRatio = 0.22;
+  const travel = 1 - restRatio;
+  const t = (time % period) / period;
+  if (t > travel) return;
+  const progress = t / travel;
+
+  const S = yS * 2.5;
+  const x = -30*S + (w + 60*S) * progress;
+  const y = (82 - 7*progress) * yS;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = "#0a0418";
+  ctx.strokeStyle = "#3a1f48"; ctx.lineWidth = Math.max(0.5, 0.4*S);
+  ctx.beginPath();
+  ctx.moveTo(-10*S, 1*S); ctx.lineTo(7*S, 1*S);
+  ctx.lineTo(10*S, 2.5*S); ctx.lineTo(7*S, 4*S);
+  ctx.lineTo(-10*S, 4*S); ctx.lineTo(-11*S, 2.5*S);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "rgba(0,232,255,0.95)";
+  ctx.fillRect(-8*S, 1.7*S, 14*S, 1.6*S);
+  ctx.fillStyle = "rgba(255,184,77,0.32)";
+  ctx.beginPath(); ctx.arc(-10*S, 2.5*S, 2.8*S, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#ffb84d";
+  ctx.beginPath(); ctx.arc(-10*S, 2.5*S, 1.4*S, 0, Math.PI*2); ctx.fill();
+  const strobe = 0.6 + 0.4*Math.abs(Math.sin(time * 0.012));
+  ctx.fillStyle = `rgba(255,255,255,${strobe})`;
+  ctx.beginPath(); ctx.arc(9*S, 2.5*S, 0.6*S, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "rgba(10,4,24,0.85)";
+  ctx.beginPath();
+  ctx.moveTo(-4*S, 4*S); ctx.lineTo(-4*S, 5.5*S); ctx.lineTo(-1*S, 4*S);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(1*S, 4*S); ctx.lineTo(1*S, 5.5*S); ctx.lineTo(4*S, 4*S);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(255,184,77,0.55)";
+  ctx.lineWidth = Math.max(0.7, 0.7*S); ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-17*S, 2.5*S); ctx.lineTo(-12*S, 2.5*S); ctx.stroke();
+  ctx.restore();
+}
+
+function drawSearchlights(ctx, w, horizon, time) {
+  const xS = w/680, yS = horizon/200;
+  const beam = (sx, sy, lengthMul, baseW, rgbCore, rgbOuter, ang1, ang2, period) => {
+    const t = (time % period) / period;
+    const angDeg = ang1 + (ang2 - ang1) * (0.5 - 0.5*Math.cos(t * Math.PI * 2));
+    const angRad = angDeg * Math.PI / 180;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(angRad);
+    const farEnd = -sy * lengthMul;  // 光束向天空(往上)延伸
+
+    // 外暈光錐(寬而淡):單一三角形 + 沿軸線的線性漸層
+    const gradOuter = ctx.createLinearGradient(0, 0, 0, farEnd);
+    gradOuter.addColorStop(0,    `rgba(${rgbOuter},0.28)`);
+    gradOuter.addColorStop(0.15, `rgba(${rgbOuter},0.18)`);
+    gradOuter.addColorStop(0.40, `rgba(${rgbOuter},0.08)`);
+    gradOuter.addColorStop(0.75, `rgba(${rgbOuter},0.02)`);
+    gradOuter.addColorStop(1,    `rgba(${rgbOuter},0)`);
+    ctx.fillStyle = gradOuter;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(baseW/2, farEnd);
+    ctx.lineTo(-baseW/2, farEnd);
+    ctx.closePath();
+    ctx.fill();
+
+    // 核心光柱(窄而亮):同樣是單一三角形 + 平滑漸層,前段衰減快、後段慢
+    const coreW = baseW * 0.45;
+    const gradCore = ctx.createLinearGradient(0, 0, 0, farEnd);
+    gradCore.addColorStop(0,    `rgba(${rgbCore},0.65)`);
+    gradCore.addColorStop(0.12, `rgba(${rgbCore},0.42)`);
+    gradCore.addColorStop(0.30, `rgba(${rgbCore},0.22)`);
+    gradCore.addColorStop(0.55, `rgba(${rgbCore},0.09)`);
+    gradCore.addColorStop(0.82, `rgba(${rgbCore},0.025)`);
+    gradCore.addColorStop(1,    `rgba(${rgbCore},0)`);
+    ctx.fillStyle = gradCore;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(coreW/2, farEnd);
+    ctx.lineTo(-coreW/2, farEnd);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+
+    // 燈具錨點 — 多層光暈製造鏡頭眩光感
+    ctx.fillStyle = `rgba(${rgbCore},0.22)`;
+    ctx.beginPath(); ctx.arc(sx, sy, 7*xS, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = `rgba(${rgbCore},0.65)`;
+    ctx.beginPath(); ctx.arc(sx, sy, 3.5*xS, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(sx, sy, 1.5*xS, 0, Math.PI*2); ctx.fill();
   };
-  drawLayer(0,16); drawLayer(1,14);
+
+  beam(227*xS, 68*yS, 1.05, 100*xS, "255,210,236", "255,144,216", -26, 30, 7000);
+  beam(431*xS, 82*yS, 1.05, 110*xS, "208,244,255", "144,232,255",  28, -30, 9000);
+}
+
+// ─── 雨 ──────────────────────────────────────────────────────────────
+// 每滴雨的長度、粗細、亮度、相位都用 skylineHash01 隨機,避免「一個樣」
+function drawRainLayer(ctx, w, h, horizon, time, cfg) {
+  const yS = horizon / 200;
+  const angRad = 12 * Math.PI / 180;  // 12° 風偏角
+  const sinA = Math.sin(angRad), cosA = Math.cos(angRad);
+
+  ctx.lineCap = "round";
+  for (let i = 0; i < cfg.count; i++) {
+    const s = i * 1.61 + cfg.seedOffset;
+    const sxNorm  = skylineHash01(s*1.1);
+    const sphase  = skylineHash01(s*1.7+1);
+    const slen    = skylineHash01(s*2.3+2);
+    const swid    = skylineHash01(s*2.9+3);
+    const salpha  = skylineHash01(s*3.7+4);
+    const sspeed  = skylineHash01(s*4.3+5);  // 速度微擾,讓雨絲不會列隊整齊
+
+    const dropLen   = (cfg.lenMin + slen*(cfg.lenMax-cfg.lenMin)) * yS;
+    const dropWid   = Math.max(0.4, (cfg.widthMin + swid*(cfg.widthMax-cfg.widthMin)) * yS);
+    const dropAlpha = cfg.alphaMin + salpha*(cfg.alphaMax-cfg.alphaMin);
+    const speedMul  = 0.85 + sspeed*0.3;  // 每滴 0.85x–1.15x 基準速度
+
+    const period = cfg.periodMs / speedMul;
+    const cycle = ((time / period) + sphase) % 1;
+    const yTop = -dropLen + cycle * (h + dropLen*2);
+    // 水平位置橫跨整個畫面寬度,加 20% 緩衝避免邊緣空白
+    const xTop = (sxNorm * 1.4 - 0.2) * w;
+
+    ctx.strokeStyle = `rgba(210,232,250,${dropAlpha})`;
+    ctx.lineWidth = dropWid;
+    ctx.beginPath();
+    ctx.moveTo(xTop, yTop);
+    ctx.lineTo(xTop + dropLen*sinA, yTop + dropLen*cosA);
+    ctx.stroke();
+  }
+}
+
+function drawRainFar(ctx, w, h, horizon, time) {
+  // 遠雨:多、短、細、極淡 → 像霧氣裡的水珠
+  drawRainLayer(ctx, w, h, horizon, time, {
+    count: 95, periodMs: 5000, seedOffset: 0,
+    lenMin: 8,  lenMax: 14, widthMin: 0.4, widthMax: 0.7,
+    alphaMin: 0.18, alphaMax: 0.35,
+  });
+}
+function drawRainMid(ctx, w, h, horizon, time) {
+  // 中雨:主要雨絲,長度/粗細/亮度都個別變化
+  drawRainLayer(ctx, w, h, horizon, time, {
+    count: 130, periodMs: 1800, seedOffset: 100,
+    lenMin: 18, lenMax: 26, widthMin: 0.7, widthMax: 1.1,
+    alphaMin: 0.32, alphaMax: 0.55,
+  });
+}
+function drawRainNear(ctx, w, h, horizon, time) {
+  // 近雨:少而粗長、很快 → 偶爾飄過畫面前景的大雨滴
+  drawRainLayer(ctx, w, h, horizon, time, {
+    count: 55, periodMs: 700, seedOffset: 200,
+    lenMin: 36, lenMax: 52, widthMin: 1.0, widthMax: 1.6,
+    alphaMin: 0.55, alphaMax: 0.88,
+  });
 }
 
 function drawRace(time) {
   const ctx=app.ctx, w=app.w, h=app.h;
   ctx.clearRect(0,0,w,h);
   {
+    // 賽博龐克夜空:深藍紫 → 紫紅 → 洋紅(地平線) → 暗黑(路面)
     const bg=ctx.createLinearGradient(0,0,0,h);
-    bg.addColorStop(0,"#06101d"); bg.addColorStop(0.45,"#122033"); bg.addColorStop(1,"#05090d");
+    bg.addColorStop(0,    "#080418");
+    bg.addColorStop(0.17, "#1c0a35");
+    bg.addColorStop(0.32, "#3c104e");
+    bg.addColorStop(0.38, "#5a1858");
+    bg.addColorStop(0.4,  "#15081f");
+    bg.addColorStop(1,    "#05090d");
     ctx.fillStyle=bg; ctx.fillRect(0,0,w,h);
     const horizon=h*0.38;
+    drawHorizonHaze(ctx,w,horizon);
     drawCitySkyline(ctx,w,h,horizon,time);
+    // 遠/中雨在城市之前;探照燈以 screen 合成疊上,自然照亮雨絲;近雨在最前
+    drawRainFar(ctx,w,h,horizon,time);
+    drawRainMid(ctx,w,h,horizon,time);
+    drawFlyingVehicle(ctx,w,horizon,time);
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    drawSearchlights(ctx,w,horizon,time);
+    ctx.restore();
+    drawRainNear(ctx,w,h,horizon,time);
   }
 
   const horizon=h*0.38;
@@ -7412,11 +7990,11 @@ function drawCurrentSpeedSign(speed, isPreview, overLimit, time) {
 }
 
 // ── 棄牌換道提示 ───────────────────────────────────────────────
-// 拖牌時若懸停在「非玩家當前道」（= 等於要 lane change），表示這張牌會
-// 直接棄掉、卡牌效果不會觸發。用速度大字下方的路面 AR 風格投影提示
-//   上行：棄牌（亮黃）
-//   下行：卡牌效果不觸發（白）
+// 已搬到拖曳卡片本身（drawInner 拖曳區塊）；保留函式空殼以兼容呼叫點
 function drawLaneDiscardHint(time) {
+  return;
+}
+function _legacyDrawLaneDiscardHint(time) {
   if (!app.drag) return;
   const isDragTeamCard = app.drag.card?.cardClass === "team";
   if (isDragTeamCard) return;  // 車隊牌不算
