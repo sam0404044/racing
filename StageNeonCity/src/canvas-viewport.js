@@ -38,10 +38,12 @@
     viewport.width = viewWidth;
     viewport.height = viewHeight;
 
-    const baseScale = Math.min(
-      viewWidth / viewport.designWidth,
-      viewHeight / viewport.designHeight
-    );
+    const fit = options.fit === "cover" ? "cover" : "contain";
+    const scaleX = viewWidth / viewport.designWidth;
+    const scaleY = viewHeight / viewport.designHeight;
+    const baseScale = fit === "cover"
+      ? Math.max(scaleX, scaleY)
+      : Math.min(scaleX, scaleY);
     viewport.scale = baseScale;
     viewport.uiScale = useUiScale ? getResponsiveUiScale(viewWidth) : 1;
     viewport.finalScale = baseScale * viewport.uiScale;

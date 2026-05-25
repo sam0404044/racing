@@ -18,9 +18,7 @@ function initQteTest() {
 
 const CanvasQteTest = (() => {
   // ─── 音樂 ────────────────────────────────────────────────────────────────
-  const NORMAL_STAGE_BGM_SRC = "assets/BGM/001.mp3";
   const BLIND_DESERT_CG_SRC  = "assets/blind-card-desert-boss.png";
-  const BLIND_DESERT_BGM_SRC = "assets/BGM/BOSS.mp3";
   const BOSS_ENTRANCE_LAYER_SRCS = [
     "assets/BOSS/boss-intro-red-banner.png",
     "assets/BOSS/boss-intro-title-code.png",
@@ -55,19 +53,10 @@ const CanvasQteTest = (() => {
     ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
     ctx.restore();
   }
-  const normalBgm = new Audio(NORMAL_STAGE_BGM_SRC);
-  normalBgm.loop = true; normalBgm.preload = "auto"; normalBgm.volume = 0.58;
-  const bossBgm = new Audio(BLIND_DESERT_BGM_SRC);
-  bossBgm.loop = true; bossBgm.preload = "auto"; bossBgm.volume = 0.72;
-  function bindBgmLoopFallback(a) {
-    a.addEventListener("ended", () => { if (a.loop) { a.currentTime = 0; a.play().catch(()=>{}); } });
-  }
-  bindBgmLoopFallback(normalBgm);
-  bindBgmLoopFallback(bossBgm);
-  function playNormalBgm() { const p=normalBgm.play(); if(p) p.catch(()=>{ app.normalBgmPending=true; }); }
-  function stopNormalBgm() { normalBgm.pause(); normalBgm.currentTime=0; }
-  function playBossBgm()   { stopNormalBgm(); const p=bossBgm.play(); if(p) p.catch(()=>{}); }
-  function stopBossBgm()   { bossBgm.pause(); bossBgm.currentTime=0; }
+  function playNormalBgm() {}
+  function stopNormalBgm() {}
+  function playBossBgm() {}
+  function stopBossBgm() {}
 
   // ─── QTE 常數 ─────────────────────────────────────────────────────────────
   const RHYTHM_DURATIONS      = [1150, 1150, 1150, 1150, 1800];

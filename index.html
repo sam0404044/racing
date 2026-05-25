@@ -3,181 +3,466 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="最後車手 / Final Driver — 機制驗證場。">
+  <meta name="description" content="The Final Driver">
   <meta name="color-scheme" content="dark">
-  <title>最後車手 / Final Driver</title>
-  <base href="StageNeonCity/">
-  <link rel="stylesheet" href="../final-driver.css">
+  <title>The Final Driver</title>
   <style>
-    /* 角落 HTML UI（不畫在 canvas、跟視窗錨定、不受設計座標 transform 影響）*/
-    .corner-ui {
-      position: fixed;
-      z-index: 50;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      pointer-events: auto;
-      font-family: system-ui, "Microsoft JhengHei", sans-serif;
+    :root {
+      color-scheme: dark;
+      --text: #f8fbff;
+      --muted: rgba(235, 242, 255, 0.72);
+      --line: rgba(255, 255, 255, 0.24);
+      --hot: #ff4a3d;
+      --gold: #ffd37a;
+      --blue: #9ed9ff;
     }
-    .corner-ui.top-right { top: 12px; right: 12px; }
-    .corner-ui-panel {
-      background: rgba(10, 18, 28, 0.85);
-      border: 1.5px solid rgba(120, 170, 220, 0.55);
-      border-radius: 10px;
-      padding: 6px 10px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      background: #05070c;
+      color: var(--text);
+      font-family: "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
     }
-    .corner-ui-label {
-      font-size: 11px;
-      font-weight: 700;
-      color: rgba(180, 200, 230, 0.9);
-      letter-spacing: 1px;
+    body { overflow: hidden; }
+    button, a { font: inherit; }
+    .game-shell {
+      position: relative;
+      width: 100vw;
+      min-height: 100vh;
+      overflow: hidden;
+      isolation: isolate;
     }
-    .corner-ui-btn {
-      width: 36px;
-      height: 30px;
-      border-radius: 6px;
-      background: rgba(70, 76, 88, 0.88);
-      border: 1.5px solid rgba(190, 198, 210, 0.46);
-      color: #d8ecff;
-      font-weight: 800;
-      font-size: 14px;
-      cursor: pointer;
-      transition: transform 0.12s ease, background 0.12s ease;
+    .cover, .level-bg {
+      position: absolute;
+      inset: 0;
+      z-index: -3;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
     }
-    .corner-ui-btn:hover {
-      background: rgba(85, 92, 105, 0.95);
-      transform: translateY(-1px);
-    }
-    .corner-ui-btn.active {
-      background: rgba(169, 39, 42, 0.94);
-      border-color: rgba(255, 188, 108, 0.88);
-      color: #fff4d6;
-      box-shadow: 0 0 12px rgba(255, 74, 54, 0.42);
-    }
-
-    /* 短螢幕提示（視窗高度不足時自動顯示）*/
-    .height-hint {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 100;
-      background: rgba(40, 28, 16, 0.96);
-      border: 1.5px solid rgba(255, 188, 108, 0.7);
-      border-radius: 12px;
-      padding: 14px 56px 14px 20px;
-      color: #fff4d6;
-      font-family: system-ui, "Microsoft JhengHei", sans-serif;
-      font-size: 14px;
-      font-weight: 700;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
-                  0 0 24px rgba(255, 74, 54, 0.18);
-      max-width: 480px;
-      line-height: 1.5;
-      opacity: 0;
-      transition: opacity 0.35s ease;
+    .cover { transform: scale(1.015); }
+    .shade {
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      background:
+        linear-gradient(90deg, rgba(2, 4, 10, 0.86), rgba(2, 4, 10, 0.42) 52%, rgba(2, 4, 10, 0.14)),
+        linear-gradient(0deg, rgba(2, 4, 10, 0.84), rgba(2, 4, 10, 0.08) 52%, rgba(2, 4, 10, 0.38));
       pointer-events: none;
     }
-    .height-hint.show {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .height-hint .hint-icon {
-      color: rgba(255, 210, 120, 0.95);
-      margin-right: 6px;
-    }
-    .height-hint .hint-sub {
-      display: block;
-      font-size: 12px;
-      font-weight: 500;
-      color: rgba(220, 200, 170, 0.78);
-      margin-top: 4px;
-    }
-    .height-hint .hint-close {
+    .grain {
       position: absolute;
-      top: 50%;
-      right: 14px;
-      transform: translateY(-50%);
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 210, 120, 0.4);
-      color: rgba(255, 230, 180, 0.85);
+      inset: 0;
+      z-index: -1;
+      opacity: 0.18;
+      background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 3px);
+      mix-blend-mode: overlay;
+      pointer-events: none;
+    }
+    .action:hover, .action:focus-visible,
+    .level-close:hover, .level-close:focus-visible {
+      border-color: rgba(255, 211, 122, 0.82);
+      background: rgba(20, 24, 34, 0.74);
+      outline: none;
+    }
+    .menu {
+      min-height: 100vh;
+      width: min(680px, calc(100vw - 40px));
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 8vh 0 9vh clamp(24px, 5vw, 72px);
+    }
+    .brand { margin: 0 0 34px; }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--blue);
+      font-size: 13px;
       font-weight: 800;
-      font-size: 14px;
-      cursor: pointer;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 {
+      color: var(--text);
+      font-size: clamp(34px, 6vw, 84px);
+      line-height: 0.94;
+      font-weight: 950;
+      letter-spacing: 0;
+      text-shadow: 0 18px 38px rgba(0, 0, 0, 0.52);
+      white-space: nowrap;
+    }
+    .official-name {
+      margin: 0 0 12px;
+      color: var(--blue);
+      font-size: 16px;
+      font-weight: 850;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: clamp(15px, 2.2vw, 20px);
+      line-height: 1.65;
+      max-width: 36rem;
+    }
+    .actions {
+      display: grid;
+      gap: 12px;
+      width: min(380px, 100%);
+    }
+    .action {
       display: flex;
       align-items: center;
-      justify-content: center;
-      transition: background 0.12s ease;
+      justify-content: space-between;
+      min-height: 56px;
+      padding: 0 18px 0 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      background: rgba(5, 8, 16, 0.48);
+      text-decoration: none;
+      font-size: 17px;
+      font-weight: 850;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
     }
-    .height-hint .hint-close:hover {
-      background: rgba(255, 255, 255, 0.12);
+    .action:hover, .action:focus-visible { transform: translateX(4px); }
+    .action.primary {
+      border-color: rgba(255, 74, 61, 0.8);
+      background: linear-gradient(90deg, rgba(189, 31, 34, 0.9), rgba(255, 121, 58, 0.56));
+      box-shadow: 0 18px 38px rgba(255, 74, 61, 0.24);
+    }
+    .arrow {
+      color: var(--gold);
+      font-size: 24px;
+      line-height: 1;
+    }
+    .level-select {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      overflow: auto;
+      background: #05070c;
+    }
+    .level-select.open { display: block; }
+    .level-bg {
+      position: fixed;
+      z-index: -3;
+    }
+    .level-select::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background:
+        linear-gradient(90deg, rgba(4, 6, 13, 0.9), rgba(4, 6, 13, 0.36) 48%, rgba(4, 6, 13, 0.62)),
+        linear-gradient(0deg, rgba(4, 6, 13, 0.9), rgba(4, 6, 13, 0.18) 58%, rgba(4, 6, 13, 0.62));
+      pointer-events: none;
+    }
+    .level-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      width: min(1180px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 54px 0 24px;
+    }
+    .level-title h2 {
+      font-size: clamp(38px, 6vw, 72px);
+      line-height: 1;
+      font-weight: 950;
+      letter-spacing: 0;
+    }
+    .level-title p {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
+      max-width: 36rem;
+    }
+    .level-close {
+      flex: 0 0 auto;
+      min-height: 44px;
+      padding: 0 16px;
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      color: var(--text);
+      background: rgba(5, 8, 16, 0.5);
+      cursor: pointer;
+      font-weight: 850;
+      backdrop-filter: blur(10px);
+    }
+    .level-grid {
+      width: min(1180px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 16px 0 54px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .level-card {
+      position: relative;
+      min-height: 260px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 8px;
+      color: var(--text);
+      background: linear-gradient(180deg, rgba(12, 18, 31, 0.88), rgba(8, 10, 18, 0.66));
+      text-decoration: none;
+      overflow: hidden;
+      backdrop-filter: blur(12px);
+      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+    .level-card:hover, .level-card:focus-visible {
+      transform: translateY(-4px);
+      border-color: rgba(255, 211, 122, 0.82);
+      background: linear-gradient(180deg, rgba(24, 31, 48, 0.94), rgba(10, 12, 20, 0.76));
+      outline: none;
+    }
+    .level-card::before {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 5px;
+      background: linear-gradient(90deg, var(--hot), var(--gold), var(--blue));
+      opacity: 0.9;
+    }
+    .level-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: rgba(235, 242, 255, 0.7);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .level-card h3 {
+      margin: 22px 0 10px;
+      font-size: 28px;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+    .level-card p {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+    .level-enter {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 22px;
+      color: var(--gold);
+      font-weight: 900;
+    }
+    .dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(2, 4, 10, 0.66);
+    }
+    .dialog.open { display: flex; }
+    .dialog-panel {
+      width: min(560px, 100%);
+      padding: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 8px;
+      background: rgba(8, 12, 22, 0.9);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+    }
+    .dialog-panel h2 {
+      font-size: 30px;
+      line-height: 1.1;
+    }
+    .dialog-panel p {
+      margin-top: 14px;
+      color: var(--muted);
+      line-height: 1.75;
+    }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 22px;
+    }
+    @media (max-width: 900px) {
+      body { overflow: auto; }
+      .menu {
+        width: 100%;
+        min-height: 100svh;
+        padding: 104px 20px 44px;
+      }
+      .shade {
+        background: linear-gradient(0deg, rgba(2, 4, 10, 0.94), rgba(2, 4, 10, 0.62) 52%, rgba(2, 4, 10, 0.18));
+      }
+      .cover { object-position: 58% center; }
+      .level-header {
+        width: min(100% - 32px, 1180px);
+        padding-top: 28px;
+        flex-direction: column;
+      }
+      .level-close { align-self: flex-start; }
+      .level-grid {
+        width: min(100% - 32px, 1180px);
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
-<body class="qte-test-page">
-  <section class="qte-test hidden" id="qteTestRoot" aria-label="最後車手 / Final Driver"></section>
+<body>
+  <main class="game-shell" aria-label="最後車手">
+    <img class="cover" src="assets/final-driver-cover.png" alt="">
+    <div class="shade" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
 
-  <!-- 角落 UI：UI 大小切換 -->
-  <div class="corner-ui top-right" id="cornerUi" style="display:none;">
-    <div class="corner-ui-panel">
-      <span class="corner-ui-label">UI</span>
-      <button class="corner-ui-btn" data-ui-size="0.85">S</button>
-      <button class="corner-ui-btn active" data-ui-size="1.0">M</button>
-      <button class="corner-ui-btn" data-ui-size="1.15">L</button>
-    </div>
-  </div>
+    <section class="menu">
+      <div class="brand">
+        <p class="official-name">The Final Driver</p>
+        <h1>極速駕駛-最終指令</h1>
+        <p class="subtitle">為人類最後一次跑到終點。</p>
+      </div>
 
-  <!-- 提示橫條：建議全螢幕、可關閉（sessionStorage 記憶）-->
-  <div class="height-hint" id="heightHint">
-    <span class="hint-icon">💡</span>
-    <span>建議全螢幕遊玩、視覺體驗最佳</span>
-    <span class="hint-sub">按 <strong>F11</strong> 進入全螢幕、或最大化瀏覽器視窗</span>
-    <button class="hint-close" id="heightHintClose" aria-label="關閉提示">✕</button>
-  </div>
+      <div class="actions" aria-label="遊戲模式">
+        <button class="action primary" type="button" id="openLevelSelect">
+          <span>開始遊戲</span>
+          <span class="arrow" aria-hidden="true">›</span>
+        </button>
+        <a class="action" href="Story-Stage/story-settings.html">
+          <span>選項</span>
+          <span class="arrow" aria-hidden="true">›</span>
+        </a>
+        <button class="action" type="button" id="openAbout">
+          <span>關於遊戲</span>
+          <span class="arrow" aria-hidden="true">›</span>
+        </button>
+        <button class="action" type="button" id="exitGame">
+          <span>離開</span>
+          <span class="arrow" aria-hidden="true">›</span>
+        </button>
+      </div>
+    </section>
 
-  <noscript>
-    <p class="qte-noscript-msg">請啟用 JavaScript，以開始最後車手 / Final Driver。</p>
-  </noscript>
+    <section class="level-select" id="levelSelect" aria-label="關卡選擇" aria-hidden="true">
+      <img class="level-bg" src="assets/level-select-bg.png" alt="">
+      <header class="level-header">
+        <div class="level-title">
+          <p class="eyebrow">Select Stage</p>
+          <h2>關卡選擇</h2>
+          <p>目前只能選三個完整版流程入口。每個入口會依序接劇情與玩法，結束後回到這裡。</p>
+        </div>
+        <button class="level-close" type="button" id="closeLevelSelect">返回主選單</button>
+      </header>
 
-  <!-- canvas-viewport library（IIFE 掛 window.StoryCanvasViewport），main.js 之前載入 -->
-  <script src="src/canvas-viewport.js"></script>
-  <script type="module" src="src/main.js?v=20251130-startmenu"></script>
+      <div class="level-grid">
+        <a class="level-card" href="Story-Stage/story-stage.html?start=play_test_1&end=play_test_2&next=../QTE/index.html%3Fboss%3Dblind-desert%26campaign%3D1">
+          <div>
+            <div class="level-meta">
+              <span>第一關</span>
+              <span>Story 1-2 + Race</span>
+            </div>
+            <h3>盲牌沙漠</h3>
+            <p>流程：劇情 test1 → 劇情 test2 → 第一關「盲牌沙漠」。完成後回到關卡選擇頁。</p>
+          </div>
+          <span class="level-enter">開始第一關 <span aria-hidden="true">›</span></span>
+        </a>
 
-  <!-- 短螢幕提示控制器 -->
+        <a class="level-card" href="Story-Stage/story-stage.html?start=play_test_3&end=play_test_3&next=../StageNeonCity/index.html%3Fcampaign%3D2">
+          <div>
+            <div class="level-meta">
+              <span>第二關</span>
+              <span>Story 3 + Race</span>
+            </div>
+            <h3>霓虹城市賽道</h3>
+            <p>流程：劇情 test3 → StageNeonCity 第二關。完成後回到關卡選擇頁。</p>
+          </div>
+          <span class="level-enter">開始第二關 <span aria-hidden="true">›</span></span>
+        </a>
+
+        <a class="level-card" href="ThirdStage/index.html">
+          <div>
+            <div class="level-meta">
+              <span>第三關</span>
+              <span>Race + Story 4</span>
+            </div>
+            <h3>第三關</h3>
+            <p>流程：第三關 → 劇情 test4。第三關玩法目前先作為完整版流程入口。</p>
+          </div>
+          <span class="level-enter">開始第三關 <span aria-hidden="true">›</span></span>
+        </a>
+      </div>
+    </section>
+
+    <section class="dialog" id="aboutDialog" aria-label="關於遊戲" aria-hidden="true">
+      <div class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <p class="eyebrow">About</p>
+        <h2 id="aboutTitle">The Final Driver</h2>
+        <p>這是一款結合劇情、卡牌決策與賽車 QTE 的完整版遊戲。你會從人類車手最後的賽季出發，在不同關卡中面對演算法車隊、盲牌壓力與逐步升級的賽道規則。</p>
+        <div class="dialog-actions">
+          <button class="level-close" type="button" id="closeAbout">關閉</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
   <script>
-    (function() {
-      const hint = document.getElementById('heightHint');
-      const closeBtn = document.getElementById('heightHintClose');
-      if (!hint || !closeBtn) return;
+    const openLevelSelect = document.querySelector("#openLevelSelect");
+    const closeLevelSelect = document.querySelector("#closeLevelSelect");
+    const levelSelect = document.querySelector("#levelSelect");
+    const openAbout = document.querySelector("#openAbout");
+    const closeAbout = document.querySelector("#closeAbout");
+    const aboutDialog = document.querySelector("#aboutDialog");
+    const exitGame = document.querySelector("#exitGame");
 
-      // 玩家已關過 → 整 session 不再顯示
-      let dismissed = false;
-      try {
-        dismissed = sessionStorage.getItem('heightHintDismissed') === '1';
-      } catch (e) {}
+    function setLevelSelectOpen(open, focusTarget = true) {
+      levelSelect.classList.toggle("open", open);
+      levelSelect.setAttribute("aria-hidden", open ? "false" : "true");
+      document.body.style.overflow = open ? "auto" : "";
+      if (!focusTarget) return;
+      if (open) closeLevelSelect.focus();
+      else openLevelSelect.focus();
+    }
 
-      function show() {
-        if (dismissed) return;
-        hint.classList.add('show');
+    function setAboutOpen(open) {
+      aboutDialog.classList.toggle("open", open);
+      aboutDialog.setAttribute("aria-hidden", open ? "false" : "true");
+      if (open) closeAbout.focus();
+      else openAbout.focus();
+    }
+
+    openLevelSelect.addEventListener("click", () => setLevelSelectOpen(true));
+    closeLevelSelect.addEventListener("click", () => setLevelSelectOpen(false));
+    openAbout.addEventListener("click", () => setAboutOpen(true));
+    closeAbout.addEventListener("click", () => setAboutOpen(false));
+    exitGame.addEventListener("click", () => {
+      window.close();
+      document.body.innerHTML = '<main class="game-shell" style="display:grid;place-items:center;padding:24px;text-align:center;"><p class="subtitle">已離開 The Final Driver。</p></main>';
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && aboutDialog.classList.contains("open")) {
+        setAboutOpen(false);
+      } else if (event.key === "Escape" && levelSelect.classList.contains("open")) {
+        setLevelSelectOpen(false);
       }
-
-      closeBtn.addEventListener('click', () => {
-        dismissed = true;
-        hint.classList.remove('show');
-        try {
-          sessionStorage.setItem('heightHintDismissed', '1');
-        } catch (e) {}
-      });
-
-      // 載入後延遲一下顯示（讓畫面穩定）
-      setTimeout(show, 300);
-    })();
+    });
+    if (new URLSearchParams(window.location.search).has("levels")) {
+      setLevelSelectOpen(true, false);
+    }
   </script>
 </body>
 </html>

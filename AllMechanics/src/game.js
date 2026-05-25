@@ -41,14 +41,8 @@ const FONT_SCALE = 1.2;
 const UI_SCALE = FONT_SCALE;
 
 // ─── 音樂 ────────────────────────────────────────────────────────────────
-const NORMAL_STAGE_BGM_SRC = "../assets/BGM/001.mp3";
-const normalBgm = new Audio(NORMAL_STAGE_BGM_SRC);
-normalBgm.loop = true; normalBgm.preload = "auto"; normalBgm.volume = 0.58;
-normalBgm.addEventListener("ended", () => {
-  if (normalBgm.loop) { normalBgm.currentTime = 0; normalBgm.play().catch(()=>{}); }
-});
-function playNormalBgm() { const p = normalBgm.play(); if (p) p.catch(()=>{ app.normalBgmPending = true; }); }
-function stopNormalBgm() { normalBgm.pause(); normalBgm.currentTime = 0; }
+function playNormalBgm() {}
+function stopNormalBgm() {}
 
 // ─── 共用視覺工具 ────────────────────────────────────────────────────────
 function smooth01(v) {

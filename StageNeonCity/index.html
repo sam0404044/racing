@@ -117,9 +117,55 @@
     .height-hint .hint-close:hover {
       background: rgba(255, 255, 255, 0.12);
     }
+    .file-protocol-warning {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: #05070c;
+      color: #f5f7ff;
+      font-family: system-ui, "Microsoft JhengHei", sans-serif;
+      text-align: center;
+      padding: 24px;
+    }
+    body.file-protocol-blocked .file-protocol-warning {
+      display: flex;
+    }
+    .file-protocol-warning strong {
+      display: block;
+      margin-bottom: 12px;
+      font-size: 26px;
+      letter-spacing: 0.04em;
+    }
+    .file-protocol-warning span {
+      display: block;
+      margin-bottom: 14px;
+      color: rgba(245, 247, 255, 0.78);
+      line-height: 1.6;
+    }
+    .file-protocol-warning code {
+      display: inline-block;
+      max-width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #8fe7ff;
+      white-space: normal;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body class="qte-test-page">
+  <div class="file-protocol-warning" id="fileProtocolWarning" role="alert">
+    <div>
+      <strong>請用本機伺服器開啟</strong>
+      <span>主玩法使用 ES module，直接用 file:// 開會被瀏覽器擋住，畫面會變成黑色。</span>
+      <code>http://127.0.0.1:9878/StageNeonCity/index.html</code>
+    </div>
+  </div>
+
   <section class="qte-test hidden" id="qteTestRoot" aria-label="最後車手 / Final Driver"></section>
 
   <!-- 角落 UI：UI 大小切換 -->
@@ -143,6 +189,12 @@
   <noscript>
     <p class="qte-noscript-msg">請啟用 JavaScript，以開始最後車手 / Final Driver。</p>
   </noscript>
+
+  <script>
+    if (window.location.protocol === 'file:') {
+      document.body.classList.add('file-protocol-blocked');
+    }
+  </script>
 
   <!-- canvas-viewport library（IIFE 掛 window.StoryCanvasViewport），main.js 之前載入 -->
   <script src="src/canvas-viewport.js"></script>

@@ -21,9 +21,7 @@ const CanvasQteTest = (() => {
    * FINAL_RESULT → final-win
    */
   const OVERTAKE_TARGET = 8;
-  const NORMAL_STAGE_BGM_SRC = "assets/BGM/001.mp3";
   const BLIND_DESERT_CG_SRC = "assets/blind-card-desert-boss.png";
-  const BLIND_DESERT_BGM_SRC = "assets/BGM/BOSS.mp3";
   const BOSS_ENTRANCE_LAYER_SRCS = [
     "assets/BOSS/boss-intro-red-banner.png",
     "assets/BOSS/boss-intro-title-code.png",
@@ -41,16 +39,6 @@ const CanvasQteTest = (() => {
     img.src = src;
     return img;
   });
-  const normalBgm = new Audio(NORMAL_STAGE_BGM_SRC);
-  normalBgm.loop = true;
-  normalBgm.preload = "auto";
-  normalBgm.volume = 0.58;
-  const bossBgm = new Audio(BLIND_DESERT_BGM_SRC);
-  bossBgm.loop = true;
-  bossBgm.preload = "auto";
-  bossBgm.volume = 0.72;
-  bindBgmLoopFallback(normalBgm);
-  bindBgmLoopFallback(bossBgm);
   /** 加速條滿刻度（數值仍可超過門檻與滿格） */
   const ACCEL_METER_DISPLAY_MAX = 10;
   const CARD_TYPES = {
@@ -262,18 +250,28 @@ const CanvasQteTest = (() => {
   /** 節奏圈外框（點擊判定＝外框內，與縮小內圈無關） */
   const RHYTHM_OUTER_R = 48;
   const RHYTHM_UI_AVOID_PAD = 24;
+  const routeParams = new URLSearchParams(window.location.search || "");
+  const LEVEL_SELECT_URL = "../index.html?levels=1";
+
+  function isCampaignRun() {
+    return routeParams.has("campaign");
+  }
+
+  function returnToLevelSelect() {
+    window.location.href = LEVEL_SELECT_URL;
+  }
 
   function start(root) {
     app.root = root;
     document.body.classList.add("qte-active", "qte-canvas-only");
     root.classList.remove("hidden");
-    root.innerHTML = `<canvas class="qte-full-canvas" aria-label="QTE TEST Canvas"></canvas>
+    root.innerHTML = `<canvas class="qte-full-canvas" aria-label="第一關：盲牌沙漠"></canvas>
 <div id="qteWinOverlay" class="qte-win-overlay hidden" aria-hidden="true">
   <div class="qte-win-ribbons" aria-hidden="true"></div>
   <div class="qte-win-content">
     <p class="qte-win-sub"></p>
-    <h1 class="qte-win-title">遊戲獲勝</h1>
-    <button type="button" class="qte-win-replay" id="qteWinReplay">再玩一次</button>
+    <h1 class="qte-win-title">第一關完成</h1>
+    <button type="button" class="qte-win-replay" id="qteWinReplay">${isCampaignRun() ? "返回關卡選擇" : "再玩一次"}</button>
   </div>
 </div>`;
     app.canvas = root.querySelector("canvas");
@@ -282,6 +280,10 @@ const CanvasQteTest = (() => {
     if (app.winOverlay) {
       app.winOverlay.addEventListener("click", e => {
         if (e.target.closest("#qteWinReplay")) {
+          if (isCampaignRun()) {
+            returnToLevelSelect();
+            return;
+          }
           hideGameWinOverlay();
           reset();
         }
@@ -476,78 +478,32 @@ const CanvasQteTest = (() => {
   }
 
   function playNormalBgm() {
-    if (app.bossStage) return;
-    normalBgm.volume = 0.58;
-    normalBgm.loop = true;
-    const promise = normalBgm.play();
-    if (promise && typeof promise.catch === "function") {
-      promise
-        .then(() => {
-          app.normalBgmPending = false;
-        })
-        .catch(() => {
-          app.normalBgmPending = true;
-        });
-    }
+    app.normalBgmPending = false;
   }
 
   function bindBgmLoopFallback(audio) {
-    audio.addEventListener("ended", () => {
-      if (audio.loop) {
-        audio.currentTime = 0;
-        const promise = audio.play();
-        if (promise && typeof promise.catch === "function") promise.catch(() => {});
-      }
-    });
   }
 
   function stopNormalBgm() {
-    normalBgm.pause();
-    normalBgm.currentTime = 0;
+    app.normalBgmPending = false;
   }
 
   function playBossBgm() {
-    stopNormalBgm();
-    bossBgm.volume = 0.72;
-    bossBgm.loop = true;
-    const promise = bossBgm.play();
-    if (promise && typeof promise.catch === "function") {
-      promise
-        .then(() => {
-          app.bossBgmPending = false;
-        })
-        .catch(() => {
-          app.bossBgmPending = true;
-        });
-    }
+    app.bossBgmPending = false;
   }
 
   function primeBossBgmMuted() {
-    stopNormalBgm();
-    bossBgm.volume = 0;
-    bossBgm.loop = true;
-    const promise = bossBgm.play();
-    if (promise && typeof promise.catch === "function") {
-      promise
-        .then(() => {
-          app.bossBgmPending = false;
-        })
-        .catch(() => {
-          app.bossBgmPending = true;
-        });
-    }
+    app.bossBgmPending = false;
   }
 
   function revealBossTransitionBgm() {
     if (app.bossTransitionBgmStarted) return;
     app.bossTransitionBgmStarted = true;
-    bossBgm.volume = 0.72;
-    if (bossBgm.paused || app.bossBgmPending) playBossBgm();
+    app.bossBgmPending = false;
   }
 
   function stopBossBgm() {
-    bossBgm.pause();
-    bossBgm.currentTime = 0;
+    app.bossBgmPending = false;
   }
 
   function createCarMotion() {
@@ -842,7 +798,7 @@ const CanvasQteTest = (() => {
       return;
     }
     if (id === "boss-intro-start") {
-      if (app.bossBgmPending || bossBgm.paused) playBossBgm();
+      playBossBgm();
       app.mode = "round2-cards";
       return;
     }

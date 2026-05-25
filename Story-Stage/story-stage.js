@@ -59,6 +59,36 @@ const defaultStorySettings = {
   startChapter: "play_test_1"
 };
 
+const storyRouteParams = new URLSearchParams(globalThis.location?.search || "");
+const storyRoute = {
+  startChapter: storyRouteParams.get("start") || "",
+  endChapter: storyRouteParams.get("end") || "",
+  nextUrl: storyRouteParams.get("next") || "",
+  returnUrl: storyRouteParams.get("return") || ""
+};
+
+function isValidStoryChapterId(chapterId) {
+  return /^play_test_\d+$/.test(String(chapterId || ""));
+}
+
+function chapterNumberFromRoute(chapterId) {
+  const match = /^play_test_(\d+)$/.exec(String(chapterId || ""));
+  return match ? Number(match[1]) : 0;
+}
+
+function storyRouteExitUrl() {
+  return storyRoute.nextUrl || storyRoute.returnUrl || "";
+}
+
+function exitStoryRouteIfNeeded() {
+  const url = storyRouteExitUrl();
+  if (!url) {
+    return false;
+  }
+  window.location.href = url;
+  return true;
+}
+
 function storySheetCsvUrl(chapter) {
   if (chapter.gid) {
     const params = new URLSearchParams({ format: "csv", gid: chapter.gid });
@@ -219,8 +249,12 @@ function skipMode() {
 }
 
 function startChapterSetting() {
+  const routedChapter = String(storyRoute.startChapter || "").trim();
+  if (isValidStoryChapterId(routedChapter)) {
+    return routedChapter;
+  }
   const chapter = String(loadStorySettings().startChapter || "play_test_1").trim();
-  return /^play_test_\d+$/.test(chapter) ? chapter : "play_test_1";
+  return isValidStoryChapterId(chapter) ? chapter : "play_test_1";
 }
 
 function findChapterStartIndex(chapterId) {
@@ -620,11 +654,26 @@ async function loadStoryLinesFromSheet() {
       });
     }
 
-    storyLines = loadedChapters.flatMap(({ lines }) => lines);
-    storyChapterLengths = loadedChapters.map(({ lines }) => lines.length);
+    const routeStartNum = chapterNumberFromRoute(storyRoute.startChapter);
+    const routeEndNum = chapterNumberFromRoute(storyRoute.endChapter);
+    const shouldFilterRoute = routeStartNum > 0 && routeEndNum >= routeStartNum;
+    const activeChapters = shouldFilterRoute
+      ? loadedChapters
+          .map(({ chapter, lines }) => ({
+            chapter,
+            lines: lines.filter((line) => {
+              const num = chapterNumberFromRoute(line?.[2]?.chapterId);
+              return num >= routeStartNum && num <= routeEndNum;
+            })
+          }))
+          .filter(({ lines }) => lines.length > 0)
+      : loadedChapters;
+
+    storyLines = activeChapters.flatMap(({ lines }) => lines);
+    storyChapterLengths = activeChapters.map(({ lines }) => lines.length);
     console.info(
       "Story chapters loaded:",
-      loadedChapters.map(({ chapter, lines }) => `${chapter.id}:${lines.length}`).join(", ")
+      activeChapters.map(({ chapter, lines }) => `${chapter.id}:${lines.length}`).join(", ")
     );
     try {
       for (const k of LEGACY_STORY_STORAGE_KEYS) {
@@ -831,6 +880,9 @@ function advanceLine() {
       maybeStartBackgroundTransition(prevLineIndex, lineIndex);
     }
     needsRedraw = true;
+  } else {
+    markLineRead();
+    exitStoryRouteIfNeeded();
   }
 }
 
