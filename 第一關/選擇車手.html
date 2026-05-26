@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>選擇車手 / 第一關</title>
+  <style>
+    :root {
+      --rust: #aa2704;
+      --oil: #121314;
+      --iron: #616569;
+      --cyan: #52d8ff;
+      --orange: #ff7a1a;
+      --text: #f5f1e8;
+      --muted: rgba(226, 232, 240, 0.68);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: #090b0d;
+      color: var(--text);
+      font-family: "Microsoft JhengHei", "Noto Sans TC", "Segoe UI", system-ui, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      overflow-x: hidden;
+      background:
+        linear-gradient(90deg, rgba(8, 11, 14, 0.94) 0%, rgba(10, 13, 16, 0.80) 42%, rgba(42, 18, 12, 0.58) 100%),
+        url("../assets/final-driver-cover.png") center / cover no-repeat;
+    }
+
+    .screen {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 18px;
+      padding: clamp(24px, 4vw, 56px);
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 1px solid rgba(97, 101, 105, 0.48);
+      padding-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(34px, 5vw, 68px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .stage {
+      color: var(--cyan);
+      font-size: 14px;
+      font-weight: 900;
+      margin: 0 0 10px;
+    }
+
+    .hint {
+      max-width: 520px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .roster {
+      align-self: center;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: clamp(14px, 2.2vw, 28px);
+      min-height: 0;
+    }
+
+    .driver {
+      position: relative;
+      min-height: min(66vh, 620px);
+      border: 1px solid rgba(97, 101, 105, 0.72);
+      background: rgba(18, 19, 20, 0.72);
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      isolation: isolate;
+    }
+
+    .driver.available {
+      border-color: rgba(255, 122, 26, 0.96);
+      background: linear-gradient(180deg, rgba(170, 39, 4, 0.36), rgba(18, 19, 20, 0.82));
+      box-shadow: 0 0 34px rgba(170, 39, 4, 0.28);
+      cursor: pointer;
+    }
+
+    .driver.locked {
+      filter: grayscale(0.5);
+      cursor: not-allowed;
+    }
+
+    .portrait {
+      position: relative;
+      min-height: 0;
+      display: flex;
+      align-items: end;
+      justify-content: center;
+      padding: 18px 10px 0;
+    }
+
+    .portrait::before {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      background:
+        radial-gradient(circle at 50% 34%, rgba(82, 216, 255, 0.13), transparent 35%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
+      z-index: -1;
+    }
+
+    .driver.available .portrait::before {
+      background:
+        radial-gradient(circle at 50% 34%, rgba(255, 122, 26, 0.26), transparent 38%),
+        linear-gradient(180deg, rgba(170, 39, 4, 0.28), rgba(255, 255, 255, 0));
+    }
+
+    .portrait img {
+      width: min(88%, 340px);
+      height: 100%;
+      max-height: min(58vh, 530px);
+      object-fit: contain;
+      object-position: bottom center;
+      display: block;
+      transform: scale(1.07);
+      transform-origin: bottom center;
+      pointer-events: none;
+    }
+
+    .driver.locked .portrait img {
+      opacity: 0.58;
+    }
+
+    .meta {
+      min-height: 120px;
+      padding: 20px 22px 22px;
+      background: linear-gradient(180deg, rgba(8, 9, 10, 0), rgba(8, 9, 10, 0.90) 18%, rgba(8, 9, 10, 0.98));
+    }
+
+    .name {
+      margin: 0;
+      font-size: clamp(28px, 3.2vw, 46px);
+      line-height: 1;
+      font-weight: 1000;
+    }
+
+    .role {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .badge {
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 7px 10px;
+      color: rgba(245, 241, 232, 0.74);
+      font-size: 12px;
+      font-weight: 1000;
+    }
+
+    .available .badge {
+      border-color: rgba(255, 122, 26, 0.68);
+      background: rgba(170, 39, 4, 0.68);
+      color: #fff3d7;
+    }
+
+    @media (max-width: 820px) {
+      .screen { padding: 22px; }
+      header {
+        display: block;
+      }
+      .hint {
+        margin-top: 12px;
+        text-align: left;
+      }
+      .roster {
+        grid-template-columns: 1fr;
+      }
+      .driver {
+        min-height: 460px;
+      }
+      .portrait img {
+        max-height: 360px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="screen">
+    <header>
+      <div>
+        <p class="stage">第一關：盲牌沙漠</p>
+        <h1>選擇車手</h1>
+      </div>
+      <p class="hint">目前僅小滿可出戰。藍司與烏爾會在後續流程解鎖。</p>
+    </header>
+
+    <section class="roster" aria-label="選擇車手">
+      <a class="driver available" id="selectXiaoman" href="index.html?campaign=1" aria-label="選擇小滿">
+        <div class="portrait">
+          <img src="../Story-Stage/assets/character/xiaoman/xiaoman-nornmal.png" alt="小滿">
+        </div>
+        <div class="meta">
+          <h2 class="name">小滿</h2>
+          <div class="role">
+            <span>平衡型車手</span>
+            <span class="badge">SELECT</span>
+          </div>
+        </div>
+      </a>
+
+      <article class="driver locked" aria-disabled="true">
+        <div class="portrait">
+          <img src="../Story-Stage/assets/character/藍司/GRAY.png" alt="藍司">
+        </div>
+        <div class="meta">
+          <h2 class="name">藍司</h2>
+          <div class="role">
+            <span>尚未解鎖</span>
+            <span class="badge">LOCKED</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="driver locked" aria-disabled="true">
+        <div class="portrait">
+          <img src="../Story-Stage/assets/character/烏爾/gray.png" alt="烏爾">
+        </div>
+        <div class="meta">
+          <h2 class="name">烏爾</h2>
+          <div class="role">
+            <span>尚未解鎖</span>
+            <span class="badge">LOCKED</span>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("campaign")) params.set("campaign", "1");
+    params.set("driver", "xiaoman");
+    document.querySelector("#selectXiaoman").href = `index.html?${params.toString()}`;
+  </script>
+</body>
+</html>

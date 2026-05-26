@@ -15,7 +15,7 @@
         <line x1="14.5" y1="14.5" x2="20" y2="20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></line>
       </svg>
     </button>
-    <a class="settings-link" href="story-settings.html?v=20260522-7" aria-label="設定">⚙</a>
+    <a class="settings-link" id="storySettingsLink" href="story-settings.html?v=20260526-2" aria-label="設定">⚙</a>
     <canvas id="storyCanvas" aria-label="劇情演出畫面"></canvas>
     <div class="loading-overlay" id="loadingOverlay" aria-live="polite">
       <span class="loading-text">LOADING......</span>
@@ -28,7 +28,19 @@
       hidden
     ></iframe>
   </main>
+  <script>
+    (function () {
+      const link = document.querySelector("#storySettingsLink");
+      if (!link) return;
+      const currentStoryUrl = `${window.location.pathname.split("/").pop() || "story-stage.html"}${window.location.search}`;
+      const params = new URLSearchParams({
+        v: "20260526-2",
+        return: currentStoryUrl
+      });
+      link.href = `story-settings.html?${params.toString()}`;
+    })();
+  </script>
   <script src="canvas-viewport.js?v=20260522-7"></script>
-  <script src="story-stage.js?v=20260522-7"></script>
+  <script src="story-stage.js?v=20260527-2"></script>
 </body>
 </html>

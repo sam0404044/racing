@@ -66,6 +66,12 @@ const storyRoute = {
   nextUrl: storyRouteParams.get("next") || "",
   returnUrl: storyRouteParams.get("return") || ""
 };
+const hasStoryRouteStart = isValidStoryChapterId(storyRoute.startChapter);
+const hasStoryRouteEnd = isValidStoryChapterId(storyRoute.endChapter);
+const DEFAULT_CHAPTER_EXIT_URLS = {
+  play_test_2: "../%E7%AC%AC%E4%B8%80%E9%97%9C/%E9%81%B8%E6%93%87%E8%BB%8A%E6%89%8B.html?campaign=1",
+  play_test_3: "../StageNeonCity/index.html?campaign=2"
+};
 
 function isValidStoryChapterId(chapterId) {
   return /^play_test_\d+$/.test(String(chapterId || ""));
@@ -87,6 +93,68 @@ function exitStoryRouteIfNeeded() {
   }
   window.location.href = url;
   return true;
+}
+
+function exitAtChapterBoundaryIfNeeded(fromIndex, toIndex) {
+  if (fromIndex < 0 || toIndex < 0 || fromIndex >= storyLines.length || toIndex >= storyLines.length) {
+    return false;
+  }
+  const fromChapter = storyLines[fromIndex]?.[2]?.chapterId || "";
+  const toChapter = storyLines[toIndex]?.[2]?.chapterId || "";
+  if (!fromChapter || fromChapter === toChapter) {
+    return false;
+  }
+  const exitUrl = DEFAULT_CHAPTER_EXIT_URLS[fromChapter];
+  if (!exitUrl) {
+    return false;
+  }
+  window.location.href = exitUrl;
+  return true;
+}
+
+function routeEndReachedAt(index) {
+  if (!hasStoryRouteEnd || !storyRouteExitUrl() || !storyLines.length) {
+    return false;
+  }
+  const currentChapter = storyLines[index]?.[2]?.chapterId || "";
+  if (currentChapter !== storyRoute.endChapter) {
+    return false;
+  }
+  if (index >= storyLines.length - 1) {
+    return true;
+  }
+  const nextChapter = storyLines[index + 1]?.[2]?.chapterId || "";
+  return nextChapter && nextChapter !== currentChapter;
+}
+
+function currentRouteEndReached() {
+  return routeEndReachedAt(lineIndex);
+}
+
+function currentRouteEndChapterActive() {
+  if (!hasStoryRouteEnd || !storyRouteExitUrl() || !storyLines.length) {
+    return false;
+  }
+  return (storyLines[lineIndex]?.[2]?.chapterId || "") === storyRoute.endChapter;
+}
+
+function updateRouteEndExit(now) {
+  if (storyLoading || transition || !currentRouteEndChapterActive() || !isBannerLine()) {
+    routeEndExitReadyAt = 0;
+    return;
+  }
+  if (!routeEndExitReadyAt) {
+    routeEndExitReadyAt = now + 900;
+    return;
+  }
+  if (now >= routeEndExitReadyAt) {
+    if (currentRouteEndReached()) {
+      exitStoryRouteIfNeeded();
+    } else {
+      routeEndExitReadyAt = 0;
+      advanceLine();
+    }
+  }
 }
 
 function storySheetCsvUrl(chapter) {
@@ -222,6 +290,7 @@ const SKIP_FORWARD_INTERVAL_MS = 58;
 let autoAdvanceReadyAt = 0;
 let skipHeld = false;
 let skipForwardReadyAt = 0;
+let routeEndExitReadyAt = 0;
 
 function loadStorySettings() {
   try {
@@ -250,7 +319,7 @@ function skipMode() {
 
 function startChapterSetting() {
   const routedChapter = String(storyRoute.startChapter || "").trim();
-  if (isValidStoryChapterId(routedChapter)) {
+  if (hasStoryRouteStart) {
     return routedChapter;
   }
   const chapter = String(loadStorySettings().startChapter || "play_test_1").trim();
@@ -853,7 +922,12 @@ function advanceLine() {
   if (speaker === transitionKey) {
     return;
   }
-  if (typedChars < text.length) {
+  if (currentRouteEndReached() && isBannerLine()) {
+    markLineRead();
+    exitStoryRouteIfNeeded();
+    return;
+  }
+  if (!isBannerLine() && typedChars < text.length) {
     typedChars = text.length;
     markLineRead();
     resetAutoAdvanceTimer();
@@ -863,6 +937,9 @@ function advanceLine() {
   if (lineIndex < storyLines.length - 1) {
     const prevLineIndex = lineIndex;
     markLineRead();
+    if (exitAtChapterBoundaryIfNeeded(lineIndex, lineIndex + 1)) {
+      return;
+    }
     lineIndex += 1;
     typedChars = 0;
     lastTypeAt = 0;
@@ -944,6 +1021,7 @@ function skipForward() {
 }
 
 function completeTransition() {
+  const transitionLineIndex = lineIndex;
   transition = null;
   lineIndex = Math.min(storyLines.length - 1, lineIndex + 1);
   typedChars = 0;
@@ -951,6 +1029,13 @@ function completeTransition() {
   backgroundTransition = null;
   resetAutoAdvanceTimer();
   bumpStoryMaxLine();
+  if (
+    storyLines[transitionLineIndex]?.[0] === transitionKey &&
+    storyLines[transitionLineIndex]?.[2]?.chapterId === storyRoute.endChapter &&
+    routeEndReachedAt(transitionLineIndex)
+  ) {
+    exitStoryRouteIfNeeded();
+  }
 }
 
 function updateSkipForward(now) {
@@ -1567,6 +1652,7 @@ function loop(now) {
   updateTransition(now);
   updateBackgroundTransition(now);
   updatePortraitAnimations(now);
+  updateRouteEndExit(now);
   if (needsRedraw) {
     draw();
   }
@@ -1626,7 +1712,9 @@ StoryCanvasViewport.bindCanvasResize(
 window.addEventListener("storage", (event) => {
   if (event.key === SETTINGS_STORAGE_KEY) {
     resetAutoAdvanceTimer();
-    jumpToChapter(startChapterSetting());
+    if (!hasStoryRouteStart) {
+      jumpToChapter(startChapterSetting());
+    }
   }
 });
 window.addEventListener("message", (event) => {

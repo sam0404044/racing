@@ -9,24 +9,36 @@
   <style>
     :root {
       color-scheme: dark;
-      --text: #f8fbff;
-      --muted: rgba(235, 242, 255, 0.72);
-      --line: rgba(255, 255, 255, 0.24);
-      --hot: #ff4a3d;
-      --gold: #ffd37a;
-      --blue: #9ed9ff;
+      --rust-red: #aa2704;
+      --oil-black: #3b3131;
+      --iron-gray: #616569;
+      --panel-black: #151313;
+      --cool-gray: #9da3a7;
+      --cyan: #25d9ff;
+      --algorithm-green: #65ff7a;
+      --flame-orange: #ff6a1a;
+      --bright-red: #ff2f1f;
+      --text: #f4f7f8;
+      --muted: rgba(244, 247, 248, 0.72);
+      --line: rgba(97, 101, 105, 0.68);
     }
     * { box-sizing: border-box; }
     html, body {
       width: 100%;
       min-height: 100%;
       margin: 0;
-      background: #05070c;
+      background: #101010;
       color: var(--text);
       font-family: "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
     }
     body { overflow: hidden; }
     button, a { font: inherit; }
+    img {
+      -webkit-user-drag: none;
+      user-select: none;
+      -webkit-user-select: none;
+      pointer-events: none;
+    }
     .game-shell {
       position: relative;
       width: 100vw;
@@ -42,6 +54,10 @@
       height: 100%;
       object-fit: cover;
       object-position: center;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
     }
     .cover { transform: scale(1.015); }
     .shade {
@@ -49,8 +65,10 @@
       inset: 0;
       z-index: -2;
       background:
-        linear-gradient(90deg, rgba(2, 4, 10, 0.86), rgba(2, 4, 10, 0.42) 52%, rgba(2, 4, 10, 0.14)),
-        linear-gradient(0deg, rgba(2, 4, 10, 0.84), rgba(2, 4, 10, 0.08) 52%, rgba(2, 4, 10, 0.38));
+        radial-gradient(circle at 82% 22%, rgba(170, 39, 4, 0.18), transparent 34%),
+        linear-gradient(125deg, rgba(11, 17, 20, 0.92) 0%, rgba(18, 19, 20, 0.74) 30%, rgba(59, 49, 49, 0.42) 62%, rgba(16, 16, 16, 0.2) 100%),
+        linear-gradient(90deg, rgba(16, 16, 16, 0.92), rgba(59, 49, 49, 0.46) 52%, rgba(16, 16, 16, 0.2)),
+        linear-gradient(0deg, rgba(16, 16, 16, 0.88), rgba(16, 16, 16, 0.08) 52%, rgba(59, 49, 49, 0.38));
       pointer-events: none;
     }
     .grain {
@@ -58,14 +76,14 @@
       inset: 0;
       z-index: -1;
       opacity: 0.18;
-      background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 3px);
+      background-image: repeating-linear-gradient(0deg, rgba(157, 163, 167, 0.07) 0 1px, transparent 1px 3px);
       mix-blend-mode: overlay;
       pointer-events: none;
     }
     .action:hover, .action:focus-visible,
     .level-close:hover, .level-close:focus-visible {
-      border-color: rgba(255, 211, 122, 0.82);
-      background: rgba(20, 24, 34, 0.74);
+      border-color: rgba(255, 106, 26, 0.86);
+      background: rgba(97, 101, 105, 0.3);
       outline: none;
     }
     .menu {
@@ -79,7 +97,7 @@
     .brand { margin: 0 0 34px; }
     .eyebrow {
       margin: 0 0 10px;
-      color: var(--blue);
+      color: var(--cyan);
       font-size: 13px;
       font-weight: 800;
       letter-spacing: 0.18em;
@@ -92,21 +110,36 @@
       line-height: 0.94;
       font-weight: 950;
       letter-spacing: 0;
-      text-shadow: 0 18px 38px rgba(0, 0, 0, 0.52);
+      text-shadow: 2px 0 0 rgba(37, 217, 255, 0.34), -2px 0 0 rgba(255, 47, 31, 0.24), 0 18px 38px rgba(0, 0, 0, 0.52);
       white-space: nowrap;
+    }
+    .title-logo {
+      display: block;
+      width: min(760px, 96vw);
+      max-height: min(48vh, 460px);
+      object-fit: contain;
+      object-position: left center;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+      filter:
+        drop-shadow(2px 0 0 rgba(37, 217, 255, 0.18))
+        drop-shadow(-2px 0 0 rgba(255, 47, 31, 0.14))
+        drop-shadow(0 18px 34px rgba(0, 0, 0, 0.68));
     }
     .official-name {
       margin: 0 0 12px;
-      color: var(--blue);
+      color: var(--cyan);
       font-size: 16px;
       font-weight: 850;
       letter-spacing: 0;
     }
     .subtitle {
-      margin: 16px 0 0;
+      margin: 6px 0 0;
       color: var(--muted);
-      font-size: clamp(15px, 2.2vw, 20px);
-      line-height: 1.65;
+      font-size: clamp(13px, 1.55vw, 16px);
+      line-height: 1.55;
       max-width: 36rem;
     }
     .actions {
@@ -123,7 +156,7 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       color: var(--text);
-      background: rgba(5, 8, 16, 0.48);
+      background: rgba(21, 19, 19, 0.7);
       text-decoration: none;
       font-size: 17px;
       font-weight: 850;
@@ -133,12 +166,12 @@
     }
     .action:hover, .action:focus-visible { transform: translateX(4px); }
     .action.primary {
-      border-color: rgba(255, 74, 61, 0.8);
-      background: linear-gradient(90deg, rgba(189, 31, 34, 0.9), rgba(255, 121, 58, 0.56));
-      box-shadow: 0 18px 38px rgba(255, 74, 61, 0.24);
+      border-color: rgba(255, 106, 26, 0.74);
+      background: linear-gradient(90deg, var(--rust-red), rgba(255, 106, 26, 0.66));
+      box-shadow: 0 18px 38px rgba(170, 39, 4, 0.28);
     }
     .arrow {
-      color: var(--gold);
+      color: var(--flame-orange);
       font-size: 24px;
       line-height: 1;
     }
@@ -148,7 +181,7 @@
       z-index: 10;
       display: none;
       overflow: auto;
-      background: #05070c;
+      background: #101010;
     }
     .level-select.open { display: block; }
     .level-bg {
@@ -161,8 +194,22 @@
       inset: 0;
       z-index: -2;
       background:
-        linear-gradient(90deg, rgba(4, 6, 13, 0.9), rgba(4, 6, 13, 0.36) 48%, rgba(4, 6, 13, 0.62)),
-        linear-gradient(0deg, rgba(4, 6, 13, 0.9), rgba(4, 6, 13, 0.18) 58%, rgba(4, 6, 13, 0.62));
+        radial-gradient(circle at 12% 8%, rgba(37, 217, 255, 0.12), transparent 28%),
+        radial-gradient(circle at 80% 20%, rgba(170, 39, 4, 0.22), transparent 34%),
+        linear-gradient(90deg, rgba(16, 16, 16, 0.92), rgba(59, 49, 49, 0.36) 48%, rgba(16, 16, 16, 0.66)),
+        linear-gradient(0deg, rgba(16, 16, 16, 0.9), rgba(16, 16, 16, 0.18) 58%, rgba(59, 49, 49, 0.58));
+      pointer-events: none;
+    }
+    .level-select::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background-image:
+        linear-gradient(90deg, rgba(97, 101, 105, 0.16) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(97, 101, 105, 0.11) 1px, transparent 1px);
+      background-size: 84px 84px;
+      mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.75), transparent 72%);
       pointer-events: none;
     }
     .level-header {
@@ -179,6 +226,7 @@
       line-height: 1;
       font-weight: 950;
       letter-spacing: 0;
+      text-shadow: 2px 0 0 rgba(37, 217, 255, 0.28), -2px 0 0 rgba(255, 47, 31, 0.22), 0 18px 38px rgba(0, 0, 0, 0.5);
     }
     .level-title p {
       margin-top: 12px;
@@ -191,10 +239,10 @@
       flex: 0 0 auto;
       min-height: 44px;
       padding: 0 16px;
-      border: 1px solid rgba(255, 255, 255, 0.28);
+      border: 1px solid rgba(97, 101, 105, 0.82);
       border-radius: 8px;
       color: var(--text);
-      background: rgba(5, 8, 16, 0.5);
+      background: rgba(59, 49, 49, 0.78);
       cursor: pointer;
       font-weight: 850;
       backdrop-filter: blur(10px);
@@ -214,19 +262,25 @@
       flex-direction: column;
       justify-content: space-between;
       padding: 18px;
-      border: 1px solid rgba(255, 255, 255, 0.22);
+      border: 1px solid rgba(97, 101, 105, 0.72);
       border-radius: 8px;
       color: var(--text);
-      background: linear-gradient(180deg, rgba(12, 18, 31, 0.88), rgba(8, 10, 18, 0.66));
+      background:
+        linear-gradient(180deg, rgba(59, 49, 49, 0.92), rgba(21, 19, 19, 0.9)),
+        linear-gradient(135deg, rgba(170, 39, 4, 0.16), transparent 48%);
       text-decoration: none;
       overflow: hidden;
       backdrop-filter: blur(12px);
-      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+      box-shadow: inset 0 1px 0 rgba(244, 247, 248, 0.08), 0 18px 48px rgba(0, 0, 0, 0.28);
+      transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
     }
     .level-card:hover, .level-card:focus-visible {
       transform: translateY(-4px);
-      border-color: rgba(255, 211, 122, 0.82);
-      background: linear-gradient(180deg, rgba(24, 31, 48, 0.94), rgba(10, 12, 20, 0.76));
+      border-color: rgba(255, 106, 26, 0.86);
+      background:
+        linear-gradient(180deg, rgba(97, 101, 105, 0.38), rgba(59, 49, 49, 0.94)),
+        linear-gradient(135deg, rgba(170, 39, 4, 0.34), transparent 52%);
+      box-shadow: inset 4px 0 0 var(--cyan), 0 22px 58px rgba(170, 39, 4, 0.2);
       outline: none;
     }
     .level-card::before {
@@ -234,7 +288,7 @@
       position: absolute;
       inset: auto 0 0;
       height: 5px;
-      background: linear-gradient(90deg, var(--hot), var(--gold), var(--blue));
+      background: linear-gradient(90deg, var(--rust-red), var(--flame-orange), var(--cyan));
       opacity: 0.9;
     }
     .level-meta {
@@ -242,7 +296,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      color: rgba(235, 242, 255, 0.7);
+      color: rgba(244, 247, 248, 0.7);
       font-size: 12px;
       font-weight: 850;
       letter-spacing: 0.12em;
@@ -254,6 +308,10 @@
       line-height: 1.1;
       letter-spacing: 0;
     }
+    .level-card:hover h3,
+    .level-card:focus-visible h3 {
+      color: #fff8f4;
+    }
     .level-card p {
       color: var(--muted);
       font-size: 14px;
@@ -264,8 +322,37 @@
       align-items: center;
       gap: 8px;
       margin-top: 22px;
-      color: var(--gold);
+      color: var(--flame-orange);
       font-weight: 900;
+    }
+    .level-card:hover .level-enter,
+    .level-card:focus-visible .level-enter {
+      color: var(--cyan);
+    }
+    .level-card.locked {
+      cursor: not-allowed;
+      color: rgba(244, 247, 248, 0.42);
+      border-color: rgba(97, 101, 105, 0.36);
+      background: linear-gradient(180deg, rgba(44, 42, 42, 0.7), rgba(18, 18, 18, 0.82));
+      box-shadow: none;
+      filter: grayscale(0.75);
+    }
+    .level-card.locked:hover,
+    .level-card.locked:focus-visible {
+      transform: none;
+      border-color: rgba(97, 101, 105, 0.36);
+      background: linear-gradient(180deg, rgba(44, 42, 42, 0.7), rgba(18, 18, 18, 0.82));
+      box-shadow: none;
+    }
+    .level-card.locked::before {
+      background: linear-gradient(90deg, var(--iron-gray), rgba(97, 101, 105, 0.34));
+      opacity: 0.58;
+    }
+    .level-card.locked .level-enter {
+      color: rgba(157, 163, 167, 0.72);
+    }
+    .level-card.locked .level-enter span {
+      display: none;
     }
     .dialog {
       position: fixed;
@@ -275,15 +362,15 @@
       align-items: center;
       justify-content: center;
       padding: 24px;
-      background: rgba(2, 4, 10, 0.66);
+      background: rgba(16, 16, 16, 0.72);
     }
     .dialog.open { display: flex; }
     .dialog-panel {
       width: min(560px, 100%);
       padding: 24px;
-      border: 1px solid rgba(255, 255, 255, 0.24);
+      border: 1px solid rgba(97, 101, 105, 0.82);
       border-radius: 8px;
-      background: rgba(8, 12, 22, 0.9);
+      background: rgba(21, 19, 19, 0.92);
       backdrop-filter: blur(14px);
       box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
     }
@@ -309,9 +396,13 @@
         padding: 104px 20px 44px;
       }
       .shade {
-        background: linear-gradient(0deg, rgba(2, 4, 10, 0.94), rgba(2, 4, 10, 0.62) 52%, rgba(2, 4, 10, 0.18));
+        background: linear-gradient(0deg, rgba(16, 16, 16, 0.94), rgba(59, 49, 49, 0.62) 52%, rgba(16, 16, 16, 0.18));
       }
       .cover { object-position: 58% center; }
+      .title-logo {
+        width: min(100%, 640px);
+        max-height: 40svh;
+      }
       .level-header {
         width: min(100% - 32px, 1180px);
         padding-top: 28px;
@@ -327,15 +418,14 @@
 </head>
 <body>
   <main class="game-shell" aria-label="最後車手">
-    <img class="cover" src="assets/final-driver-cover.png" alt="">
+    <img class="cover" src="assets/final-driver-cover.png" alt="" draggable="false">
     <div class="shade" aria-hidden="true"></div>
     <div class="grain" aria-hidden="true"></div>
 
     <section class="menu">
       <div class="brand">
-        <p class="official-name">The Final Driver</p>
-        <h1>極速駕駛-最終指令</h1>
-        <p class="subtitle">為人類最後一次跑到終點。</p>
+        <img class="title-logo" src="assets/game-title-logo.png" alt="極速駕駛 最終指令" draggable="false">
+        <p class="subtitle">在被演算法接管的賽道上，為人類最後一次跑到終點。</p>
       </div>
 
       <div class="actions" aria-label="遊戲模式">
@@ -343,7 +433,7 @@
           <span>開始遊戲</span>
           <span class="arrow" aria-hidden="true">›</span>
         </button>
-        <a class="action" href="Story-Stage/story-settings.html">
+        <a class="action" href="Story-Stage/story-settings.html?v=20260526-2&return=../index.html">
           <span>選項</span>
           <span class="arrow" aria-hidden="true">›</span>
         </a>
@@ -359,7 +449,7 @@
     </section>
 
     <section class="level-select" id="levelSelect" aria-label="關卡選擇" aria-hidden="true">
-      <img class="level-bg" src="assets/level-select-bg.png" alt="">
+      <img class="level-bg" src="assets/level-select-bg.png" alt="" draggable="false">
       <header class="level-header">
         <div class="level-title">
           <p class="eyebrow">Select Stage</p>
@@ -370,38 +460,38 @@
       </header>
 
       <div class="level-grid">
-        <a class="level-card" href="Story-Stage/story-stage.html?start=play_test_1&end=play_test_2&next=../QTE/index.html%3Fboss%3Dblind-desert%26campaign%3D1">
+        <a class="level-card" data-level="1" href="Story-Stage/story-stage.html?start=play_test_1&end=play_test_2&next=../%E7%AC%AC%E4%B8%80%E9%97%9C/%E9%81%B8%E6%93%87%E8%BB%8A%E6%89%8B.html%3Fcampaign%3D1">
           <div>
             <div class="level-meta">
               <span>第一關</span>
-              <span>Story 1-2 + Race</span>
+              <span>Blind Desert</span>
             </div>
             <h3>盲牌沙漠</h3>
-            <p>流程：劇情 test1 → 劇情 test2 → 第一關「盲牌沙漠」。完成後回到關卡選擇頁。</p>
+            <p>能見度被風沙切碎的荒漠賽道，盲牌會遮住關鍵資訊，只能靠節奏、判斷與臨場反應守住車體穩定。</p>
           </div>
           <span class="level-enter">開始第一關 <span aria-hidden="true">›</span></span>
         </a>
 
-        <a class="level-card" href="Story-Stage/story-stage.html?start=play_test_3&end=play_test_3&next=../StageNeonCity/index.html%3Fcampaign%3D2">
+        <a class="level-card" data-level="2" href="Story-Stage/story-stage.html?start=play_test_3&end=play_test_3&next=../StageNeonCity/index.html%3Fcampaign%3D2">
           <div>
             <div class="level-meta">
               <span>第二關</span>
-              <span>Story 3 + Race</span>
+              <span>Neon City</span>
             </div>
             <h3>霓虹城市賽道</h3>
-            <p>流程：劇情 test3 → StageNeonCity 第二關。完成後回到關卡選擇頁。</p>
+            <p>穿過高樓、光軌與演算法看板的夜間城市賽道，速度越高，霓虹路線與防守判斷就越不容失誤。</p>
           </div>
           <span class="level-enter">開始第二關 <span aria-hidden="true">›</span></span>
         </a>
 
-        <a class="level-card" href="ThirdStage/index.html">
+        <a class="level-card" data-level="3" href="ThirdStage/index.html">
           <div>
             <div class="level-meta">
               <span>第三關</span>
-              <span>Race + Story 4</span>
+              <span>Repair Skyway</span>
             </div>
-            <h3>第三關</h3>
-            <p>流程：第三關 → 劇情 test4。第三關玩法目前先作為完整版流程入口。</p>
+            <h3>維修站高架</h3>
+            <p>架在維修站上方的高速路段，補給區、升降平台與工業管線交錯，考驗車手在狹窄高架上的控車能力。</p>
           </div>
           <span class="level-enter">開始第三關 <span aria-hidden="true">›</span></span>
         </a>
@@ -420,6 +510,7 @@
     </section>
   </main>
 
+  <script src="shared/progress.js"></script>
   <script>
     const openLevelSelect = document.querySelector("#openLevelSelect");
     const closeLevelSelect = document.querySelector("#closeLevelSelect");
@@ -428,6 +519,39 @@
     const closeAbout = document.querySelector("#closeAbout");
     const aboutDialog = document.querySelector("#aboutDialog");
     const exitGame = document.querySelector("#exitGame");
+
+    document.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+    });
+    document.addEventListener("dragstart", (event) => {
+      if (event.target instanceof HTMLImageElement) {
+        event.preventDefault();
+      }
+    });
+
+    function syncLevelLocks() {
+      const progress = window.FinalDriverProgress;
+      document.querySelectorAll(".level-card[data-level]").forEach((card) => {
+        const level = Number(card.dataset.level || "1");
+        const unlocked = !progress || progress.isLevelUnlocked(level);
+        if (!card.dataset.href && card.getAttribute("href")) {
+          card.dataset.href = card.getAttribute("href");
+        }
+        card.classList.toggle("locked", !unlocked);
+        card.setAttribute("aria-disabled", unlocked ? "false" : "true");
+        card.tabIndex = unlocked ? 0 : -1;
+        const enter = card.querySelector(".level-enter");
+        if (enter) {
+          if (!enter.dataset.defaultText) enter.dataset.defaultText = enter.textContent.trim();
+          enter.firstChild.textContent = unlocked ? enter.dataset.defaultText.replace("›", "").trim() + " " : "尚未解鎖 ";
+        }
+        if (unlocked) {
+          card.setAttribute("href", card.dataset.href || "#");
+        } else {
+          card.removeAttribute("href");
+        }
+      });
+    }
 
     function setLevelSelectOpen(open, focusTarget = true) {
       levelSelect.classList.toggle("open", open);
@@ -446,6 +570,13 @@
     }
 
     openLevelSelect.addEventListener("click", () => setLevelSelectOpen(true));
+    document.querySelectorAll(".level-card[data-level]").forEach((card) => {
+      card.addEventListener("click", (event) => {
+        if (card.classList.contains("locked")) {
+          event.preventDefault();
+        }
+      });
+    });
     closeLevelSelect.addEventListener("click", () => setLevelSelectOpen(false));
     openAbout.addEventListener("click", () => setAboutOpen(true));
     closeAbout.addEventListener("click", () => setAboutOpen(false));
@@ -463,6 +594,7 @@
     if (new URLSearchParams(window.location.search).has("levels")) {
       setLevelSelectOpen(true, false);
     }
+    syncLevelLocks();
   </script>
 </body>
 </html>

@@ -5,15 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>劇情設定</title>
-  <link rel="stylesheet" href="story-settings.css?v=20260522-7">
+  <link rel="stylesheet" href="story-settings.css?v=20260526-3">
 </head>
 <body>
   <main class="settings-page">
     <header class="settings-header">
       <h1>劇情設定</h1>
       <div class="settings-actions" aria-label="設定操作">
-        <a class="home-link" href="../index.html">退出到主選單</a>
-        <a class="close-link" href="story-stage.html?v=20260522-7" aria-label="關閉設定">×</a>
+        <a class="close-link" id="settingsCloseLink" href="../index.html" aria-label="關閉設定">×</a>
       </div>
     </header>
 
@@ -51,17 +50,11 @@
       </div>
     </section>
 
-    <section class="setting-row">
-      <div>
-        <h2>選擇章節</h2>
-        <p>選擇從哪一個 play_test 分頁開始播放。</p>
-      </div>
-      <div class="chapter-picker" id="chapterPicker" aria-label="選擇章節">
-        <p class="chapter-loading" id="chapterLoading">LOADING......</p>
-      </div>
-    </section>
+    <nav class="settings-footer-actions" aria-label="主選單操作">
+      <a class="home-link settings-confirm-link" href="../index.html">退出到主選單</a>
+    </nav>
   </main>
 
-  <script src="story-settings.js?v=20260522-7"></script>
+  <script src="story-settings.js?v=20260526-3"></script>
 </body>
 </html>

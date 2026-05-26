@@ -1,13 +1,13 @@
 ﻿function initQteTest() {
   const root = document.querySelector("#qteTestRoot");
   const btn = document.querySelector("#qteTestButton");
-  if (btn) btn.addEventListener("click", () => { window.location.href = "qte-test.html"; });
+  if (btn) btn.addEventListener("click", () => { window.location.href = "第一關.html"; });
   if (root) CanvasQteTest.start(root);
 }
 
 const CanvasQteTest = (() => {
   /**
-   * QTE TEST 狀態流（簡化字串 mode，對應說明）：
+   * 第一關狀態流（簡化字串 mode，對應說明）：
    * start-ready（準備起跑）→ 按「開始遊戲」→ tutorial-play, tutorial-stable, overtake-ready
    *   手牌：橫列略抬高，可與賽道重疊（不打 QTE 時）。
    * OVERTAKE_QTE_INTRO / OVERTAKE_QTE → splash-overtake, rhythm-formal
@@ -21,16 +21,16 @@ const CanvasQteTest = (() => {
    * FINAL_RESULT → final-win
    */
   const OVERTAKE_TARGET = 8;
-  const BLIND_DESERT_CG_SRC = "assets/blind-card-desert-boss.png";
+  const BLIND_DESERT_CG_SRC = "../assets/blind-card-desert-boss.png";
   const BOSS_ENTRANCE_LAYER_SRCS = [
-    "assets/BOSS/boss-intro-red-banner.png",
-    "assets/BOSS/boss-intro-title-code.png",
-    "assets/BOSS/boss-intro-quote-panel.png",
-    "assets/BOSS/boss-intro-sand-sweep.png",
-    "assets/BOSS/boss-intro-bottom-panel.png",
-    "assets/BOSS/boss-intro-stats-bars.png",
-    "assets/BOSS/boss-intro-mask-emblem.png",
-    "assets/BOSS/boss-intro-portrait.png",
+    "../assets/BOSS/boss-intro-red-banner.png",
+    "../assets/BOSS/boss-intro-title-code.png",
+    "../assets/BOSS/boss-intro-quote-panel.png",
+    "../assets/BOSS/boss-intro-sand-sweep.png",
+    "../assets/BOSS/boss-intro-bottom-panel.png",
+    "../assets/BOSS/boss-intro-stats-bars.png",
+    "../assets/BOSS/boss-intro-mask-emblem.png",
+    "../assets/BOSS/boss-intro-portrait.png",
   ];
   const bossCgImage = new Image();
   bossCgImage.src = BLIND_DESERT_CG_SRC;
@@ -39,6 +39,14 @@ const CanvasQteTest = (() => {
     img.src = src;
     return img;
   });
+  const normalBgm = new Audio("../assets/audio/normal-stage.wav");
+  const bossBgm = new Audio("../assets/audio/boss-stage.wav");
+  normalBgm.loop = true;
+  normalBgm.volume = 0.42;
+  bossBgm.loop = true;
+  bossBgm.volume = 0.5;
+  bindBgmLoopFallback(normalBgm);
+  bindBgmLoopFallback(bossBgm);
   /** 加速條滿刻度（數值仍可超過門檻與滿格） */
   const ACCEL_METER_DISPLAY_MAX = 10;
   const CARD_TYPES = {
@@ -102,6 +110,7 @@ const CanvasQteTest = (() => {
   function getRhythmDuration(circleIndex) {
     let dur = RHYTHM_DURATIONS[circleIndex];
     dur *= 1 + 0.15 * app.perkFocus;
+    dur *= 1 + 0.12 * Math.min(5, app.stable.length);
     if (circleIndex === 4 && app.perkRhythmLast) dur *= 1 + 0.24 * app.perkRhythmLast;
     return Math.round(dur);
   }
@@ -187,9 +196,6 @@ const CanvasQteTest = (() => {
     burstTargetReduction: 0,
     pressureWideBand: false,
     lastRhythmHadMiss: false,
-    aiConfirmOpen: false,
-    aiHoldActive: false,
-    aiHoldStart: 0,
     carMotion: null,
   };
 
@@ -294,9 +300,6 @@ const CanvasQteTest = (() => {
       app.bossCgReady = true;
     };
     reset();
-    if (new URLSearchParams(window.location.search).get("boss") === "blind-desert") {
-      startBlindDesertBoss();
-    }
     requestAnimationFrame(loop);
   }
 
@@ -478,31 +481,65 @@ const CanvasQteTest = (() => {
   }
 
   function playNormalBgm() {
-    app.normalBgmPending = false;
+    stopBossBgm();
+    normalBgm.volume = 0.42;
+    normalBgm.muted = false;
+    normalBgm.play().then(() => {
+      app.normalBgmPending = false;
+    }).catch(() => {
+      app.normalBgmPending = true;
+    });
   }
 
   function bindBgmLoopFallback(audio) {
+    audio.addEventListener("ended", () => {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    });
   }
 
   function stopNormalBgm() {
+    normalBgm.pause();
+    normalBgm.currentTime = 0;
     app.normalBgmPending = false;
   }
 
   function playBossBgm() {
-    app.bossBgmPending = false;
+    stopNormalBgm();
+    bossBgm.muted = false;
+    bossBgm.volume = 0.5;
+    bossBgm.play().then(() => {
+      app.bossBgmPending = false;
+    }).catch(() => {
+      app.bossBgmPending = true;
+    });
   }
 
   function primeBossBgmMuted() {
-    app.bossBgmPending = false;
+    stopNormalBgm();
+    bossBgm.muted = true;
+    bossBgm.volume = 0;
+    bossBgm.play().then(() => {
+      app.bossBgmPending = false;
+    }).catch(() => {
+      app.bossBgmPending = true;
+    });
   }
 
   function revealBossTransitionBgm() {
     if (app.bossTransitionBgmStarted) return;
     app.bossTransitionBgmStarted = true;
-    app.bossBgmPending = false;
+    bossBgm.muted = false;
+    bossBgm.volume = 0.5;
+    if (bossBgm.paused) {
+      playBossBgm();
+    }
   }
 
   function stopBossBgm() {
+    bossBgm.pause();
+    bossBgm.currentTime = 0;
+    bossBgm.muted = false;
     app.bossBgmPending = false;
   }
 
@@ -553,6 +590,7 @@ const CanvasQteTest = (() => {
   function showGameWinOverlay() {
     if (!app.winOverlay) return;
     if (app.winOverlay.classList.contains("qte-win-overlay--visible")) return;
+    window.FinalDriverProgress?.markLevelCleared?.(1);
     if (app.winReplayTimer) {
       clearTimeout(app.winReplayTimer);
       app.winReplayTimer = 0;
@@ -627,16 +665,6 @@ const CanvasQteTest = (() => {
       if (e.button != null && e.button !== 0) return;
       const p = point(e);
       app.mouse = p;
-      if (app.aiConfirmOpen) {
-        const hold = app.zones.aiHoldCircle;
-        if (hold && dist(p.x, p.y, hold.x, hold.y) <= hold.r) {
-          app.aiHoldActive = true;
-          app.aiHoldStart = performance.now();
-        }
-        const close = app.zones.aiClose;
-        if (close && dist(p.x, p.y, close.x, close.y) <= close.r) handleButton("ai-auto-cancel");
-        return;
-      }
       if (app.mode === "card-reward-choice" && !app.rewardPickAnim) {
         const slot = hitRewardSlot(p);
         if (slot >= 0) {
@@ -680,10 +708,6 @@ const CanvasQteTest = (() => {
     );
 
     const onCanvasPrimaryUp = e => {
-      if (app.aiHoldActive) {
-        app.aiHoldActive = false;
-        app.aiHoldStart = 0;
-      }
       if (!app.drag) return;
       const p = point(e);
       const stableDrop = app.zones.stableHit || app.zones.stable;
@@ -721,7 +745,11 @@ const CanvasQteTest = (() => {
 
   function rhythmBeatWindowSec() {
     if (rhythmFormalEasy()) {
-      return { perfect: RHYTHM_FORMAL_EASY_PERFECT_SEC, good: RHYTHM_FORMAL_EASY_GOOD_SEC };
+      const stabilityBonus = Math.min(5, app.stable.length) * 0.045;
+      return {
+        perfect: RHYTHM_FORMAL_EASY_PERFECT_SEC + stabilityBonus,
+        good: RHYTHM_FORMAL_EASY_GOOD_SEC + stabilityBonus * 1.35
+      };
     }
     return { perfect: RHYTHM_BEAT_ERROR_PERFECT, good: RHYTHM_BEAT_ERROR_GOOD };
   }
@@ -776,25 +804,9 @@ const CanvasQteTest = (() => {
   }
 
   function handleButton(id) {
-    if (id === "ai-auto-open") {
-      app.aiConfirmOpen = true;
-      app.aiHoldActive = false;
-      app.aiHoldStart = 0;
-      return;
-    }
-    if (id === "ai-auto-cancel") {
-      app.aiConfirmOpen = false;
-      app.aiHoldActive = false;
-      app.aiHoldStart = 0;
-      return;
-    }
     if (id === "start-tutorial") {
       playNormalBgm();
       app.mode = "tutorial-play";
-      return;
-    }
-    if (id === "debug-boss-transition") {
-      startBossStageTransition();
       return;
     }
     if (id === "boss-intro-start") {
@@ -1032,11 +1044,6 @@ const CanvasQteTest = (() => {
   }
 
   function update(time) {
-    if (app.aiHoldActive && time - app.aiHoldStart >= 3000) {
-      app.aiConfirmOpen = false;
-      app.aiHoldActive = false;
-      app.aiHoldStart = 0;
-    }
     if (isRhythmMode()) {
       for (let i = 0; i < 5; i++) {
         const start = app.qteCircleStarts[i] ?? app.qteStart;
@@ -1422,12 +1429,17 @@ const CanvasQteTest = (() => {
     const hud = statusHudRect();
     const R = Math.min(56, app.w * 0.072);
     const cx = 18 + R;
-    const cy = app.h - 20 - R - 10;
+    const cy = stabilityDropVisible() ? app.h - 240 - R : app.h - 20 - R - 10;
     const label = getExpressionState(typeof time === "number" ? time : performance.now()).label;
-    return [
+    const rects = [
       inflateRect(hud, RHYTHM_UI_AVOID_PAD),
       inflateRect(rectFromBounds(expressionDockBounds(cx, cy, R, label)), RHYTHM_UI_AVOID_PAD),
     ];
+    if (stabilityDropVisible()) {
+      const panel = window.FinalDriverChassisHud?.panelRect?.({ left: 0, bottom: app.h, width: app.w, height: app.h });
+      if (panel) rects.push(inflateRect(panel, RHYTHM_UI_AVOID_PAD));
+    }
+    return rects;
   }
 
   function qtePointSafe(x, y, r, time) {
@@ -1447,7 +1459,7 @@ const CanvasQteTest = (() => {
     const marginL = 18;
     const marginB = 20;
     let cx = marginL + R;
-    let cy = app.h - marginB - R - 10;
+    let cy = stabilityDropVisible() ? app.h - 240 - R : app.h - marginB - R - 10;
     if (false && tutorialBlocking()) {
       /** 與手牌、HUD 相同：在黃框「外」、全螢幕模糊上；不可壓到黃框、也不塞進框內 */
       const tb = getTutorialModalBox();
@@ -1538,150 +1550,10 @@ const CanvasQteTest = (() => {
     ctx.fillStyle = COL.pillText;
     ctx.fillText(label, cx, py + pillH / 2 + 0.5);
     ctx.restore();
-    drawAutoBattleButton(cx, cy, R);
-    if (app.aiConfirmOpen) drawAutoBattleConfirmModal(time);
-  }
-
-  function drawAutoBattleButton(cx, cy, faceR) {
-    const w = 126;
-    const h = 38;
-    const x = Math.max(14, cx - w / 2);
-    const y = Math.max(16, cy - faceR - 62);
-    button("ai-auto-open", "自動戰鬥", x, y, w, h, false, "ai");
-  }
-
-  function drawAutoBattleConfirmModal(time) {
-    const ctx = app.ctx;
-    const box = getCenteredModalBox(520, 340);
-    const progress = app.aiHoldActive ? Math.min(1, (time - app.aiHoldStart) / 3000) : 0;
-    ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.62)";
-    ctx.fillRect(0, 0, app.w, app.h);
-    drawModalPanel(box, "#ffd94f");
-    if (progress >= 0.5) drawAutoBattleElectroFrame(box, progress, time);
-    drawAutoBattleCloseButton(box);
-    const cx = box.x + box.w / 2;
-    text("自動戰鬥", cx, box.y + 58, 30, "#ffe082", "1000", "center");
-    text("接下來的卡牌與 QTE 會由 AI 來操作，", cx, box.y + 104, 18, "#e8f0ff", "800", "center");
-    text("讓你可以方便快速通關。", cx, box.y + 132, 18, "#e8f0ff", "800", "center");
-    text("按住下方圓圈，等它填滿後才會生效。", cx, box.y + 170, 15, "rgba(255,232,180,0.92)", "800", "center");
-
-    const r = 42;
-    const holdX = cx;
-    const holdY = box.y + 248;
-    app.zones.aiHoldCircle = { x: holdX, y: holdY, r };
-    ctx.save();
-    ctx.shadowColor = "rgba(255,217,79,0.35)";
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = "rgba(8,16,27,0.95)";
-    ctx.beginPath();
-    ctx.arc(holdX, holdY, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(255,217,79,0.55)";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(holdX, holdY, r - 2, 0, Math.PI * 2);
-    ctx.stroke();
-    if (progress > 0) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(holdX, holdY, r - 10, 0, Math.PI * 2);
-      ctx.clip();
-      const fillY = holdY + r - 10 - (r * 2 - 20) * progress;
-      const fill = ctx.createLinearGradient(holdX, fillY, holdX, holdY + r);
-      fill.addColorStop(0, progress >= 0.8 ? "#ff2534" : "#fff0a6");
-      fill.addColorStop(1, progress >= 0.8 ? "#111111" : "#d7a72a");
-      ctx.fillStyle = fill;
-      ctx.fillRect(holdX - r, fillY, r * 2, holdY + r - fillY);
-      ctx.restore();
-      ctx.strokeStyle = progress >= 0.8 ? "#ff2633" : "#ffd94f";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(holdX, holdY, r - 10, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.font = '900 16px system-ui, "Microsoft JhengHei", sans-serif';
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#fff3c4";
-    ctx.fillText("確定", holdX, holdY);
-    ctx.restore();
-    ctx.restore();
-  }
-
-  function drawAutoBattleCloseButton(box) {
-    const ctx = app.ctx;
-    const r = 13;
-    const x = box.x + box.w - 26;
-    const y = box.y + 24;
-    app.zones.aiClose = { x, y, r };
-    ctx.save();
-    ctx.strokeStyle = "rgba(255, 232, 180, 0.82)";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.moveTo(x - 5, y - 5);
-    ctx.lineTo(x + 5, y + 5);
-    ctx.moveTo(x + 5, y - 5);
-    ctx.lineTo(x - 5, y + 5);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawAutoBattleElectroFrame(box, progress, time) {
-    const ctx = app.ctx;
-    const strong = progress >= 0.8;
-    const count = strong ? 28 : 16;
-    const alpha = strong ? 0.9 : 0.58;
-    ctx.save();
-    ctx.strokeStyle = strong ? `rgba(255, 38, 50, ${alpha})` : `rgba(255, 226, 102, ${alpha})`;
-    ctx.lineWidth = strong ? 1.8 : 1.25;
-    ctx.shadowColor = strong ? "rgba(255, 0, 20, 0.72)" : "rgba(255, 217, 79, 0.52)";
-    ctx.shadowBlur = strong ? 14 : 9;
-    for (let i = 0; i < count; i++) {
-      const seed = i * 18.37 + time * 0.012;
-      const edge = i % 4;
-      let x1;
-      let y1;
-      if (edge === 0) {
-        x1 = box.x + 22 + (box.w - 44) * ((Math.sin(seed) + 1) / 2);
-        y1 = box.y - 3;
-      } else if (edge === 1) {
-        x1 = box.x + box.w + 3;
-        y1 = box.y + 22 + (box.h - 44) * ((Math.sin(seed) + 1) / 2);
-      } else if (edge === 2) {
-        x1 = box.x + 22 + (box.w - 44) * ((Math.sin(seed) + 1) / 2);
-        y1 = box.y + box.h + 3;
-      } else {
-        x1 = box.x - 3;
-        y1 = box.y + 22 + (box.h - 44) * ((Math.sin(seed) + 1) / 2);
-      }
-      const flicker = 0.62 + 0.38 * Math.sin(time * 0.03 + i * 2.1);
-      const len = (strong ? 10 + (i % 3) * 4 : 7 + (i % 3) * 3) * flicker;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x1 + Math.cos(seed) * len, y1 + Math.sin(seed * 1.3) * len);
-      ctx.stroke();
-      if (strong) {
-        ctx.strokeStyle = `rgba(0, 0, 0, ${0.45 + (i % 2) * 0.18})`;
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(x1 + 1.5, y1 + 1);
-        ctx.lineTo(x1 + Math.cos(seed + 0.8) * (len * 0.7), y1 + Math.sin(seed * 1.1) * (len * 0.7));
-        ctx.stroke();
-        ctx.strokeStyle = `rgba(255, 38, 50, ${alpha})`;
-        ctx.lineWidth = 1.8;
-      }
-    }
-    ctx.restore();
   }
 
   function draw(time) {
     app.zones.buttons = [];
-    if (!app.aiConfirmOpen) {
-      app.zones.aiHoldCircle = null;
-      app.zones.aiClose = null;
-    }
     if (!isRhythmMode()) app.zones.circles = [];
     if (!stabilityDropVisible()) {
       app.zones.stableHit = null;
@@ -2263,11 +2135,25 @@ const CanvasQteTest = (() => {
   function drawStabilityDrop(time) {
     if (!stabilityDropVisible()) return;
     const t = typeof time === "number" ? time : performance.now();
-    const r = { x: app.w - 292, y: app.h - 220, w: 268, h: 142 };
+    const viewport = { left: 0, bottom: app.h, width: app.w, height: app.h };
+    const r = window.FinalDriverChassisHud?.panelRect?.(viewport) || { x: 24, y: app.h - 170 - 24, w: 290, h: 170 };
     app.zones.stableHit = { x: r.x, y: r.y, w: r.w, h: r.h };
-    app.zones.stable = { x: r.x + 20, y: r.y + 58, w: r.w - 40, h: 58 };
-    panel(r.x, r.y, r.w, r.h, "rgba(10,42,24,0.9)", dropDisabled("stable") ? "rgba(120,128,140,0.35)" : "#57e585", true);
-    text("穩定性區域", r.x + r.w / 2, r.y + 34, 24, "#aaff9a", "900", "center");
+    app.zones.stable = { x: r.x + 18, y: r.y + 42, w: r.w - 36, h: 60 };
+    const dragCenter = app.drag ? { x: app.drag.x + app.drag.w / 2, y: app.drag.y + app.drag.h / 2 } : null;
+    const canAccept = !!app.drag && !dropDisabled("stable");
+    const hover = canAccept && inRect(dragCenter, app.zones.stableHit);
+    const msg = canAccept ? "棄手牌至此，提升車身穩定" : "棄手牌至此，讓 QTE 更穩定";
+    const chassisVisual = window.FinalDriverChassisHud?.drawStabilityPanel?.(app.ctx, viewport, {
+      time: t,
+      charges: app.stable.length,
+      disabled: dropDisabled("stable"),
+      canAccept,
+      hover,
+      message: msg
+    });
+    if (chassisVisual?.dropZone) {
+      app.zones.stable = chassisVisual.dropZone;
+    }
     if (app.mode === "tutorial-stable") {
       const arrowX = r.x - 10 + Math.sin(t * 0.008) * 2.5;
       const col = "rgba(150, 255, 200, 0.9)";
@@ -2275,8 +2161,6 @@ const CanvasQteTest = (() => {
         text("▶", arrowX, r.y + r.h * (0.24 + i * 0.28), 18, col, "900", "right");
       }
     }
-    strokeRect(app.zones.stable.x, app.zones.stable.y, app.zones.stable.w, app.zones.stable.h, dropDisabled("stable") ? "rgba(160,168,178,0.35)" : "#57e585", 3, [7, 6]);
-    drawStableCountOnly(app.zones.stable.x, app.zones.stable.y, app.zones.stable.w, app.zones.stable.h);
   }
 
   function drawDeckArea(time) {
@@ -3014,7 +2898,7 @@ const CanvasQteTest = (() => {
     text(teachingPageText(), box.x + padX, box.y + 100, 28, "#ffd94f", "900");
     const bodyMaxW = box.w - padX * 2;
     if (isStable) {
-      wrapText("將 1 張牌拖曳到穩定性區域。放入這裡的牌不會發動效果，但會讓超車更簡單。", box.x + padX, box.y + 136, bodyMaxW, 18, "#f4f8ff", 4);
+      wrapText("將 1 張牌拖曳到車體穩定區。放入這裡的牌不會發動效果，但會讓 QTE 更穩定。", box.x + padX, box.y + 136, bodyMaxW, 18, "#f4f8ff", 4);
     } else {
       text("將任意 4 張加速牌拖曳到打出區。", box.x + padX, box.y + 148, 19, "#f4f8ff", "900");
     }
@@ -3037,7 +2921,7 @@ const CanvasQteTest = (() => {
       text("→", arrowCx, demoY + 6, 34, "rgba(214,222,235,0.88)", "900", "center");
     }
     strokeRect(targetX, demoY - 50, targetW, targetH, "rgba(190,198,210,0.82)", 4, [9, 7]);
-    text(isStable ? "穩定性區域" : "打出區", targetX + targetW / 2, demoY + 8, 22, "#eef4ff", "900", "center");
+    text(isStable ? "車體穩定區" : "打出區", targetX + targetW / 2, demoY + 8, 22, "#eef4ff", "900", "center");
     button("tutorial-ok", "確定", box.x + box.w - 180, box.y + box.h - 68, 160, 48);
   }
 
@@ -3136,8 +3020,7 @@ const CanvasQteTest = (() => {
     }
     const bottomHrY = lastTextBaseline + 30;
     drawHrAt(bottomHrY);
-    button("start-tutorial", "開始遊戲", cx - 214, bottomHrY + 28, 200, 48, false, "start");
-    button("debug-boss-transition", "進入 Boss 關", cx + 14, bottomHrY + 28, 200, 48);
+    button("start-tutorial", "開始遊戲", cx - 100, bottomHrY + 28, 200, 48, false, "start");
   }
 
   function drawBossIntroModal() {
@@ -3664,11 +3547,10 @@ const CanvasQteTest = (() => {
     app.zones.buttons.push({ id, rect: { x, y, w, h }, disabled });
     const gray = variant === "gray";
     const start = variant === "start";
-    const ai = variant === "ai";
     const fill = disabled
-      ? gray ? "rgba(54,60,70,0.45)" : start ? "rgba(91,34,34,0.52)" : ai ? "rgba(52,52,20,0.52)" : "rgba(20,44,72,0.5)"
-      : gray ? "rgba(70,76,88,0.88)" : start ? "rgba(169,39,42,0.94)" : ai ? "rgba(82,70,20,0.94)" : "rgba(20,44,72,0.9)";
-    const stroke = gray ? "rgba(190,198,210,0.46)" : start ? "rgba(255,188,108,0.88)" : ai ? "rgba(255,217,79,0.78)" : "rgba(105,164,224,0.55)";
+      ? gray ? "rgba(54,60,70,0.45)" : start ? "rgba(91,34,34,0.52)" : "rgba(20,44,72,0.5)"
+      : gray ? "rgba(70,76,88,0.88)" : start ? "rgba(169,39,42,0.94)" : "rgba(20,44,72,0.9)";
+    const stroke = gray ? "rgba(190,198,210,0.46)" : start ? "rgba(255,188,108,0.88)" : "rgba(105,164,224,0.55)";
     if (start && !disabled) {
       const ctx = app.ctx;
       ctx.save();
@@ -3682,18 +3564,7 @@ const CanvasQteTest = (() => {
       app.ctx.fillStyle = "rgba(255, 219, 130, 0.18)";
       app.ctx.fillRect(x + 8, y + 7, w - 16, 6);
     }
-    if (ai) {
-      const ctx = app.ctx;
-      ctx.save();
-      ctx.font = '1000 15px system-ui, "Microsoft JhengHei", sans-serif';
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = disabled ? "rgba(216,236,255,0.55)" : "#fff0b8";
-      ctx.fillText(label, x + w / 2, y + h / 2);
-      ctx.restore();
-    } else {
-      text(label, x + w / 2, y + 31, 18, disabled ? "rgba(216,236,255,0.55)" : start ? "#fff4d6" : "#d8ecff", start ? "1000" : "800", "center");
-    }
+    text(label, x + w / 2, y + 31, 18, disabled ? "rgba(216,236,255,0.55)" : start ? "#fff4d6" : "#d8ecff", start ? "1000" : "800", "center");
   }
 
   function hitButton(p) {

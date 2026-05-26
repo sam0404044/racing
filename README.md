@@ -33,10 +33,10 @@ npx --yes serve .
 |-------------|------|
 | `index.html` | 最後車手正式版入口 |
 | `final-driver.js`, `final-driver.css` | 最後車手正式版 Canvas 遊戲 |
-| `qte-test.html` | 舊連結相容入口，載入正式版資源 |
+| `第一關/第一關.html` | 第一關相容入口，載入正式版資源 |
 | `index-legacy-new-york-playtest.html` | New York New York 歷史試玩頁 |
 | `game.js`, `cards.js`, `track.js`, `styles.css` | New York New York 歷史試玩資源 |
-| `qte-preview.png` | 最後車手分享預覽圖 |
+| `第一關-preview.png` | 第一關分享預覽圖 |
 | `GAME_RULES.md`, `GAME_RULES.html` | 最後車手規則 |
 | `GAME_RULES_NEW_YORK.md` | New York New York 歷史規則 |
 

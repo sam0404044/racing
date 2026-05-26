@@ -1,0 +1,5 @@
+interface:
+  display_name: "Racing Industrial Palette"
+  short_description: "Apply the project racing-industrial color language."
+  default_prompt: "Use $racing-industrial-palette to apply the racing-industrial visual palette to this project asset."
+  brand_color: "#AA2704"
