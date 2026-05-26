@@ -40,40 +40,16 @@ const DESIGN_H = 1080;
 // 一次調整所有文字大小與 modal 框框尺寸
 const FONT_SCALE = 1.2;
 const UI_SCALE = FONT_SCALE;
-const gameRouteParams = new URLSearchParams(globalThis.location?.search || "");
-const CAMPAIGN_LEVEL_SELECT_URL = "../index.html?levels=1";
-
-function isCampaignRun() {
-  return gameRouteParams.has("campaign");
-}
-
-function returnToLevelSelect() {
-  window.location.href = CAMPAIGN_LEVEL_SELECT_URL;
-}
-
-function visibleWorldRect() {
-  const vp = app.viewport;
-  const scale = vp?.finalScale || 1;
-  if (!vp || !scale) {
-    return { left: 0, top: 0, right: app.w, bottom: app.h, width: app.w, height: app.h };
-  }
-  const left = Math.max(0, -vp.offsetX / scale);
-  const top = Math.max(0, -vp.offsetY / scale);
-  const right = Math.min(app.w, (vp.width - vp.offsetX) / scale);
-  const bottom = Math.min(app.h, (vp.height - vp.offsetY) / scale);
-  return {
-    left,
-    top,
-    right,
-    bottom,
-    width: Math.max(0, right - left),
-    height: Math.max(0, bottom - top),
-  };
-}
 
 // ─── 音樂 ────────────────────────────────────────────────────────────────
-function playNormalBgm() {}
-function stopNormalBgm() {}
+const NORMAL_STAGE_BGM_SRC = "../assets/BGM/001.mp3";
+const normalBgm = new Audio(NORMAL_STAGE_BGM_SRC);
+normalBgm.loop = true; normalBgm.preload = "auto"; normalBgm.volume = 0.58;
+normalBgm.addEventListener("ended", () => {
+  if (normalBgm.loop) { normalBgm.currentTime = 0; normalBgm.play().catch(()=>{}); }
+});
+function playNormalBgm() { const p = normalBgm.play(); if (p) p.catch(()=>{ app.normalBgmPending = true; }); }
+function stopNormalBgm() { normalBgm.pause(); normalBgm.currentTime = 0; }
 
 // ─── 共用視覺工具 ────────────────────────────────────────────────────────
 function smooth01(v) {
@@ -2540,8 +2516,10 @@ function finishPlayerAction() {
     playerSpeedSource(slipDelta, "尾流", "#ff9b54");
     // 績效考核：吃尾流事件
     updateBossTaskProgress("slipstream");
-  } else if (pa.wasSameLane && app.playerLane !== app.opponentLane) {
+  } else if (pa.wasSameLane && app.playerLane !== app.opponentLane
+             && !app.stage2?.slipstreamUsed) {
     // 玩家步驟 1 結束時同道、但對手切走 → 嘲諷
+    // 但如果這回合 slipstream 已經被吃過（例如回合開頭同道立刻拿）→ 不嘲諷
     showOpponentTaunt();
   }
   // 閘門：等步驟 3 尾流飛字播完，才執行步驟 4（賽道結算 → push 賽道飛字 + 可能觸發 QTE）
@@ -4533,14 +4511,7 @@ function handleButton(id) {
     return;
   }
   // 重新來過
-  if (id === "replay") {
-    if (isCampaignRun()) {
-      returnToLevelSelect();
-      return;
-    }
-    reset();
-    return;
-  }
+  if (id === "replay") { reset(); return; }
 }
 
 // ─── Update ────────────────────────────────────────────────────────────────
@@ -6065,8 +6036,7 @@ function drawDragHighlight(time, h, horizon) {
 // ─── HUD ───────────────────────────────────────────────────────────────────
 function statusHudRect() {
   // 輪胎搬到左下「車子部件」面板後、本面板高度從 250 縮成 200
-  const v = visibleWorldRect();
-  return { x: v.right - 276 - 24, y: v.bottom - 200 - 24, w: 276, h: 200 };
+  return { x: app.w - 300, y: app.h - 200 - 24, w: 276, h: 200 };
 }
 
 function drawHud(time) {
@@ -6153,8 +6123,7 @@ function drawHud(time) {
 // 整個面板是 stability drop zone（拖牌進來 → 充能尾翼 = 空力穩定系統）
 function carPartsHudRect() {
   // 跟右下 statusHudRect 對稱
-  const v = visibleWorldRect();
-  return { x: v.left + 24, y: v.bottom - 170 - 24, w: 290, h: 170 };
+  return { x: 24, y: app.h - 170 - 24, w: 290, h: 170 };
 }
 
 // ── 各部件 metadata（名稱 + 敘述 / 預告）──
@@ -8562,7 +8531,7 @@ function drawAllClear() {
   ctx.fillStyle = "rgba(0,0,0,0.72)"; ctx.fillRect(0,0,app.w,app.h);
   text("通關！", app.w/2, app.h*0.38, 56, "#ffd94f", "1000", "center");
   text("Final Driver — 機制驗證場", app.w/2, app.h*0.52, 20, "rgba(200,220,255,0.8)", "700", "center");
-  button("replay", isCampaignRun() ? "返回關卡選擇" : "再玩一次", app.w/2-110, app.h*0.62, 220, 52, false, "start");
+  button("replay", "再玩一次", app.w/2-110, app.h*0.62, 220, 52, false, "start");
 }
 
 // ─── 第五關繪製 ────────────────────────────────────────────────────────────
@@ -9516,9 +9485,8 @@ function drawStage2SidePanel(time) {
   const s2 = app.stage2;
   if (!s2) return;
   const ctx = app.ctx;
-  const visible = visibleWorldRect();
-  const x = visible.left + 14;
-  const y = visible.top + 24;
+  const x = 14;
+  const y = 80;
   const w = 240;  // 字體放大後加寬讓標題跟回合計時不重疊
   let curY = y;
   // 估算面板高度：標題 34 + 名次標 22 + 4 列 × 30 + 後車警告 58 + 尾流 22 + 車隊牌
@@ -10783,7 +10751,7 @@ function resize() {
   // resizeCanvasToDisplay：設定 canvas.width/height、setTransform(dpr,...)、更新 viewport state
   // 注意：library 內 setTransform 只套 DPR、不套 finalScale
   //      我們之後再套 design transform 給整個 frame
-  SCV.resizeCanvasToDisplay(app.canvas, app.ctx, app.viewport, { useUiScale: false, fit: "cover" });
+  SCV.resizeCanvasToDisplay(app.canvas, app.ctx, app.viewport, { useUiScale: true });
 
   // app.w / app.h 永遠是設計稿大小（給遊戲程式碼用）
   app.w = DESIGN_W;
@@ -10815,14 +10783,7 @@ function start(root) {
   app.winOverlay = root.querySelector("#qteWinOverlay");
   if (app.winOverlay) {
     app.winOverlay.addEventListener("click", e => {
-      if (e.target.closest("#qteWinReplay")) {
-        if (isCampaignRun()) {
-          returnToLevelSelect();
-          return;
-        }
-        hideGameWinOverlay();
-        reset();
-      }
+      if (e.target.closest("#qteWinReplay")) { hideGameWinOverlay(); reset(); }
     });
   }
   setupInput();
@@ -10836,7 +10797,7 @@ function start(root) {
       app.w = DESIGN_W;
       app.h = DESIGN_H;
       app.dpr = app.viewport.dpr;
-    }, { useUiScale: false, fit: "cover" });
+    }, { useUiScale: true });
   } else {
     // fallback：原本的 resize
     resize();
