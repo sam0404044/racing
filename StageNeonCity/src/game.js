@@ -25,6 +25,7 @@ import {
   STAGE2_COMMAND_CARDS,
   STAGE2_TEAM_CARDS,
   STAGE2_ALL_CARDS,
+  BOSS_TASK_POOL,
 } from './config.js';
 import { app } from './state.js';
 
@@ -319,9 +320,75 @@ function tickSpeedPopGates() {
 //   - 換道 delta = -laneCost
 //   - 打牌 delta = +cardValue
 //   - 步驟 3「檢查尾流」也用這函式（同道則 +30）
+// 玩家速度變動（內部用）。Esp 結算另外處理、見 playerSpeedSource。
 function applyPlayerActionDelta(delta) {
   app.playerSpeed = app.playerSpeed + delta;
   if (app.playerSpeed < 0) app.playerSpeed = 0;
+}
+
+// ─── 玩家速度來源（pop + apply + 企業間諜 per-source 抽成）─────────────
+// 統一的「玩家速度變動 + 飛字 + Boss 抽成」入口
+//   delta — 本來源的速度增減（含正負）
+//   label — 飛字顯示的來源名（"加速"、"尾流"、"連擊"、"順風道" 等）
+//   color — 飛字顏色（可選、不傳用預設色）
+// 行為：
+//   1. 推來源飛字
+//   2. 套用到玩家速度
+//   3. 若企業間諜本動 active → Boss 取走 50%（玩家損失、Boss 取得、累計顯示）
+function playerSpeedSource(delta, label, color = null) {
+  if (delta === 0) return;
+  const before = app.playerSpeed;
+  pushSpeedDeltaPop("player", delta, label, color);
+  app.playerSpeed = app.playerSpeed + delta;
+  if (app.playerSpeed < 0) app.playerSpeed = 0;
+  // 企業間諜 per-source 結算（轉嫁 50%、玩家失去、Boss 取得）
+  if (app.espionageActiveThisAction) {
+    applyEspionageTransfer(delta);
+  }
+  // 績效考核「累積淨加速」用：發送 net delta event（含 espionage 抽走後）
+  const netDelta = app.playerSpeed - before;
+  if (netDelta !== 0) {
+    updateBossTaskProgress("speedDelta", { delta: netDelta });
+  }
+}
+
+// 企業間諜 per-source 結算
+//   playerDelta — 本次來源的速度增減（玩家視角）
+// 機制：50% 轉嫁、玩家失去 skim、Boss 取得 skim
+//   正向 delta（玩家 +30）→ skim +15、玩家 -15、Boss +15
+//   負向 delta（玩家 -10）→ skim -5、玩家 +5（少虧 5）、Boss -5
+
+// 取得當前有效抽成 ratio（依 buff/debuff 層數）
+//   基礎 50%、每層 buff +10%、每層 debuff -10%
+//   範圍：Buff 3 → 80%、Debuff 3 → 20%
+function getEffectiveEspionageRatio() {
+  const boss = app.stage2?.boss;
+  if (!boss) return 0.5;
+  const buff = boss.buffStacks || 0;
+  const debuff = boss.debuffStacks || 0;
+  return Math.max(0, Math.min(1, 0.5 + buff * 0.10 - debuff * 0.10));
+}
+
+function applyEspionageTransfer(playerDelta) {
+  // 抽成依 buff / debuff 層數：base 50% ± 10% per stack
+  // Buff 1/2/3 → 60% / 70% / 80%；Debuff 1/2/3 → 40% / 30% / 20%
+  const ratio = getEffectiveEspionageRatio();
+  const skim = Math.trunc(playerDelta * ratio);
+  if (skim === 0) return;
+  // 玩家失去 skim
+  app.playerSpeed = app.playerSpeed - skim;
+  if (app.playerSpeed < 0) app.playerSpeed = 0;
+  // Boss 取得 skim
+  app.opponentSpeed = app.opponentSpeed + skim;
+  if (app.opponentSpeed < 0) app.opponentSpeed = 0;
+  // 累計顯示
+  const boss = (app.stage2.boss = app.stage2.boss || {});
+  boss.espionageCumulative = (boss.espionageCumulative || 0) + skim;
+  // 飛字：玩家側「-N 被抽成」（負號跟 skim 反向）、Boss 側「+N 企業間諜（累計）」
+  pushSpeedDeltaPop("player", -skim, "被抽成", "rgba(255,100,150,0.95)");
+  pushSpeedDeltaPop("opponent", skim, `企業間諜（${boss.espionageCumulative}）`, "rgba(255,100,200,0.95)");
+  // 視覺特效：玩家→Boss 紅紫資料光束（負 skim 反向）
+  spawnEspionageBeam(skim);
 }
 
 // 從 lane bonus 的 label 取車道名稱（去掉數值跟符號部分）
@@ -347,20 +414,29 @@ function resolvePlayerCircuit() {
   const add  = b?.add  ?? 0;
   const mult = b?.mult ?? 1;
   const laneName = extractLaneLabelName(b?.label);
-  const before = app.playerSpeed;
-  // add 階段：先 +add（飛字只顯示車道名、不重複數值）
+  // add 階段：用 playerSpeedSource（含 espionage 抽成）
   if (add) {
-    pushSpeedDeltaPop("player", add, laneName);
+    playerSpeedSource(add, laneName);
   }
-  const afterAdd = before + add;
-  // mult 階段：算出 ×mult 後的差值、用 `×N 車道名 +diff` 顯示
+  // mult 階段：算出 ×mult 後的差值、用 `×N 車道名 +diff` 顯示 + 套用 + espionage 抽成
   if (mult !== 1) {
-    const afterMult = Math.floor(afterAdd * mult);
-    const diff = afterMult - afterAdd;
-    pushSpeedMultPop("player", mult, laneName, diff);
+    const before = app.playerSpeed;
+    const afterMult = Math.floor(before * mult);
+    const diff = afterMult - before;
+    if (diff !== 0) {
+      pushSpeedMultPop("player", mult, laneName, diff);
+      app.playerSpeed = afterMult;
+      if (app.playerSpeed < 0) app.playerSpeed = 0;
+      if (app.espionageActiveThisAction) {
+        applyEspionageTransfer(diff);
+      }
+      // 績效考核 net delta event
+      const netDelta = app.playerSpeed - before;
+      if (netDelta !== 0) {
+        updateBossTaskProgress("speedDelta", { delta: netDelta });
+      }
+    }
   }
-  app.playerSpeed = Math.floor(afterAdd * mult);
-  if (app.playerSpeed < 0) app.playerSpeed = 0;
 }
 // 公式：playerSpeed = floor((playerSpeed + delta + add) × mult)
 function applyLaneBonusToSpeed(delta, laneIdx) {
@@ -465,10 +541,10 @@ function tierToQteDiff(tier) {
   return "normal";
 }
 // 把所在道的 qteDiff 扣掉穩定區張數後的最終 qteDiff
+// 注意：空力區效果現在改由 speedTierStep 處理（直接降 tier）
+// 這個函式現在只回傳本道天然的 qteDiff（hard/normal/easy）、不再被 stab 影響
 function currentLaneQteDiffResolved() {
-  const baseTier = qteDiffToTier(currentLaneQteDiff());
-  const charges = app.stabilityCharges || 0;
-  return tierToQteDiff(Math.max(-1, baseTier - charges));
+  return currentLaneQteDiff();
 }
 
 // 彎道限速（playerSpeed 已結算，直接比較）
@@ -1572,6 +1648,8 @@ function tutorialAdvance() {
   t.eventCount = 0;  // 重置事件計數（給 requireCount 用）
   if (t.stepIndex >= TUTORIAL_STEPS.length) {
     t.active = false;
+    // 教學結束：洗牌賽段順序、進入正式遊戲不再永遠直線
+    reshuffleNormalCircuitOrder();
     return;
   }
   // 新 step 的 onEnter callback（用於降對手速、強制對手換道等 side effects）
@@ -1772,6 +1850,21 @@ function advanceCircuit() {
   applyCircuit(STAGE2_CIRCUITS[s2.circuitIndex]);
   s2.circuitJustChanged = true;
 }
+// 重洗賽段循環順序（教學結束 / 跳關 / 重打時呼叫）
+// 教學期間 circuitOrder 被寫成 [c3,c3,...]、教學結束後需要洗成正常池
+// 把 STAGE2_NORMAL_CIRCUITS_POOL（c1,c2,c3,c4,c8）打亂、複製兩遍當作循環隊列
+function reshuffleNormalCircuitOrder() {
+  const s2 = app.stage2;
+  if (!s2) return;
+  const pool = [...STAGE2_NORMAL_CIRCUITS_POOL];
+  // Fisher-Yates 洗牌
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  // 複製兩遍當循環隊列、保證循環時不會撞回相同順序連兩次
+  s2.circuitOrder = [...pool, ...pool];
+}
 // 每打一張牌切換賽段（核心機制）
 // 順序：
 //   1. 賽道結算（用「當前」賽段加成）
@@ -1782,6 +1875,10 @@ function advanceCircuitOnCard() {
   //   順序:玩家賽道 → 對手賽道
   resolvePlayerCircuit();
   resolveOpponentCircuit();
+  // 企業間諜：結算完所有來源後、清掉本動旗標
+  clearEspionageFlagsAtEndOfAction();
+  // Boss 績效考核：在賽道結算後才評分、確保本動的路面加成算進當前任務
+  maybeFirePerfReviewAtEndOfAction();
   // 套完 mult 才能正確判斷是否超速
   checkBendSpeedLimit();
   // c8 紅綠燈干擾:結算後玩家所在道立刻揭曉
@@ -1908,6 +2005,7 @@ function currentOpponent() {
   return STAGE2_OPPONENTS[app.stage2.currentOpponentId];
 }
 // 隨機從「前方對手陣容（排除 boss）」抽一個當當前對手
+// BOSS 規則：當一般對手都被超過、ahead 只剩 BOSS（或包含 BOSS）→ 開戰最終 Boss NCC-7
 function pickNextOpponent() {
   const s2 = app.stage2;
   if (!s2) return null;
@@ -1918,7 +2016,11 @@ function pickNextOpponent() {
     return id;
   }
   const candidates = s2.ahead.filter(id => id !== "BOSS");
-  if (candidates.length === 0) return null;  // 全部超過 = 通關
+  // 一般對手全部超過、若 BOSS 還在 ahead → 開戰 BOSS（最終戰）
+  if (candidates.length === 0) {
+    if (s2.ahead.includes("BOSS")) return "BOSS";
+    return null;  // 真的通關了
+  }
   // v0.9：固定取「玩家前一個名次」的對手 = ahead 列表的最後一個
   //   ahead 的排列是「第 1 名、第 2 名、...、玩家前一名」
   //   所以最後一個 = 離玩家最近的對手 = 應該面對的對手
@@ -1976,8 +2078,8 @@ function applyChaserToApp(chaserId) {
 function initStage2State() {
   app.stage2 = {
     // 教學版陣容：P 陪跑員排在最末（pickNextOpponent 取最後一個 → P 第一個面對）
-    // 後面接 A 禿鷹 → B 清道夫 → C 破風者（共 4 對手、玩家從第 5 名開始）
-    ahead: ["C","B","A","P"],
+    // 後面接 A 禿鷹 → B 清道夫 → C 破風者 → BOSS NCC-7（共 5 對手、玩家從第 6 名開始）
+    ahead: ["BOSS","C","B","A","P"],
     passed: [],
     currentOpponentId: null,
     pinnedNextOpponentId: null,
@@ -2003,7 +2105,7 @@ function initStage2State() {
     lastMistakeCount: 0,
     // 回合計時：跑滿 MAX_ROUNDS 回合 = 越過終點線、強制結束
     roundsPlayed: 0,                       // 已進入的新回合次數（stage2StartNewRound 每次 +1）
-    maxRounds: 10,                         // 終點線回合數
+    maxRounds: 15,                         // 終點線回合數
     // 教學版專用旗標
     firstRoundReady: true,   // 第一回合不執行 advanceCircuit（讓玩家直接玩 init 設好的 c3）
     tutorial: {
@@ -2031,6 +2133,20 @@ function initStage2State() {
   // 把起始牌庫灌入抽牌堆（教學版：不洗牌、用 makeStage2InitialDeck 寫死的順序）
   app.stage2.drawPile = [...app.stage2.deckBase];
   app.stage2.discardPile = [];
+  // ─── NCC-7 Boss 戰狀態（Phase 3 績效考核）──────────────────────────
+  // 整個 Boss 戰持續、玩家真正超過 Boss 時才 reset
+  app.stage2.boss = {
+    currentTask: null,         // { def, subTasks: [{def, progress, extra}], ... }
+    taskHistory: new Set(),    // 已派發過的任務 id（避免重複、池空時重洗）
+    evalHistory: [],           // 評分紀錄 [{taskDisplay, passed, evalNumber}]、用於 modal「考核紀錄」
+    evalCount: 0,              // 累計考核次數（顯示「第 N 次考核」用）
+    lastCommentary: "",        // 最後一句長官評語、modal 顯示用
+    buffStacks: 0,             // 績效考核達標堆疊（0-3）
+    debuffStacks: 0,           // 績效考核未達標堆疊（0-3、跟 buff 互斥）
+    espionageCumulative: 0,    // 本動間諜累計（per-action、間諜啟動時 reset）
+    commentaryPicked: { start: new Set(), pass: new Set(), fail: new Set() },  // 已抽過的評語、避免重複
+    suppressionActive: false,  // Phase 4 旗標、暫未啟用
+  };
 }
 // 取得對手的「起始專注度」（display 的 max 用；教學版 A 會被覆寫）
 //   - 優先讀 stage2.opponentFocusStartMap（per-stage 可覆寫）
@@ -2094,6 +2210,69 @@ function loadStage(idx) {
   stage2StartNewRound();
 }
 
+// ─── 測試：跳過新手教學 ───────────────────────────────────────────────
+// 開始畫面的測試按鈕用、結束教學、洗牌賽段、保留正常 5 對手陣容
+// 教學階段包含陪跑員 P 的對戰、所以「跳過教學」也視為跳過 P、玩家從第 5 名開始面對 A 禿鷹
+function skipTutorialForTest() {
+  playNormalBgm();
+  loadStage(0);
+  const s2 = app.stage2;
+  if (!s2) return;
+  // 結束教學
+  if (s2.tutorial) s2.tutorial.active = false;
+  // 跳過陪跑員 P（視為教學的一部分）
+  s2.passed = ["P"];
+  s2.ahead = ["BOSS", "C", "B", "A"];
+  app.rank = 5;  // rankTotal 6 - 1 passed = 5
+  s2.currentOpponentId = "A";
+  applyOpponentToApp("A");
+  // 洗牌賽段順序、避免一直直線
+  reshuffleNormalCircuitOrder();
+  // 從洗牌結果取第一段套用（脫離教學的 c3）
+  const firstCircuitIdx = s2.circuitOrder[0];
+  s2.circuitIndex = firstCircuitIdx;
+  applyCircuit(STAGE2_CIRCUITS[firstCircuitIdx]);
+  // 重置回合資訊
+  s2.firstRoundReady = false;
+  app.message = "[測試] 跳過教學";
+  app.mode = "playing";
+}
+
+// ─── 測試：直接跳到 Boss 戰 ────────────────────────────────────────────
+// 開始畫面的測試按鈕用、跳過教學跟前面 4 個對手、直接面對 NCC-7
+// 觸發前先讓玩家選 3 次牌（模擬一般流程從 A→B→C 的 3 次獎勵）
+function skipToBossForTest() {
+  playNormalBgm();
+  loadStage(0);  // 正常 init 走一遍
+  const s2 = app.stage2;
+  if (!s2) return;
+  // 結束教學
+  if (s2.tutorial) s2.tutorial.active = false;
+  // 前 4 個對手算超過、ahead 只剩 BOSS
+  s2.passed = ["P", "A", "B", "C"];
+  s2.ahead = ["BOSS"];
+  app.rank = 2;  // 玩家在 Boss 的下一位
+  // rankTotal 已經是 6（init 時設好）
+  // 設定 Boss 為當前對手
+  s2.currentOpponentId = "BOSS";
+  applyOpponentToApp("BOSS");
+  // 洗牌賽段順序、避免一直直線
+  reshuffleNormalCircuitOrder();
+  // 從洗牌結果取第一段套用（脫離教學的 c3）
+  const firstCircuitIdx = s2.circuitOrder[0];
+  s2.circuitIndex = firstCircuitIdx;
+  applyCircuit(STAGE2_CIRCUITS[firstCircuitIdx]);
+  // 重置回合資訊
+  s2.roundsPlayed = 0;     // 第一次選牌後才算第 1 回合開始
+  s2.firstRoundReady = true;  // Boss 戰第一回合不切段
+  // 標記要先選 3 次牌（每次 stage2OnRewardPicked / Skip 後遞減）
+  // 模擬一般流程：超過 A → 選牌、超過 B → 選牌、超過 C → 選牌、然後遇上 Boss
+  s2._testRewardsRemaining = 3;
+  app.message = "[測試] 進 NCC-7 戰前選 3 次牌";
+  // 直接進入第一輪選牌
+  stage2BeginRewardPick();
+}
+
 // ─── Reset ─────────────────────────────────────────────────────────────────
 function reset() {
   stopNormalBgm();
@@ -2155,6 +2334,8 @@ function dropCardToStability(cardIdx) {
   pushSpeedPop("player", "🛡 空力 -1 階", "rgba(110,255,140,0.95)");
   // 教學：通知有丟一張到穩定區
   tutorialNotify("stabilityDrop");
+  // 績效考核：丟穩定區事件（resource 類任務）
+  updateBossTaskProgress("stabilityDrop");
   // 不算行動、不觸發對手、不重置 lastCard 連擊鏈
   // 玩家還在自己的動作中、繼續等下一個操作
   return true;
@@ -2191,12 +2372,14 @@ function playCardToLane(cardIdx, targetLane) {
   //   - 不觸發對手回合、不切換賽段
   //   - 打完繼續等玩家動作
   // 在「換道」邏輯之前先處理，避免被當成換道
+  // v0.9：team card 不算行動、不觸發對手、不切換賽段（除了純打牌效果）
   if (isStage2() && card.cardClass === "team") {
     app.hand.splice(cardIdx, 1);
     const s2 = app.stage2;
     s2.teamCardsActive.push(card);
     // 即時套用效果（permanent 效果由查詢點自然生效）
-    // 不算行動、不觸發對手、不切換賽段
+    // 績效考核：打車隊牌事件
+    updateBossTaskProgress("teamCardPlay");
     checkAutoPrompt();
     return;
   }
@@ -2213,11 +2396,15 @@ function playCardToLane(cardIdx, targetLane) {
     // 計算扣速量（跨道數 = abs(target - 當前)）
     const lanesCrossed = Math.abs(targetLane - app.playerLane);
     const laneCost = laneChangeCost(lanesCrossed);
-    app.playerLane = targetLane;  // 移到新道（純動作）
+    const newLane = targetLane;
+    app.playerLane = newLane;  // 移到新道（純動作）
     if (isStage2()) {
-      // 步驟 1：自身代價立即生效（扣 laneCost）
-      applyPlayerActionDelta(-laneCost);
-      pushSpeedDeltaPop("player", -laneCost, "跨道");
+      // 步驟 1：自身代價立即生效（扣 laneCost）+ 飛字 + Boss 抽成
+      // 在套用速度變動「之前」啟動 Boss passive 行為（espionage、績效考核）
+      maybeActivateBossPassivesEarly();
+      playerSpeedSource(-laneCost, "跨道");
+      // 績效考核：換道事件
+      updateBossTaskProgress("laneChange", { newLane });
       // 換道打斷「連續指令牌」連擊鏈
       const s2 = app.stage2;
       s2.lastActionWasCard = false;
@@ -2251,6 +2438,10 @@ function playCardToLane(cardIdx, targetLane) {
 
   if (isStage2()) {
     const s2 = app.stage2;
+    // 在套用速度變動「之前」啟動 Boss passive 行為（espionage、績效考核）
+    maybeActivateBossPassivesEarly();
+    // 績效考核：打指令牌事件（戰術類車隊牌另外計、見上方 cardClass === "team" 分支）
+    updateBossTaskProgress("cardPlay");
     if (card.penaltyNextHand) {
       s2.penaltyNextHand = (s2.penaltyNextHand || 0) + card.penaltyNextHand;
     }
@@ -2258,19 +2449,18 @@ function playCardToLane(cardIdx, targetLane) {
       // 反 allIn：下回合多抽 1 張
       s2.penaltyNextHand = (s2.penaltyNextHand || 0) + card.drawNextHand;
     }
-    // ─ 算「實際打牌速度」= base + 車隊牌加成 ─
-    let cardSpd = card.speedValue || 0;
-    // 卡牌主效果（先 push、後面車隊牌加成依次 push）
-    if (cardSpd) {
-      pushSpeedDeltaPop("player", cardSpd, card.name || "加速");
+    // ─ 各速度來源 per-source 結算（pop + 套用 + Boss 抽成） ─
+    // 1. 卡牌主效果
+    const baseCardSpd = card.speedValue || 0;
+    if (baseCardSpd) {
+      playerSpeedSource(baseCardSpd, card.name || "加速");
     }
-    // fuelMaster：本回合內所有指令牌 +5
+    // 2. fuelMaster：本回合內所有指令牌 +5
     const hasFuelMaster = s2.teamCardsActive.some(c => c.effect === "cardBonusThisRound");
     if (hasFuelMaster) {
-      cardSpd += 5;
-      pushSpeedDeltaPop("player", 5, "燃料管理大師");
+      playerSpeedSource(5, "燃料管理大師");
     }
-    // rhythmCoach：連續同名指令牌 +10 / +20
+    // 3. rhythmCoach：連續同名指令牌 +10 / +20
     const hasRhythmCoach = s2.teamCardsActive.some(c => c.effect === "comboBonusThisRound");
     if (hasRhythmCoach) {
       // 計算「本回合連續同名打的張數」（含當前這張）
@@ -2280,28 +2470,23 @@ function playCardToLane(cardIdx, targetLane) {
       s2.lastCardType = card.type;
       s2.lastCardSameStreak = lastSameNameStreak;
       if (lastSameNameStreak === 2) {
-        cardSpd += 10;
-        pushSpeedDeltaPop("player", 10, "連擊");
+        playerSpeedSource(10, "連擊");
       } else if (lastSameNameStreak >= 3) {
-        cardSpd += 20;
-        pushSpeedDeltaPop("player", 20, "連擊×3");
+        playerSpeedSource(20, "連擊×3");
       }
     } else {
       // 沒裝 rhythmCoach 也要記錄、玩家可能後續再裝
       s2.lastCardType = card.type;
       s2.lastCardSameStreak = (s2.lastCardType === card.type) ? (s2.lastCardSameStreak || 1) + 1 : 1;
     }
-    // smoothOperator（賽車節奏）：若前一動作也是指令牌（不論種類） → 額外 +20（總共 +40）
+    // 4. smoothOperator（賽車節奏）：若前一動作也是指令牌（不論種類） → 額外 +20
     if (card.smoothOperator && s2.lastActionWasCard) {
-      cardSpd += 20;
-      pushSpeedDeltaPop("player", 20, "賽車節奏");
+      playerSpeedSource(20, "賽車節奏");
     }
     // chill（冷靜應對）：本動 QTE 容錯 +qteForgive（用 flag 傳到 QTE 結算處）
     if (card.qteForgive) {
       s2.chillForgiveActive = card.qteForgive;
     }
-    // 步驟 1：卡牌效果立即生效（加修正後 cardSpd）
-    applyPlayerActionDelta(cardSpd);
     // 標記「上一動作是指令牌」給下次 smoothOperator 用
     s2.lastActionWasCard = true;
     // 記錄玩家動作後是否跟對手同道（用於步驟 3 嘲諷檢測）
@@ -2352,8 +2537,9 @@ function finishPlayerAction() {
   // 步驟 3：檢查尾流（這時對手已動完）
   const slipDelta = consumeSlipstreamDelta();
   if (slipDelta) {
-    applyPlayerActionDelta(slipDelta);
-    pushSpeedPop("player", `+${slipDelta} 尾流`, "#ff9b54");
+    playerSpeedSource(slipDelta, "尾流", "#ff9b54");
+    // 績效考核：吃尾流事件
+    updateBossTaskProgress("slipstream");
   } else if (pa.wasSameLane && app.playerLane !== app.opponentLane) {
     // 玩家步驟 1 結束時同道、但對手切走 → 嘲諷
     showOpponentTaunt();
@@ -2400,6 +2586,483 @@ function showOpponentTaunt() {
   };
 }
 
+// ─── Passive Behavior Layer ────────────────────────────────────────────
+// 目前 NCC-7 的 espionage 跟 performanceReview 都改在 playCardToLane 開頭
+// 用 maybeActivateBossPassivesEarly 提前觸發、這個函式只當保險用
+function executePassiveBehavior(b) {
+  // espionage / performanceReview 在動作開頭已經提前啟動、這裡 no-op
+  // 未來其他 passive 行為的 fallback 入口
+}
+
+// 在玩家動作「最開頭」觸發 Boss 的「需要在動作期間生效」的 passive
+//   - espionage：要 active 旗標、玩家第一個速度來源就能被抽
+//   - performanceReview：移到動作結束才 fire（見 maybeFirePerfReviewAtEndOfAction）
+//     原因：本動的賽道加成要算進當前任務、所以評分要在路面結算完之後
+function maybeActivateBossPassivesEarly() {
+  if (!app.opponentBehaviors || !app.opponentBehaviorLastTriggered) return;
+  if (app.stage2?.currentOpponentId !== "BOSS") return;
+  const actN = app.actionsThisRound ?? 0;
+  for (const b of app.opponentBehaviors) {
+    if (b.action !== "espionage") continue;
+    const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
+    if (actN - lastAt < getEffectiveCooldown(b)) continue;
+    app.opponentBehaviorLastTriggered[b.id] = actN;
+    app.espionageActiveThisAction = true;
+    const boss = app.stage2.boss = app.stage2.boss || {};
+    boss.espionageCumulative = 0;
+    pushSpeedPop("opponent", "⚡ 監聽中", "rgba(255,100,200,0.95)");
+    return;
+  }
+}
+
+// 在玩家動作「結束時」觸發績效考核（賽道結算之後）
+// 這樣本動的路面加成（含逆風 / 順風 / 紅綠燈 / 彎道 ×mult）會先算進當前任務、
+// 才評分。確保「累積淨加速」這類任務不會少算本動的最後一筆。
+// 呼叫時機：advanceCircuitOnCard 末端、clearEspionageFlagsAtEndOfAction 之後
+function maybeFirePerfReviewAtEndOfAction() {
+  if (!app.opponentBehaviors || !app.opponentBehaviorLastTriggered) return;
+  if (app.stage2?.currentOpponentId !== "BOSS") return;
+  const actN = app.actionsThisRound ?? 0;
+  for (const b of app.opponentBehaviors) {
+    if (b.action !== "performanceReview") continue;
+    const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
+    if (actN - lastAt < getEffectiveCooldown(b)) continue;
+    app.opponentBehaviorLastTriggered[b.id] = actN;
+    executePerformanceReview();
+    return;
+  }
+}
+
+// 兼容舊呼叫點：保留 maybeActivateEspionageEarly 名稱
+const maybeActivateEspionageEarly = maybeActivateBossPassivesEarly;
+
+// 動作結束時清旗標（呼叫於 advanceCircuitOnCard 末端、賽道結算之後）
+// 累計顯示 boss.espionageCumulative 不清、要等下次 maybeActivateBossPassivesEarly 才重置
+function clearEspionageFlagsAtEndOfAction() {
+  app.espionageActiveThisAction = false;
+}
+
+// 取得 behavior 的「有效冷卻」
+//   - Phase 4 企業壓制啟動時：espionage 跟 moveSmart 的 cd -1
+//   - 績效考核 cd 不變
+//   - 其他 behavior cd 不變
+function getEffectiveCooldown(behavior) {
+  if (!behavior) return 0;
+  const baseCd = behavior.cooldown ?? 0;
+  if (app.stage2?.boss?.suppressionActive) {
+    if (behavior.action === "espionage" || behavior.action === "moveSmart") {
+      return Math.max(0, baseCd - 1);
+    }
+  }
+  return baseCd;
+}
+
+// ─── 績效考核（Phase 3）────────────────────────────────────────────────
+// 觸發時機：cd 3 滿、由 maybeActivateBossPassivesEarly 呼叫
+// 行為：評分當前任務 → 派發新任務 → 開啟中央 modal（含長官評語）
+function executePerformanceReview() {
+  const boss = app.stage2?.boss;
+  if (!boss) return;
+  let evalResult = null;
+  if (boss.currentTask) {
+    evalResult = evaluateCurrentBossTask();
+  }
+  assignNewBossTask();
+  // 視覺：飛字 + 抽長官評語 + 彈中央 modal
+  pushSpeedPop("opponent", "🔍 績效考核", "rgba(255,217,79,0.95)");
+  boss.lastCommentary = pickNcc7Commentary(evalResult);
+  openPerfReviewModal(false);  // 不再 auto-close、留給玩家手動縮小或點外面
+}
+
+// 評分當前任務、更新 buff/debuff 堆疊、寫入歷史
+// 回傳 "pass" / "fail"
+function evaluateCurrentBossTask() {
+  const boss = app.stage2.boss;
+  const ct = boss.currentTask;
+  if (!ct) return null;
+  const passed = ct.subTasks.every(st => st.progress >= st.def.targetN);
+  // 累計考核次數（第 N 次）
+  boss.evalCount = (boss.evalCount || 0) + 1;
+  // 寫歷史紀錄（push 到尾端、最新的在最底下、舊的在最頂）
+  boss.evalHistory.push({
+    taskDisplay: ct.def.displayText,
+    passed,
+    evalNumber: boss.evalCount,
+  });
+  // 只保留最近 5 筆（從前面砍、保留最新的 5 筆）
+  if (boss.evalHistory.length > 5) boss.evalHistory.shift();
+  if (passed) {
+    boss.buffStacks = Math.min(3, boss.buffStacks + 1);
+    boss.debuffStacks = 0;
+  } else {
+    boss.debuffStacks = Math.min(3, boss.debuffStacks + 1);
+    boss.buffStacks = 0;
+  }
+  boss.currentTask = null;
+  return passed ? "pass" : "fail";
+}
+
+// 從評語池抽一句（依結果類型）
+const NCC7_COMMENTARY_POOL = {
+  start: [
+    "霓虹道路株式會社啟動定期績效考核。請車手達成下方 KPI 目標。",
+    "歡迎進入企業評估體系。第一份 KPI 已下發。",
+    "第一份考核項目已下發、請務必如期完成。",
+  ],
+  pass: [
+    "車手達成本季目標。為了維持競爭力、抽成將上調 10%。",
+    "老闆對車手表現滿意、要求繼續精進。抽成 +10%。",
+    "達標即是基線、抽成上調 10% 維持壓力。下季標準同步上修。",
+    "KPI 完成、抽成提升 10%。組織期望持續高效運作。",
+    "績效認列、抽成 +10%。企業政策:好的表現、要回饋更多給組織。",
+    "達標獎勵已發放:抽成 +10%。請繼續為公司創造價值。",
+  ],
+  fail: [
+    "KPI 未達標、抽成下調 10%。請車手立即改進。",
+    "績效報告:未達標。NCC-7 將抽成下調 10%、惟仍會加強監控。",
+    "KPI 未達、抽成下修 10%。NCC-7 建議車手檢討策略。",
+    "績效低於預期、抽成 -10%。企業議會表示遺憾。",
+    "未達標、抽成下調 10% 以紓困。NCC-7 觀察車手後續表現。",
+  ],
+};
+// 抽評語、避開本場已抽過的（用 boss.commentaryPicked 記錄）
+// 池內所有句子都抽過 → 清空該類別、重新抽
+function pickNcc7Commentary(evalResult) {
+  const key = evalResult === "pass" ? "pass" : evalResult === "fail" ? "fail" : "start";
+  const pool = NCC7_COMMENTARY_POOL[key];
+  if (!pool || pool.length === 0) return "";
+  const boss = app.stage2?.boss;
+  if (!boss) return pool[Math.floor(Math.random() * pool.length)];
+  // 初始化 picked 結構（per Boss-fight、resetBossState 時清空）
+  boss.commentaryPicked = boss.commentaryPicked || { start: new Set(), pass: new Set(), fail: new Set() };
+  const picked = boss.commentaryPicked[key];
+  // 找出還沒抽過的
+  let unused = pool.filter(line => !picked.has(line));
+  // 全部抽過了 → 重洗該類別
+  if (unused.length === 0) {
+    picked.clear();
+    unused = pool.slice();
+  }
+  const line = unused[Math.floor(Math.random() * unused.length)];
+  picked.add(line);
+  return line;
+}
+
+// 中央 modal 狀態
+//   visible        — 是否顯示（包含正在淡入淡出時）
+//   state          — "opening" | "open" | "closing" | "closed"
+//   stateStart     — 進入當前狀態的 timestamp（用於動畫進度）
+//   bounds         — modal 當前的矩形範圍（給 click-outside 判定用、每 frame 更新）
+function openPerfReviewModal(_unused) {
+  app.perfReviewModal = app.perfReviewModal || {};
+  app.perfReviewModal.visible = true;
+  app.perfReviewModal.state = "opening";
+  app.perfReviewModal.stateStart = performance.now();
+}
+function closePerfReviewModal() {
+  if (!app.perfReviewModal || !app.perfReviewModal.visible) return;
+  if (app.perfReviewModal.state === "closing") return;
+  app.perfReviewModal.state = "closing";
+  app.perfReviewModal.stateStart = performance.now();
+}
+
+// 取得下次績效考核還要幾動（給 MEMO + modal 顯示倒數用）
+function getPerfReviewCountdown() {
+  if (app.stage2?.currentOpponentId !== "BOSS") return null;
+  if (!app.opponentBehaviors || !app.opponentBehaviorLastTriggered) return null;
+  const actN = app.actionsThisRound ?? 0;
+  for (const b of app.opponentBehaviors) {
+    if (b.action !== "performanceReview") continue;
+    const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
+    if (lastAt === -Infinity) return null;
+    return Math.max(0, lastAt + b.cooldown - actN);
+  }
+  return null;
+}
+
+// 取得車手心理狀態描述（依 buff / debuff 堆疊）
+//   - 三層 buff / 三層 debuff 各自有些微不同的敘述
+//   - 無堆疊：中性描述
+//   回傳 { line, color }
+function getDriverMoodDescription() {
+  const boss = app.stage2?.boss;
+  if (!boss) return null;
+  const buff = boss.buffStacks;
+  const debuff = boss.debuffStacks;
+  if (buff > 0) {
+    const lines = [
+      "車手對於績效達標感到鼓勵！QTE 難度 -1。",
+      "車手達標兩次、信心穩步提升！QTE 難度 -2。",
+      "車手連續達標、進入心流狀態！QTE 難度 -3。",
+    ];
+    return { line: lines[Math.min(2, buff - 1)], color: "rgba(140, 255, 160, 0.95)" };
+  }
+  if (debuff > 0) {
+    const lines = [
+      "車手對於績效未達標感到沮喪…… QTE 難度 +1。",
+      "車手連續未達標、開始感到焦慮…… QTE 難度 +2。",
+      "車手績效持續低迷、瀕臨崩潰…… QTE 難度 +3。",
+    ];
+    return { line: lines[Math.min(2, debuff - 1)], color: "rgba(255, 130, 130, 0.95)" };
+  }
+  // 中性狀態（buff=0、debuff=0）
+  // 有當前任務 → 考核已啟動、正在受評
+  // 無當前任務 → 還沒被派發、靜待 KPI
+  const neutralLine = boss.currentTask
+    ? "車手正在接受績效考核……"
+    : "車手保持平常心、靜待 KPI 派發。";
+  return { line: neutralLine, color: "rgba(220, 220, 220, 0.75)" };
+}
+
+// 從任務池抽一個指定 level 的任務（排除已用過的、可指定排除 type）
+function pickRandomBossTask(level, excludeType = null) {
+  const boss = app.stage2.boss;
+  let candidates = Object.values(BOSS_TASK_POOL).filter(t =>
+    t.level === level
+    && !boss.taskHistory.has(t.id)
+    && (excludeType == null || t.type !== excludeType)
+  );
+  // 池空 → 清掉這個 level 的歷史、重新抽
+  if (candidates.length === 0) {
+    boss.taskHistory = new Set([...boss.taskHistory].filter(id => {
+      const t = BOSS_TASK_POOL[id];
+      return t && t.level !== level;
+    }));
+    candidates = Object.values(BOSS_TASK_POOL).filter(t =>
+      t.level === level
+      && (excludeType == null || t.type !== excludeType)
+    );
+    if (candidates.length === 0) return null;
+  }
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+// 建立 sub-task 結構
+function makeBossSubTask(def) {
+  return {
+    def,
+    progress: 0,
+    extra: {},  // for uniqueLanes 用 Set
+  };
+}
+
+// 派發新任務
+//   - 一般：抽一個 level = buffStacks+1（capped 3）的任務
+//   - buff=3：抽兩個任務（L1+L3 或 L2+L2 隨機、不同 type）
+//   - tactic_l3 特殊：遞迴抽兩個不同 type 的 L1
+function assignNewBossTask() {
+  const boss = app.stage2.boss;
+  if (!boss) return;
+  // buff 滿層（=3）：抽兩個任務、不同 type
+  if (boss.buffStacks >= 3) {
+    const useL1L3 = Math.random() < 0.5;
+    const lA = useL1L3 ? 1 : 2;
+    const lB = useL1L3 ? 3 : 2;
+    const taskA = pickRandomBossTask(lA);
+    const taskB = pickRandomBossTask(lB, taskA?.type);
+    if (!taskA || !taskB) return;
+    boss.taskHistory.add(taskA.id);
+    boss.taskHistory.add(taskB.id);
+    boss.currentTask = {
+      def: { id:"buffmax_combo", type:"combo", level:4, displayText:"雙重任務" },
+      subTasks: [makeBossSubTask(taskA), makeBossSubTask(taskB)],
+    };
+    return;
+  }
+  // 一般：抽一個 level = buffStacks+1 的任務
+  const level = Math.min(3, boss.buffStacks + 1);
+  const taskDef = pickRandomBossTask(level);
+  if (!taskDef) return;
+  boss.taskHistory.add(taskDef.id);
+  // tactic_l3：遞迴抽兩個不同 type 的 L1
+  if (taskDef.special === "recursive2L1") {
+    const types = ["move", "resource", "output", "combat"];
+    types.sort(() => Math.random() - 0.5);
+    const subA = pickRandomBossTask(1);  // 任意 L1
+    // pickRandomBossTask 第二次找一個不同 type 的 L1
+    const subB = pickRandomBossTask(1, subA?.type);
+    if (!subA || !subB) {
+      // fallback：直接給 4 張車隊牌
+      boss.currentTask = {
+        def: taskDef,
+        subTasks: [makeBossSubTask({ ...taskDef, targetN: 4, displayText: "打 4 張車隊牌", special: null })],
+      };
+      return;
+    }
+    boss.taskHistory.add(subA.id);
+    boss.taskHistory.add(subB.id);
+    boss.currentTask = {
+      def: taskDef,
+      subTasks: [makeBossSubTask(subA), makeBossSubTask(subB)],
+    };
+  } else {
+    boss.currentTask = {
+      def: taskDef,
+      subTasks: [makeBossSubTask(taskDef)],
+    };
+  }
+}
+
+// 更新當前任務進度（呼叫於各種玩家事件、見後續 hooks）
+//   eventType — "laneChange" | "discard" | "stabilityDrop" | "cardPlay" | "teamCardPlay" | "speedDelta" | "slipstream" | "qteSuccess"
+//   data      — 事件相關資料（如 laneChange 帶 newLane、speedDelta 帶 delta）
+function updateBossTaskProgress(eventType, data = {}) {
+  if (app.stage2?.currentOpponentId !== "BOSS") return;
+  const boss = app.stage2.boss;
+  if (!boss?.currentTask) return;
+  for (const sub of boss.currentTask.subTasks) {
+    const def = sub.def;
+    if (sub.progress >= def.targetN) continue;  // 已達標、跳過
+    switch (def.type) {
+      case "move":
+        if (def.special === "uniqueLanes" && eventType === "laneChange") {
+          sub.extra.lanesVisited = sub.extra.lanesVisited || new Set();
+          sub.extra.lanesVisited.add(data.newLane);
+          sub.progress = sub.extra.lanesVisited.size;
+        } else if (eventType === "laneChange") {
+          sub.progress += 1;
+        }
+        break;
+      case "resource":
+        if (def.special === "stabilityOnly") {
+          if (eventType === "stabilityDrop") sub.progress += 1;
+        } else if (def.special === "stabilityOrLaneChange") {
+          // 穩定區 + 換道（laneChange）都算
+          if (eventType === "stabilityDrop" || eventType === "laneChange") {
+            sub.progress += 1;
+          }
+        } else if (eventType === "stabilityDrop" || eventType === "discard") {
+          sub.progress += 1;
+        }
+        break;
+      case "tactic":
+        if (eventType === "teamCardPlay") sub.progress += 1;
+        break;
+      case "output":
+        // 只計正向 delta（net、已含 espionage 抽走）
+        if (eventType === "speedDelta" && data.delta > 0) {
+          sub.progress = Math.min(def.targetN, sub.progress + data.delta);
+        }
+        break;
+      case "combat":
+        if (def.level === 1 && eventType === "slipstream") sub.progress += 1;
+        else if (def.level === 2 && eventType === "cardPlay") sub.progress += 1;
+        else if (def.level === 3 && eventType === "qteSuccess") sub.progress += 1;
+        break;
+    }
+  }
+}
+
+// ─── 企業間諜視覺特效 ──────────────────────────────────────────────────
+// 1. Boss 監聽中：紅紫掃描線 overlay + 邊框脈衝
+// 2. Per-skim 資料光束：玩家→Boss 紅紫虛線 + 移動粒子
+//
+// 呼叫時機：drawScene 主流程、兩台車繪製之後、speedPops 之前
+
+// 在 applyEspionageTransfer 結算時呼叫、push 一條光束
+function spawnEspionageBeam(skim) {
+  app.espionageBeams = app.espionageBeams || [];
+  app.espionageBeams.push({
+    startTime: performance.now(),
+    duration: 700,
+    magnitude: skim,  // 正：玩家被抽、Boss 取得；負：Boss 被扣、玩家拿回
+  });
+}
+
+function drawEspionageEffects(time, opponentX, opponentY, playerX, playerY) {
+  const ctx = app.ctx;
+
+  // ─── 1. Boss 監聽中 overlay ─────────────────────────────────────
+  if (app.espionageActiveThisAction) {
+    const redW = 130, redH = 70;  // 對手車尺寸（同 drawCar）
+    const bx = opponentX - redW / 2;
+    const by = opponentY - redH / 2;
+    // (a) 掃描線：3 條紅紫線、從上往下飄
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(bx, by, redW, redH, 6);
+    ctx.clip();
+    const phase = (time / 600) % 1;
+    const lineAlpha = 0.45 + 0.25 * Math.sin(time / 180);
+    ctx.strokeStyle = `rgba(255, 80, 200, ${lineAlpha})`;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const ly = by + ((phase + i / 3) % 1) * redH;
+      ctx.beginPath();
+      ctx.moveTo(bx, ly);
+      ctx.lineTo(bx + redW, ly);
+      ctx.stroke();
+    }
+    // (b) 紅紫色 tint
+    ctx.fillStyle = `rgba(255, 80, 180, ${0.08 + 0.04 * Math.sin(time / 200)})`;
+    ctx.fillRect(bx, by, redW, redH);
+    ctx.restore();
+    // (c) 外框脈衝光暈
+    ctx.save();
+    const borderAlpha = 0.45 + 0.25 * Math.sin(time / 200);
+    ctx.strokeStyle = `rgba(255, 80, 200, ${borderAlpha})`;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = "rgba(255, 60, 180, 0.65)";
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.roundRect(bx - 3, by - 3, redW + 6, redH + 6, 8);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ─── 2. 資料光束（per-skim event）────────────────────────────────
+  if (app.espionageBeams && app.espionageBeams.length) {
+    const now = performance.now();
+    for (let i = app.espionageBeams.length - 1; i >= 0; i--) {
+      const beam = app.espionageBeams[i];
+      const elapsed = now - beam.startTime;
+      if (elapsed > beam.duration) {
+        app.espionageBeams.splice(i, 1);
+        continue;
+      }
+      const t = elapsed / beam.duration;  // 0..1
+      // 光束端點：玩家頭頂 → Boss 中央
+      const fx = playerX,  fy = playerY - 30;
+      const tx = opponentX, ty = opponentY - 5;
+      // 方向：正 skim 玩家→Boss（被抽）；負 skim Boss→玩家（拿回）
+      const isReverse = beam.magnitude < 0;
+      const sx = isReverse ? tx : fx;
+      const sy = isReverse ? ty : fy;
+      const ex = isReverse ? fx : tx;
+      const ey = isReverse ? fy : ty;
+      const color = isReverse
+        ? `rgba(80, 255, 140, `    // 亮綠：玩家拿回（提亮）
+        : `rgba(255, 100, 200, `;  // 紅紫：Boss 抽走
+      const alpha = (1 - t) * 0.9;
+      ctx.save();
+      ctx.strokeStyle = color + `${alpha})`;
+      // 綠色 beam 加厚（更顯眼）
+      ctx.lineWidth = (isReverse ? 2.5 : 1.5) + Math.min(4, Math.abs(beam.magnitude) / 6);
+      ctx.setLineDash([4, 6]);
+      ctx.lineDashOffset = -t * 50;
+      ctx.shadowColor = color + (isReverse ? `0.9)` : `0.7)`);
+      ctx.shadowBlur = isReverse ? 14 : 8;
+      // 曲線中點往上偏（避免穿過車體中間、有飛弧感）
+      const mx = (sx + ex) / 2;
+      const my = (sy + ey) / 2 - 60;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.quadraticCurveTo(mx, my, ex, ey);
+      ctx.stroke();
+      // 領頭粒子（順著曲線、比光束快一點抵達）
+      const u = Math.min(1, t * 1.5);
+      const px = (1 - u) * (1 - u) * sx + 2 * (1 - u) * u * mx + u * u * ex;
+      const py = (1 - u) * (1 - u) * sy + 2 * (1 - u) * u * my + u * u * ey;
+      ctx.setLineDash([]);
+      ctx.fillStyle = color + `${alpha * 1.2})`;
+      ctx.beginPath();
+      ctx.arc(px, py, (isReverse ? 5 : 3) + Math.min(5, Math.abs(beam.magnitude) / 6), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
 function triggerOpponentActions() {
   // 守門：如果 mode 已經被切到結束/結算狀態（如 result、stage2-finish-line），
   // 不應該再進對手回合過場（避免遮蓋輸/勝畫面）
@@ -2420,15 +3083,28 @@ function triggerOpponentActions() {
     const ready = [];
     for (const b of app.opponentBehaviors) {
       const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
-      if (actN - lastAt >= b.cooldown) {
+      if (actN - lastAt >= getEffectiveCooldown(b)) {
         ready.push(b);
       }
     }
-    if (ready.length > 0) {
+    // ── Passive 層：跟主動 behavior 並行觸發、不走獨立 turn 動畫 ──
+    // NCC-7 的 espionage 跟 performanceReview 不走這層：
+    //   - espionage 由 maybeActivateBossPassivesEarly 於動作開頭觸發
+    //   - performanceReview 由 maybeFirePerfReviewAtEndOfAction 於動作末端觸發
+    // 兩者都自管 lastTriggered、dispatcher 不能再更新（會搶到 cd 永遠不滿）
+    const isSelfManaged = (b) => b.action === "espionage" || b.action === "performanceReview";
+    const passiveReady = ready.filter(b => b.weight === "passive" && !isSelfManaged(b));
+    for (const passive of passiveReady) {
+      app.opponentBehaviorLastTriggered[passive.id] = actN;
+      executePassiveBehavior(passive);
+    }
+    // ── Active 層：擇一觸發、走 turn 動畫 ──
+    const activeReady = ready.filter(b => b.weight !== "passive");
+    if (activeReady.length > 0) {
       // 挑 weight 最強的一個（strong > medium > weak）
       const weightRank = { strong: 3, medium: 2, weak: 1 };
-      ready.sort((a, b) => (weightRank[b.weight] || 0) - (weightRank[a.weight] || 0));
-      const picked = ready[0];
+      activeReady.sort((a, b) => (weightRank[b.weight] || 0) - (weightRank[a.weight] || 0));
+      const picked = activeReady[0];
       app.opponentBehaviorLastTriggered[picked.id] = actN;
       // 不立即執行，改進入「對手回合」過場
       beginOpponentTurn(picked);
@@ -2725,7 +3401,24 @@ function pickSmartLaneForOpponent(strategy, bypassAura = false) {
   if (effectiveStrategy === "bestForSelf") {
     return scores[Math.floor(Math.random() * scores.length)].lane;
   }
-  // avoidPlayer：仍挑最快道（同分時優先選跟當前道近的）
+  // avoidPlayer：(1) 速度最高 (2) 離玩家越遠越好 (3) 仍平手 → 隨機（避免永遠待在同一道）
+  if (effectiveStrategy === "avoidPlayer") {
+    scores.sort((a, b) => {
+      if (b.speed !== a.speed) return b.speed - a.speed;
+      // 離玩家越遠越好（更符合「遠離」語意）
+      const distA = Math.abs(a.lane - playerRef);
+      const distB = Math.abs(b.lane - playerRef);
+      return distB - distA;
+    });
+    // 找出與 top 同分（速度跟離玩家距離都相同）的所有道、隨機選一條
+    const top = scores[0];
+    const topDist = Math.abs(top.lane - playerRef);
+    const tied = scores.filter(s =>
+      s.speed === top.speed && Math.abs(s.lane - playerRef) === topDist
+    );
+    return tied[Math.floor(Math.random() * tied.length)].lane;
+  }
+  // 其他策略（保留原行為）：仍挑最快、同分時優先選跟當前道近的
   scores.sort((a, b) => {
     if (b.speed !== a.speed) return b.speed - a.speed;
     return Math.abs(a.lane - app.opponentLane) - Math.abs(b.lane - app.opponentLane);
@@ -2840,12 +3533,24 @@ function stage2BeginRewardPick() {
   if (!s2) return;
   // 牌池：1 指令 + 1 車隊 + 1 隨機（三張之間互不重複）
   //   - 排除 mistake：失誤牌只能從 QTE 懲罰取得、絕不在獎勵階段出現
+  //   - 排除 color === "basic"：基本牌（加速、風阻減免）不在獎勵出現、玩家初始牌庫已有
   //   - 排除 requiresTires 標記的牌：本關沒有輪胎機制、相關牌沒意義
   //     （若未來新增有輪胎的關卡、把 stage.hasTires 設為 true 就會自動放回）
+  //   - 排除「已裝備且 unique」的 equip 車隊牌（如大數據預測：拿到後不重複出現）
   const stageHasTires = !!(STAGES[app.stageIndex] && STAGES[app.stageIndex].hasTires);
+  // 已裝備的 equip 車隊牌效果集合（用 effect 判斷、避免實例物件比對）
+  const equippedEffects = new Set((s2.teamCardsActive || [])
+    .filter(c => c.trigger === "equip")
+    .map(c => c.effect));
   const isCardAllowed = (def) => {
     if (!def) return false;
     if (def.requiresTires && !stageHasTires) return false;
+    if (def.color === "basic") return false;
+    // equip-once 車隊牌：已裝備就不再出現
+    if (def.cardClass === "team" && def.trigger === "equip"
+        && def.effect && equippedEffects.has(def.effect)) {
+      return false;
+    }
     return true;
   };
   const cmdKeys = Object.keys(STAGE2_COMMAND_CARDS).filter(k =>
@@ -2885,6 +3590,13 @@ function stage2OnRewardPicked(slot) {
   }
   s2.rewardOptions = [];
   s2.rewardSlotHover = -1;
+  // 測試模式：直接跳 Boss 時、選滿 3 次才進回合
+  if (s2._testRewardsRemaining && s2._testRewardsRemaining > 1) {
+    s2._testRewardsRemaining--;
+    stage2BeginRewardPick();
+    return;
+  }
+  s2._testRewardsRemaining = 0;
   stage2StartNewRound();
 }
 // 玩家略過獎勵
@@ -2893,6 +3605,13 @@ function stage2OnRewardSkip() {
   if (!s2) return;
   s2.rewardOptions = [];
   s2.rewardSlotHover = -1;
+  // 測試模式：跳過也算一次
+  if (s2._testRewardsRemaining && s2._testRewardsRemaining > 1) {
+    s2._testRewardsRemaining--;
+    stage2BeginRewardPick();
+    return;
+  }
+  s2._testRewardsRemaining = 0;
   stage2StartNewRound();
 }
 // 套用車隊牌持續效果到本回合 app 狀態
@@ -2906,6 +3625,9 @@ function stage2StartNewRound() {
   if (!s2) return;
   // 清掉上回合可能殘留的超車動畫（避免新回合對手車卡在畫面外）
   app.overtakePassAnim = null;
+  // 清企業間諜視覺殘留
+  app.espionageBeams = [];
+  app.espionageActiveThisAction = false;
   if (s2.ahead.length === 0) {
     stage2OnGameWin();
     return;
@@ -2992,6 +3714,8 @@ function stage2OnOvertakeSuccess() {
   if (!s2) return;
   // 教學：超車 QTE 成功（不論真的超過或只是磨掉專注）→ 推進 tryOvertake 步
   tutorialNotify("overtakeAttempt");
+  // 績效考核：QTE 成功事件（combat L3）
+  updateBossTaskProgress("qteSuccess");
   const oppId = s2.currentOpponentId;
 
   if (oppId) {
@@ -3000,6 +3724,11 @@ function stage2OnOvertakeSuccess() {
     if (curFocus > 0) {
       // 專注度還有 → 扣 1，尚未超過
       s2.opponentFocusMap[oppId] = curFocus - 1;
+      // Phase 4 企業壓制：BOSS 第二次 QTE 破防、focus 跌到 0 → 啟動（最後一張臉、垂死掙扎）
+      if (oppId === "BOSS" && curFocus === 1 && s2.boss && !s2.boss.suppressionActive) {
+        s2.boss.suppressionActive = true;
+        showSuppressionBanner();
+      }
       app.message = `打破防守！（專注度剩 ${curFocus - 1}）`;
       app.mode = "stage2-overtake-result";
       // 不移動排名、不移除對手，下回合繼續面對同一對手
@@ -3009,6 +3738,20 @@ function stage2OnOvertakeSuccess() {
     s2.ahead = s2.ahead.filter(id => id !== oppId);
     s2.passed.push(oppId);
     app.rank = Math.max(1, app.rank - 1);
+    // Boss 真正被超過 → 清空 Boss 戰狀態（任務 / Buff / Debuff / 累計 / 紀錄）
+    if (oppId === "BOSS" && s2.boss) {
+      s2.boss.currentTask = null;
+      s2.boss.taskHistory = new Set();
+      s2.boss.buffStacks = 0;
+      s2.boss.debuffStacks = 0;
+      s2.boss.espionageCumulative = 0;
+      s2.boss.commentaryPicked = { start: new Set(), pass: new Set(), fail: new Set() };
+      s2.boss.suppressionActive = false;
+      app.suppressionBanner = null;
+      s2.boss.evalHistory = [];
+      s2.boss.evalCount = 0;
+      s2.boss.lastCommentary = "";
+    }
     // v0.9：觸發「對手被超」動畫——從 QTE 結束的「當下位置」滑出畫面
     //   起始位置 = QTE 期間最後一幀對手車真實渲染位置（cache 在 drawLanes 每 frame 更新）
     //   這樣不會跳到某個 base 位置才開始動畫
@@ -3194,7 +3937,12 @@ function speedTierStep(speed) {
   const base = Math.max(0, Math.floor((speed - 10) / 20));
   const b = getLaneBonusFor(app.playerLane);
   const offset = (b && typeof b.qteDifficultyOffset === "number") ? b.qteDifficultyOffset : 0;
-  return Math.max(0, base + offset);
+  // 空力區（穩定區）：每張牌 -1 階 QTE 難度
+  const stab = app.stabilityCharges || 0;
+  // 績效考核 Buff/Debuff：buff -1、debuff +1
+  const buff = app.stage2?.boss?.buffStacks || 0;
+  const debuff = app.stage2?.boss?.debuffStacks || 0;
+  return Math.max(0, base + offset - stab - buff + debuff);
 }
 
 function resetRhythmState() {
@@ -3459,6 +4207,14 @@ function setupInput() {
     if (e.button != null && e.button !== 0) return;
     const p = point(e);
     app.mouse = p;
+    // 績效考核 modal 開啟時、點外面（非 modal 內、非 modal 縮小按鈕）→ 關閉 modal、消化點擊
+    const prm = app.perfReviewModal;
+    if (prm?.visible && prm.state === "open" && prm.bounds) {
+      if (!inRect(p, prm.bounds)) {
+        closePerfReviewModal();
+        return;
+      }
+    }
     const hit = hitButton(p);
     if (hit) { handleButton(hit); return; }
     // corner-pick mode：檢查是否點到某道
@@ -3647,6 +4403,26 @@ function handleButton(id) {
   if (id === "start-game") {
     playNormalBgm();
     loadStage(0);
+    return;
+  }
+  // 測試：直接跳到 Boss 戰
+  if (id === "test-skip-to-boss") {
+    skipToBossForTest();
+    return;
+  }
+  // 測試：跳過新手教學
+  if (id === "test-skip-tutorial") {
+    skipTutorialForTest();
+    return;
+  }
+  // 績效考核 MEMO 展開 → 開啟 modal（用戶手動、不自動縮小）
+  if (id === "perfreview-memo-expand") {
+    openPerfReviewModal(false);
+    return;
+  }
+  // 績效考核 modal 縮小 → 關閉 modal
+  if (id === "perfreview-modal-collapse") {
+    closePerfReviewModal();
     return;
   }
   // 主選單：規則
@@ -4124,6 +4900,10 @@ function drawInner(time) {
 
   drawTutorialOverlay(time);
   drawExpressionDock(time);
+  // Boss 績效考核 modal：放在最末確保不被其他 UI 覆蓋（包含 tutorial overlay）
+  drawPerfReviewModal(time);
+  // 企業壓制啟動橫幅（Phase 4）：放在最最末、覆蓋 modal
+  drawSuppressionBanner(time);
 }
 
 // ─── 賽道背景（沿用 Sam）──────────────────────────────────────────────────
@@ -4984,6 +5764,12 @@ function drawRace(time) {
   app._lastPlayerRenderX = whiteX;
   app._lastPlayerRenderY = whiteY;
   drawCar(whiteX, whiteY, whiteW, 82, "#dceaff");
+
+  // 企業間諜視覺特效（Boss 監聽中 + 資料光束）
+  // 兩台車繪製之後、飛字之前
+  if (isStage2()) {
+    drawEspionageEffects(time, redX, opponentY, whiteX, whiteY);
+  }
 
   // 速度結算飛字：以兩台車車頂為錨點，每個來源一個 pop 往上飄 + 淡出
   drawSpeedPops(time, {
@@ -6499,19 +7285,18 @@ function drawLanes(time) {
     if (!hovering) continue;
 
     // 計算 preview speed（跟原邏輯一致、供彎道警告判斷）
+    // 預覽速度不含尾流（跟 BIG speed sign 一致、避免顯示跟警告對不上）
     const b = getLaneBonusFor(i);
     const add = c8Hidden2 ? 0 : (b?.add ?? 0);
     const mult = c8Hidden2 ? 1 : (b?.mult ?? 1);
     let previewSpeed = app.playerSpeed;
     if (i === app.playerLane) {
       const cardSpd = app.drag.card.speedValue ?? 0;
-      const slipBonus = canGetSlipstreamAtLane(i) ? 30 : 0;
-      previewSpeed = Math.floor((app.playerSpeed + cardSpd + slipBonus + add) * mult);
+      previewSpeed = Math.floor((app.playerSpeed + cardSpd + add) * mult);
     } else if (droppable && app.playerSpeed > 0) {
-      const slipBonus = canGetSlipstreamAtLane(i) ? 30 : 0;
       const lanesCrossed = Math.abs(i - app.playerLane);
       const laneCost = laneChangeCost(lanesCrossed);
-      previewSpeed = Math.floor((app.playerSpeed - laneCost + slipBonus + add) * mult);
+      previewSpeed = Math.floor((app.playerSpeed - laneCost + add) * mult);
     }
     const overLimit = speedLimit !== null && previewSpeed > speedLimit;
 
@@ -6590,13 +7375,13 @@ function drawOpponentInfoPanel(redX, opponentY, redW, redH, time) {
   const ctx = app.ctx;
   const focusMax = getOpponentFocusMax(opp.id);
   const focusCur = s2.opponentFocusMap[opp.id] ?? 0;
-  const hasBigData = s2.teamCardsActive.some(c => c.effect === "showOpponent");
+  // 大數據預測不改名條外觀（plate 寬度、label 都跟沒裝備時一樣）
+  // 它只影響 ⚡ icon tooltip 內容（描述具體技能）
+  // 名條本身永遠用 compact mode
+  const hint = computeOpponentNextActionHint("compact");
 
-  // 查預告資訊（取自 drawOpponentNextActionHint 的邏輯）
-  const hint = computeOpponentNextActionHint(hasBigData ? "full" : "compact");
-
-  // 面板尺寸（大數據預測啟動時加寬給 label 用）
-  const plateW = hasBigData ? 240 : 180;
+  // 面板尺寸
+  const plateW = 180;
   const nameRowH = 28;            // 名字 + 專注度的高度
   const hintRowH = hint ? 36 : 0; // 預告區高度（有招才顯示）
   const plateH = nameRowH + hintRowH;
@@ -6605,28 +7390,62 @@ function drawOpponentInfoPanel(redX, opponentY, redW, redH, time) {
 
   // 整體底板（兩區共用）
   const isStrong = hint?.weight === "strong";
+  // 偵測下回合是否有特殊行動（⚡ 或 🔍）→ 名條外框紅紫脈衝光暈
+  const hasEspWarning = hint?.icons?.some(ic => ic === "⚡" || ic === "🔍");
+  // Phase 4 企業壓制：BOSS 在壓制狀態時、名條外框紅色強脈衝
+  const isSuppressed = opp.id === "BOSS" && s2?.boss?.suppressionActive;
   const borderColor = focusCur === 0
     ? "rgba(100,255,160,0.75)"
-    : isStrong
-      ? "rgba(255,120,120,0.85)"
-      : "rgba(220,80,60,0.75)";
+    : isSuppressed
+      ? "rgba(255,80,100,1)"        // 紅色：企業壓制最高優先
+      : hasEspWarning
+        ? "rgba(255,120,200,0.95)"   // 紅紫：⚡ 預警次之
+        : isStrong
+          ? "rgba(255,120,120,0.85)"
+          : "rgba(220,80,60,0.75)";
 
   ctx.save();
-  // 強招時整面板加紅光暈
-  if (isStrong) {
+  // 光暈優先級：企業壓制 > ⚡ 特殊行動 > 強招 > 一般
+  if (isSuppressed) {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 0.012);
+    ctx.shadowColor = `rgba(255, 60, 80, ${0.9 * pulse})`;
+    ctx.shadowBlur = 28;
+  } else if (hasEspWarning) {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 0.008);
+    ctx.shadowColor = `rgba(255, 80, 200, ${0.75 * pulse})`;
+    ctx.shadowBlur = 22;
+  } else if (isStrong) {
     const pulse = 0.5 + 0.5 * Math.sin(time * 0.008);
     ctx.shadowColor = `rgba(255, 80, 80, ${0.6 * pulse})`;
     ctx.shadowBlur = 18;
   }
   ctx.fillStyle = "rgba(6,12,24,0.92)";
   ctx.strokeStyle = borderColor;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = isSuppressed ? 2.5 : (hasEspWarning ? 2 : 1.5);
   ctx.beginPath();
   ctx.roundRect(plateX, plateY, plateW, plateH, 8);
   ctx.fill();
   ctx.stroke();
   ctx.shadowBlur = 0;
   ctx.restore();
+
+  // 企業壓制狀態：名條上方 +5px 處印「壓制中」紅色小標籤
+  if (isSuppressed) {
+    const tagW = 62, tagH = 16;
+    const tagX = plateX + plateW - tagW - 6;
+    const tagY = plateY - tagH - 2;
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 50, 80, 0.92)";
+    ctx.shadowColor = "rgba(255, 60, 80, 0.8)";
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.roundRect(tagX, tagY, tagW, tagH, 3);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    text("壓制中", tagX + tagW / 2, tagY + tagH - 4, 10,
+      "rgba(255, 255, 255, 0.95)", "900", "center");
+  }
 
   // 預告區（上半）
   if (hint) {
@@ -6779,26 +7598,150 @@ function drawOpponentInfoPanel(redX, opponentY, redW, redH, time) {
   }
 }
 
+// 找出下回合會觸發的「特殊」行為、組成 title + desc（大數據預測 tooltip 用）
+// 包括：boost / boostAfter / bypassAura / absBonus 跟 passive 的 espionage
+function describeSpecialActionsThisTurn() {
+  if (!app.opponentBehaviors || !app.opponentBehaviorLastTriggered) return null;
+  const actN = app.actionsThisRound ?? 0;
+  // 收集下動會觸發、且帶有特殊效果的 behavior
+  const items = [];
+  for (const b of app.opponentBehaviors) {
+    const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
+    const rem = Math.max(1, getEffectiveCooldown(b) - (actN - lastAt));
+    if (rem !== 1) continue;
+    if (b.action === "espionage") {
+      const pct = Math.round(getEffectiveEspionageRatio() * 100);
+      items.push({
+        name: "企業間諜",
+        desc: `對手抽走玩家下動每個速度來源的 ${pct}%（依績效調整、正負皆轉嫁）`,
+      });
+    } else if (b.action === "performanceReview") {
+      items.push({
+        name: "績效考核",
+        desc: `評分當前任務、派發新任務`,
+      });
+    } else if (b.action === "boost") {
+      items.push({ name: "加速", desc: `對手加速 +${b.amount || 1}` });
+    } else if (b.boostAfter) {
+      items.push({ name: "加速", desc: `切道後加速 +${b.boostAfter}` });
+    } else if (b.bypassAura) {
+      items.push({ name: "豁免光環", desc: "本動豁免自身光環、吃道路加成" });
+    } else if (b.absBonus) {
+      items.push({ name: "取 abs", desc: "本道加成取絕對值（永遠拿正）" });
+    }
+  }
+  if (items.length === 0) return null;
+  if (items.length === 1) {
+    return { title: items[0].name, desc: items[0].desc };
+  }
+  return {
+    title: items.map(i => i.name).join(" + "),
+    desc: items.map(i => i.desc).join("、"),
+  };
+}
+
+// 按 icon 對應「下動就會發生」的特殊行為描述（單一 icon、不合併）
+//   icon: "⚡" → espionage / "🔍" → performanceReview / 其他 → null
+//   expanded: true → 帶具體數字（%、機制細節）／ false → 僅顯示招式名 + 簡短說明
+function describeSpecialActionByIcon(icon, expanded = false) {
+  if (!app.opponentBehaviors || !app.opponentBehaviorLastTriggered) return null;
+  const actN = app.actionsThisRound ?? 0;
+  for (const b of app.opponentBehaviors) {
+    const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
+    const rem = Math.max(1, getEffectiveCooldown(b) - (actN - lastAt));
+    if (rem !== 1) continue;
+    if (icon === "⚡" && b.action === "espionage") {
+      if (expanded) {
+        const pct = Math.round(getEffectiveEspionageRatio() * 100);
+        return {
+          title: "企業間諜",
+          desc: `對手抽走玩家下動每個速度來源的 ${pct}%（正負皆轉嫁）`,
+        };
+      }
+      return {
+        title: "企業間諜",
+        desc: "對手會抽走玩家下動每個速度來源",
+      };
+    }
+    if (icon === "🔍" && b.action === "performanceReview") {
+      return {
+        title: "績效考核",
+        desc: "本動結束評分當前任務、派發新任務",
+      };
+    }
+  }
+  return null;
+}
+
+// 預測對手下動的目標道（給 ⛔/💨 tooltip 顯示確切道號用）
+// 找出下動會觸發的 move behavior、用 dispatcher 同一套邏輯算 lane
+// 隨機 tie-break 部分快取於 app.stage2._opponentLanePrediction（同個 actN + behaviorId 不重算）
+function predictOpponentMoveLane() {
+  if (!app.opponentBehaviors || !app.opponentBehaviorLastTriggered) return null;
+  const actN = app.actionsThisRound ?? 0;
+  for (const b of app.opponentBehaviors) {
+    if (b.action !== "moveSmart" && b.action !== "moveTo") continue;
+    const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
+    if (actN - lastAt < getEffectiveCooldown(b)) continue;
+    // 快取命中（同個 actN + 同個 behavior）→ 用上次算的、避免隨機 tie-break 每 frame 跳
+    const cache = app.stage2?._opponentLanePrediction;
+    if (cache && cache.actN === actN && cache.behaviorId === b.id) {
+      return cache.lane;
+    }
+    // 計算 lane
+    let lane;
+    if (b.action === "moveTo") {
+      lane = (b.target === "playerLane") ? app.playerLane : b.target;
+    } else {
+      lane = pickSmartLaneForOpponent(b.strategy, b.bypassAura);
+    }
+    if (app.stage2) {
+      app.stage2._opponentLanePrediction = { actN, behaviorId: b.id, lane };
+    }
+    return lane;
+  }
+  return null;
+}
+
 // 對手意圖 icon tooltip
 function drawOpponentIconTooltip(rect, plateX, plateY) {
   const ctx = app.ctx;
   let title = "";
   let desc = "";
+  const hasBigData = app.stage2?.teamCardsActive?.some(c => c.effect === "showOpponent");
   if (rect.icon === "⛔") {
     title = "阻擋";
-    desc = "對手會移動到你當前的道";
+    if (hasBigData) {
+      desc = `對手會切到道 ${app.playerLane + 1}（你的道）`;
+    } else {
+      desc = "對手會移動到你當前的道";
+    }
   } else if (rect.icon === "💨") {
     title = "遠離";
-    desc = "對手會避開你當前的道";
+    if (hasBigData) {
+      const lane = predictOpponentMoveLane();
+      desc = (lane != null)
+        ? `對手會切到道 ${lane + 1}、避開你`
+        : "對手會避開你當前的道";
+    } else {
+      desc = "對手會避開你當前的道";
+    }
   } else if (rect.icon === "❓") {
     title = "未知";
     desc = "對手選自己最快路線、或隨機切道，無法預測";
   } else if (rect.icon === "❗") {
     title = "賽道干擾";
     desc = "對手原意圖可能被賽道機制打亂、結果不確定";
-  } else if (rect.icon === "⚡") {
-    title = "特殊行動";
-    desc = "對手會加速、豁免光環、或取 abs 加成";
+  } else if (rect.icon === "⚡" || rect.icon === "🔍") {
+    // 即使沒大數據、仍顯示招式名稱（desc 是否帶具體數字、依 bigData）
+    const detail = describeSpecialActionByIcon(rect.icon, hasBigData);
+    if (detail) {
+      title = detail.title;
+      desc = detail.desc;
+    } else {
+      title = "特殊行動";
+      desc = "對手準備特殊行動……";
+    }
   } else {
     return;
   }
@@ -6919,7 +7862,7 @@ function computeOpponentNextActionHint(mode = "compact") {
       const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
       // 至少 1：「0 動後」會讓玩家困惑（明明剛剛才出招）
       // 實際語意是「下一動就會觸發」→ 顯示 1
-      const rem = Math.max(1, b.cooldown - (actN - lastAt));
+      const rem = Math.max(1, getEffectiveCooldown(b) - (actN - lastAt));
       if (rem < minRem) {
         minRem = rem;
         nextAct = b;
@@ -6998,6 +7941,23 @@ function computeOpponentNextActionHint(mode = "compact") {
              :                          "❓");
   }
   if (hasSpecial) icons.push("⚡");
+  // 加上同一回合會同時觸發的 passive behavior icon（例：企業間諜 ⚡）
+  // 主要 nextAct 已經被選為「最早觸發」的；找其他同 remaining 的 passive
+  if (app.opponentBehaviors && app.opponentBehaviorLastTriggered) {
+    const actN = app.actionsThisRound ?? 0;
+    for (const b of app.opponentBehaviors) {
+      if (b === nextAct) continue;  // 跳過主要的
+      const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
+      const rem = Math.max(1, getEffectiveCooldown(b) - (actN - lastAt));
+      if (rem !== remaining) continue;  // 不同回合觸發、不疊圖示
+      if (b.action === "espionage" && !icons.includes("⚡")) {
+        icons.push("⚡");
+      }
+      if (b.action === "performanceReview" && !icons.includes("🔍")) {
+        icons.push("🔍");
+      }
+    }
+  }
   // 細節描述（full mode 才用）
   let label = "";
   if (mode === "full") {
@@ -7025,6 +7985,20 @@ function computeOpponentNextActionHint(mode = "compact") {
       label = "隨機切道";
     } else if (nextAct.action === "boost") {
       label = `加速 +${nextAct.amount || 1}`;
+    }
+    // 大數據預測 full mode：同回合若 NCC-7 間諜也觸發、label 補上抽成資訊
+    if (app.opponentBehaviors && app.opponentBehaviorLastTriggered) {
+      const actN = app.actionsThisRound ?? 0;
+      for (const b of app.opponentBehaviors) {
+        if (b === nextAct) continue;
+        if (b.action !== "espionage") continue;
+        const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
+        const rem = Math.max(1, getEffectiveCooldown(b) - (actN - lastAt));
+        if (rem === remaining) {
+          const pct = Math.round((b.skimRatio ?? 0.5) * 100);
+          label = label ? `${label}+間諜抽${pct}%` : `間諜抽${pct}%`;
+        }
+      }
     }
   }
   return {
@@ -7058,7 +8032,7 @@ function drawOpponentNextActionHint(cx, carTopY, time, mode = "strongOnly") {
       // strongOnly 模式：只看強招
       if (mode === "strongOnly" && b.weight !== "strong") continue;
       const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
-      const rem = Math.max(0, b.cooldown - (actN - lastAt));
+      const rem = Math.max(0, getEffectiveCooldown(b) - (actN - lastAt));
       if (rem < minRem) {
         minRem = rem;
         nextAct = b;
@@ -7492,7 +8466,7 @@ function drawModalPanel(box, accent) {
 }
 
 function drawStartModal() {
-  const box = getCenteredModalBox(460, 320);
+  const box = getCenteredModalBox(460, 440);
   drawModalPanel(box);
   const cx = box.x+box.w/2;
   text("最後車手", cx, box.y+62*UI_SCALE, 36, "#dfeeff", "900", "center");
@@ -7504,6 +8478,10 @@ function drawStartModal() {
   text("你是車隊領隊，透過打牌以指揮車手", cx, box.y+140*UI_SCALE, 16, "#e8f0ff", "700", "center");
   text("駕駛賽車超過前車。", cx, box.y+164*UI_SCALE, 16, "#e8f0ff", "700", "center");
   button("start-game", "開始遊戲", cx-110, box.y+220*UI_SCALE, 220, 48, false, "start");
+  // 測試按鈕區
+  text("[ 測試模式 ]", cx, box.y+290*UI_SCALE, 11, "rgba(255,140,180,0.6)", "700", "center");
+  button("test-skip-tutorial", "跳過新手教學", cx-90, box.y+302*UI_SCALE, 180, 36, false, "gray");
+  button("test-skip-to-boss",  "直接打 NCC-7",   cx-90, box.y+346*UI_SCALE, 180, 36, false, "gray");
 }
 
 function drawPromptModal() {
@@ -7615,6 +8593,445 @@ function drawSpeedLimitAR(time) {
 
   // ─── 4. 拖牌到不同車道 → 「棄牌、卡牌效果不觸發」提示
   drawLaneDiscardHint(time);
+
+  // ─── 5. Boss 績效考核 MEMO 紙條（NCC-7 戰鬥中才顯示）──────────────
+  drawBossTaskMemo(time);
+  // 中央 modal 改在 drawInner 末端繪製、確保覆蓋其他 UI（見 drawInner）
+}
+
+// Boss 績效考核 MEMO 紙條 + Buff/Debuff 堆疊指示器
+function drawBossTaskMemo(time) {
+  if (app.stage2?.currentOpponentId !== "BOSS") return;
+  const boss = app.stage2?.boss;
+  if (!boss) return;
+  // modal 開啟時（含動畫中）不畫 MEMO、避免兩個都同時顯示
+  if (app.perfReviewModal?.visible) return;
+  const ctx = app.ctx;
+  const ct = boss.currentTask;
+  // 計算需要幾列
+  const lines = [];
+  if (ct) {
+    const subs = ct.subTasks;
+    if (subs.length === 1) {
+      const s = subs[0];
+      lines.push({
+        text: `${s.def.displayText}`,
+        progress: `${Math.min(s.progress, s.def.targetN)}/${s.def.targetN}`,
+        done: s.progress >= s.def.targetN,
+      });
+    } else {
+      lines.push({ text: ct.def.displayText, header: true });
+      for (const s of subs) {
+        lines.push({
+          text: `　${s.def.displayText}`,
+          progress: `${Math.min(s.progress, s.def.targetN)}/${s.def.targetN}`,
+          done: s.progress >= s.def.targetN,
+        });
+      }
+    }
+  } else {
+    lines.push({ text: "（尚未派發任務）", muted: true });
+  }
+  // 尺寸
+  const cx = app.w / 2;
+  const boxW = 400;
+  const lineH = 22;
+  const headerH = 26;
+  const stackRowH = 22;
+  const padTop = 8;
+  const padBot = 8;
+  const boxH = headerH + lines.length * lineH + stackRowH + padTop + padBot;
+  const boxY = 60;
+  // 註冊點擊區（按了 → 開啟 modal、用戶手動展開、無 auto-close）
+  app.zones.buttons.push({
+    id: "perfreview-memo-expand",
+    rect: { x: cx - boxW / 2, y: boxY, w: boxW, h: boxH },
+    disabled: false,
+  });
+  // hover 檢測
+  const memoRect = { x: cx - boxW / 2, y: boxY, w: boxW, h: boxH };
+  const hovered = app.mouse && inRect(app.mouse, memoRect);
+  // 底板：黃色 sticky-note 風（hover 時邊框加亮 + 光暈強化）
+  ctx.save();
+  ctx.shadowColor = hovered ? "rgba(255, 217, 79, 0.55)" : "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = hovered ? 16 : 10;
+  ctx.fillStyle = "rgba(28, 22, 12, 0.94)";
+  ctx.strokeStyle = hovered ? "rgba(255, 240, 130, 0.95)" : "rgba(255, 217, 79, 0.65)";
+  ctx.lineWidth = hovered ? 2 : 1.5;
+  ctx.beginPath();
+  ctx.roundRect(cx - boxW / 2, boxY, boxW, boxH, 8);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  // 標題（左側）+ 倒數（右側）
+  text("📋 績效考核", cx - boxW / 2 + 20, boxY + 18, 13,
+    "rgba(255, 217, 79, 0.9)", "900", "left");
+  const countdown = getPerfReviewCountdown();
+  if (countdown !== null && countdown > 0) {
+    text(`下一季考核：${countdown} 動後`, cx + boxW / 2 - 20, boxY + 18, 11,
+      "rgba(220, 200, 140, 0.7)", "700", "right");
+  } else if (countdown === 0) {
+    text(`下次考核：本動觸發`, cx + boxW / 2 - 20, boxY + 18, 11,
+      "rgba(255, 180, 100, 0.95)", "800", "right");
+  }
+  // 分隔線
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 217, 79, 0.25)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - boxW / 2 + 20, boxY + 26);
+  ctx.lineTo(cx + boxW / 2 - 20, boxY + 26);
+  ctx.stroke();
+  ctx.restore();
+  // 任務列
+  let lineY = boxY + headerH + padTop + 8;
+  for (const ln of lines) {
+    const color = ln.muted ? "rgba(180, 170, 140, 0.6)"
+                : ln.done  ? "rgba(140, 255, 160, 0.95)"
+                : ln.header? "rgba(255, 220, 130, 0.95)"
+                :            "rgba(245, 235, 210, 0.95)";
+    const weight = ln.header ? "900" : "700";
+    text(ln.text, cx - boxW / 2 + 20, lineY, 12, color, weight, "left");
+    if (ln.progress) {
+      text(ln.progress, cx + boxW / 2 - 20, lineY, 12,
+        ln.done ? "rgba(140, 255, 160, 0.95)" : "rgba(245, 235, 210, 0.85)",
+        "900", "right");
+    }
+    lineY += lineH;
+  }
+  // Buff / Debuff 堆疊指示器（底部一列、3 顆點）
+  const stackY = boxY + boxH - padBot - 12;
+  const isBuff = boss.buffStacks > 0;
+  const isDebuff = boss.debuffStacks > 0;
+  const stacks = isBuff ? boss.buffStacks : boss.debuffStacks;
+  const dotSpacing = 22;
+  const totalW = dotSpacing * 2;
+  const startX = cx - totalW / 2;
+  const stackLabel = isBuff ? "達標 +Buff" : isDebuff ? "未達標 +Debuff" : "—";
+  const stackColor = isBuff ? "rgba(140, 255, 160, 0.95)"
+                   : isDebuff ? "rgba(255, 130, 130, 0.95)"
+                   : "rgba(120, 120, 120, 0.4)";
+  for (let i = 0; i < 3; i++) {
+    const active = i < stacks;
+    ctx.save();
+    ctx.fillStyle = active ? stackColor : "rgba(100, 100, 100, 0.25)";
+    if (active) {
+      ctx.shadowColor = stackColor;
+      ctx.shadowBlur = 6;
+    }
+    ctx.beginPath();
+    ctx.arc(startX + i * dotSpacing, stackY, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  if (isBuff || isDebuff) {
+    text(stackLabel, startX + totalW + 18, stackY + 4, 11, stackColor, "800", "left");
+  }
+  // hover 提示「點擊展開」
+  if (hovered) {
+    text("點擊展開詳細資訊 ▾", cx, boxY + boxH + 14, 10,
+      "rgba(255, 217, 79, 0.85)", "700", "center");
+  }
+}
+
+// ─── 中央 modal：考核啟動 / 達標 / 未達標 完整資訊 ─────────────────────
+// 內容：事件標題 / 副標、長官評語、當前任務、考核紀錄、倒數 + 車手心理、縮小按鈕
+// 動畫：開啟時從 MEMO 位置滑下（ease-out cubic）+ 淡入；縮小時往上滑回（ease-in）+ 淡出
+function drawPerfReviewModal(time) {
+  const modal = app.perfReviewModal;
+  if (!modal || !modal.visible) return;
+  if (app.stage2?.currentOpponentId !== "BOSS") return;
+  const boss = app.stage2?.boss;
+  if (!boss) return;
+
+  // ─── 動畫狀態 ─────────────────────────────────────────
+  const ANIM_DUR = 280;
+  const stateElapsed = performance.now() - modal.stateStart;
+  let animProgress;
+  if (modal.state === "opening") {
+    animProgress = Math.min(1, stateElapsed / ANIM_DUR);
+    if (animProgress >= 1) modal.state = "open";
+  } else if (modal.state === "closing") {
+    animProgress = Math.max(0, 1 - stateElapsed / ANIM_DUR);
+    if (animProgress <= 0) {
+      modal.visible = false;
+      modal.state = "closed";
+      return;
+    }
+  } else {
+    animProgress = 1;
+    // 已不再 auto-close、open 狀態純等用戶互動
+  }
+  const eased = modal.state === "closing"
+    ? animProgress * animProgress * animProgress       // ease-in（往上滑回）
+    : 1 - Math.pow(1 - animProgress, 3);                // ease-out（往下滑入）
+
+  // 取最近一筆考核結果（決定標題樣式）
+  // evalHistory 用 push 寫入、最新在陣列尾端
+  const lastEval = boss.evalHistory[boss.evalHistory.length - 1];
+  const isFirst = !lastEval;
+  let title, subtitle, titleColor, accentColor, bgGlow;
+  if (isFirst) {
+    title = "📋 績效考核啟動";
+    subtitle = "霓虹道路株式會社 — KPI 評估體系";
+    titleColor = "rgba(255, 217, 79, 1)";
+    accentColor = "rgba(255, 217, 79, 0.85)";
+    bgGlow = "rgba(220, 180, 60, 0.55)";
+  } else if (lastEval.passed) {
+    title = "✅ 績效達標";
+    subtitle = "車手達成 KPI、企業議會表示認可";
+    titleColor = "rgba(140, 255, 160, 1)";
+    accentColor = "rgba(140, 255, 160, 0.85)";
+    bgGlow = "rgba(80, 220, 120, 0.55)";
+  } else {
+    title = "✗ 績效未達標";
+    subtitle = "車手未能達成 KPI、企業議會表示失望";
+    titleColor = "rgba(255, 130, 130, 1)";
+    accentColor = "rgba(255, 130, 130, 0.85)";
+    bgGlow = "rgba(220, 80, 80, 0.55)";
+  }
+
+  // 尺寸與位置
+  const modalW = 560;
+  const modalH = 500;
+  const memoY = 60;
+  const finalY = (app.h - modalH) / 2;
+  const my = memoY + (finalY - memoY) * eased;
+  const mx = (app.w - modalW) / 2;
+  // 儲存當前 modal 矩形給 click-outside 判定用
+  modal.bounds = { x: mx, y: my, w: modalW, h: modalH };
+  const ctx = app.ctx;
+
+  // 半透明背景遮罩
+  ctx.save();
+  ctx.fillStyle = `rgba(0, 0, 0, ${0.35 * eased})`;
+  ctx.fillRect(0, 0, app.w, app.h);
+  ctx.restore();
+
+  // Modal 底板
+  ctx.save();
+  ctx.globalAlpha = eased;
+  ctx.shadowColor = bgGlow;
+  ctx.shadowBlur = 32;
+  ctx.fillStyle = "rgba(12, 16, 26, 0.98)";
+  ctx.strokeStyle = titleColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(mx, my, modalW, modalH, 14);
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // 動畫進行中、避免畫面閃爍：早期 opening 跟所有 closing 都只畫底板
+  if (modal.state === "opening" && animProgress < 0.55) return;
+  if (modal.state === "closing") return;
+
+  // 縮小按鈕（右上角）— 只在 open 狀態註冊點擊
+  const btnW = 70, btnH = 28;
+  const btnX = mx + modalW - btnW - 14;
+  const btnY = my + 14;
+  if (modal.state === "open") {
+    app.zones.buttons.push({
+      id: "perfreview-modal-collapse",
+      rect: { x: btnX, y: btnY, w: btnW, h: btnH },
+      disabled: false,
+    });
+  }
+  const collapseHovered = modal.state === "open"
+    && app.mouse && inRect(app.mouse, { x: btnX, y: btnY, w: btnW, h: btnH });
+  ctx.save();
+  ctx.fillStyle = collapseHovered ? "rgba(70, 76, 88, 0.95)" : "rgba(50, 56, 70, 0.8)";
+  ctx.strokeStyle = "rgba(190, 198, 210, 0.6)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(btnX, btnY, btnW, btnH, 6);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  text("▴ 縮小", btnX + btnW / 2, btnY + btnH / 2 + 4, 12,
+    "rgba(220, 230, 245, 0.95)", "800", "center");
+
+  // ─── 內容區 ─────────────────────────────────────────
+  let cy = my + 32;
+  text(title, mx + modalW / 2, cy + 24, 28, titleColor, "900", "center");
+  cy += 38;
+  text(subtitle, mx + modalW / 2, cy + 14, 13, accentColor, "700", "center");
+  cy += 28;
+  drawModalDivider(mx, modalW, cy);
+  cy += 14;
+  // ─ NCC-7 評估部備註（移到上方）─
+  text("NCC-7 評估部備註", mx + 28, cy + 14, 11,
+    "rgba(180, 195, 220, 0.7)", "800", "left");
+  cy += 22;
+  text(`「${boss.lastCommentary || "（無）"}」`, mx + 28, cy + 14, 14,
+    "rgba(230, 215, 175, 0.95)", "700", "left");
+  cy += 32;
+  drawModalDivider(mx, modalW, cy);
+  cy += 14;
+  // ─ 考核項目 ─
+  const categoryName = (() => {
+    if (!boss.currentTask) return null;
+    const t = boss.currentTask.def.type;
+    return ({
+      move: "移動", resource: "資源", tactic: "戰術",
+      output: "產出", combat: "戰鬥", combo: "多重任務",
+    })[t] || t;
+  })();
+  const itemHeader = categoryName
+    ? `📌 考核項目:${categoryName}`
+    : `📌 考核項目`;
+  text(itemHeader, mx + 28, cy + 14, 11,
+    "rgba(180, 195, 220, 0.7)", "800", "left");
+  cy += 22;
+  if (boss.currentTask) {
+    const ct = boss.currentTask;
+    if (ct.subTasks.length === 1) {
+      const s = ct.subTasks[0];
+      const prog = `${Math.min(s.progress, s.def.targetN)}/${s.def.targetN}`;
+      const done = s.progress >= s.def.targetN;
+      text(s.def.displayText, mx + 28, cy + 14, 14,
+        done ? "rgba(140, 255, 160, 0.95)" : "rgba(245, 235, 210, 0.95)", "700", "left");
+      text(prog, mx + modalW - 28, cy + 14, 14,
+        done ? "rgba(140, 255, 160, 0.95)" : "rgba(245, 235, 210, 0.85)", "900", "right");
+      cy += 22;
+    } else {
+      text(ct.def.displayText, mx + 28, cy + 14, 13,
+        "rgba(255, 220, 130, 0.95)", "900", "left");
+      cy += 22;
+      for (const s of ct.subTasks) {
+        const prog = `${Math.min(s.progress, s.def.targetN)}/${s.def.targetN}`;
+        const done = s.progress >= s.def.targetN;
+        text(`　${s.def.displayText}`, mx + 28, cy + 14, 13,
+          done ? "rgba(140, 255, 160, 0.95)" : "rgba(245, 235, 210, 0.95)", "700", "left");
+        text(prog, mx + modalW - 28, cy + 14, 13,
+          done ? "rgba(140, 255, 160, 0.95)" : "rgba(245, 235, 210, 0.85)", "900", "right");
+        cy += 22;
+      }
+    }
+  } else {
+    text("（無任務）", mx + 28, cy + 14, 13, "rgba(180, 170, 140, 0.6)", "700", "left");
+    cy += 22;
+  }
+  cy += 6;
+  drawModalDivider(mx, modalW, cy);
+  cy += 14;
+  // ─ 下季考核（字大一點）+ 車手心理 ─
+  const cd = getPerfReviewCountdown();
+  let cdText = "";
+  if (cd !== null && cd > 0) cdText = `下季考核:${cd} 動後`;
+  else if (cd === 0) cdText = "下次考核:本動觸發";
+  if (cdText) {
+    text(cdText, mx + 28, cy + 18, 16,
+      "rgba(255, 220, 130, 0.95)", "900", "left");
+    cy += 26;
+  }
+  const mood = getDriverMoodDescription();
+  if (mood) {
+    text(mood.line, mx + 28, cy + 14, 13, mood.color, "700", "left");
+    cy += 22;
+  }
+  cy += 6;
+  drawModalDivider(mx, modalW, cy);
+  cy += 14;
+  // ─ 考核紀錄（往下長、舊→新）─
+  text("📚 考核紀錄", mx + 28, cy + 14, 11,
+    "rgba(180, 195, 220, 0.7)", "800", "left");
+  cy += 22;
+  if (boss.evalHistory.length === 0) {
+    text("（暫無紀錄）", mx + 28, cy + 14, 12, "rgba(180, 170, 140, 0.5)", "700", "left");
+    cy += 20;
+  } else {
+    for (const h of boss.evalHistory) {
+      const sym = h.passed ? "✓" : "✗";
+      const symColor = h.passed ? "rgba(140, 255, 160, 0.95)" : "rgba(255, 130, 130, 0.95)";
+      text(sym, mx + 28, cy + 14, 13, symColor, "900", "left");
+      text(h.taskDisplay, mx + 50, cy + 14, 12,
+        "rgba(220, 225, 240, 0.85)", "700", "left");
+      if (h.evalNumber != null) {
+        text(`第 ${h.evalNumber} 次考核`, mx + modalW - 28, cy + 14, 11,
+          "rgba(180, 195, 220, 0.65)", "700", "right");
+      }
+      cy += 20;
+    }
+  }
+}
+
+// modal 區間分隔線
+function drawModalDivider(mx, modalW, y) {
+  const ctx = app.ctx;
+  ctx.save();
+  ctx.strokeStyle = "rgba(180, 195, 220, 0.18)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(mx + 28, y);
+  ctx.lineTo(mx + modalW - 28, y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ─── 企業壓制啟動橫幅（Phase 4）──────────────────────────────────────
+// 在 BOSS 第一次 QTE 被破（focus 2→1）時觸發、紅色震撼風
+// 持續 3.5 秒、淡入 0.1 / 持續 0.7 / 淡出 0.2
+function showSuppressionBanner() {
+  app.suppressionBanner = {
+    startTime: performance.now(),
+    duration: 3500,
+  };
+}
+
+function drawSuppressionBanner(time) {
+  if (!app.suppressionBanner) return;
+  const b = app.suppressionBanner;
+  const elapsed = time - b.startTime;
+  if (elapsed > b.duration) {
+    app.suppressionBanner = null;
+    return;
+  }
+  const t = elapsed / b.duration;
+  let alpha = 1;
+  if (t < 0.1) alpha = t / 0.1;
+  else if (t > 0.8) alpha = (1 - t) / 0.2;
+  alpha = Math.min(1, Math.max(0, alpha));
+
+  const ctx = app.ctx;
+  const cx = app.w / 2;
+  const cy = app.h / 2;
+
+  // 全屏紅色閃光底
+  const flashAlpha = alpha * 0.28 * (1 + Math.sin(time / 110) * 0.35);
+  ctx.save();
+  ctx.fillStyle = `rgba(255, 50, 80, ${flashAlpha})`;
+  ctx.fillRect(0, 0, app.w, app.h);
+  ctx.restore();
+
+  // 大號 banner box
+  const boxW = 760;
+  const boxH = 150;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.shadowColor = "rgba(255, 60, 80, 0.95)";
+  ctx.shadowBlur = 48;
+  ctx.fillStyle = "rgba(18, 8, 12, 0.97)";
+  ctx.strokeStyle = "rgba(255, 90, 110, 1)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(cx - boxW / 2, cy - boxH / 2, boxW, boxH, 14);
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // 標題
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  text("⚠ 企業壓制啟動 ⚠", cx, cy - 20, 38,
+    "rgba(255, 110, 130, 1)", "900", "center");
+  text("NCC-7 啟動全面監聽模式", cx, cy + 18, 17,
+    "rgba(255, 180, 200, 0.95)", "800", "center");
+  text("企業間諜頻率倍增、迴避動作每動觸發",
+    cx, cy + 44, 13, "rgba(255, 160, 180, 0.85)", "700", "center");
+  ctx.restore();
 }
 
 // 路面 AR 加成標籤：每道在道路上方（天空區）顯示 add / mult / 強制 QTE / 隱藏 ?
@@ -7831,19 +9248,22 @@ function computePlayerSpeedPreview() {
     return { value: baseSpeed, isPreview: false, overLimit };
   }
   // 套用 drawLanes 同款預覽公式
+  // c8 紅綠燈未揭曉道：不能把 ?道隱藏的 add/mult 算進預覽（否則洩漏值）
+  // 預覽速度不含尾流（混淆玩家、改成只有打牌動作 + 道路明值）
+  const circForPreview = currentCircuit();
+  const isC8HiddenForPreview = circForPreview?.hideLaneBonusUntilVisited
+    && !(app.stage2?.revealedC8Lanes?.has(hoverLane));
   const b = getLaneBonusFor(hoverLane);
-  const add = b?.add ?? 0;
-  const mult = b?.mult ?? 1;
+  const add = isC8HiddenForPreview ? 0 : (b?.add ?? 0);
+  const mult = isC8HiddenForPreview ? 1 : (b?.mult ?? 1);
   let preview;
   if (hoverLane === app.playerLane) {
     const cardSpd = app.drag.card.speedValue ?? 0;
-    const slipBonus = canGetSlipstreamAtLane(hoverLane) ? 30 : 0;
-    preview = Math.floor((baseSpeed + cardSpd + slipBonus + add) * mult);
+    preview = Math.floor((baseSpeed + cardSpd + add) * mult);
   } else if (baseSpeed > 0) {
-    const slipBonus = canGetSlipstreamAtLane(hoverLane) ? 30 : 0;
     const lanesCrossed = Math.abs(hoverLane - app.playerLane);
     const laneCost = laneChangeCost(lanesCrossed);
-    preview = Math.floor((baseSpeed - laneCost + slipBonus + add) * mult);
+    preview = Math.floor((baseSpeed - laneCost + add) * mult);
   } else {
     preview = baseSpeed;
   }
@@ -8876,19 +10296,27 @@ function drawQteDifficultyPanel(qteType) {
   const laneBonus = getLaneBonusFor(app.playerLane);
   const offset = (laneBonus && typeof laneBonus.qteDifficultyOffset === "number")
     ? laneBonus.qteDifficultyOffset : 0;
-  const step = Math.max(0, speedComponent + offset);
 
-  // 空力區（穩定區）折扣：只影響 overtake QTE 的道路節奏 tier
+  // 空力區（穩定區）：只影響 overtake QTE 的 tier
   const stabCharges = app.stabilityCharges || 0;
-  const baseQteDiff = currentLaneQteDiff();
-  const resolvedQteDiff = currentLaneQteDiffResolved();
   const showStability = (qteType === "overtake") && stabCharges > 0;
+  // Boss 績效考核 Buff/Debuff
+  const bossBuff = app.stage2?.boss?.buffStacks || 0;
+  const bossDebuff = app.stage2?.boss?.debuffStacks || 0;
+  const showPerfReview = (qteType === "overtake") && (bossBuff > 0 || bossDebuff > 0);
+  // 最終 tier：含空力區 + buff/debuff
+  const step = Math.max(0, speedComponent + offset
+    - (showStability ? stabCharges : 0)
+    - bossBuff + bossDebuff);
 
-  // 各 QTE 的副標（用 resolved diff 算最終時間 / 間距）
+  // 道路節奏：本道天然 diff（hard/normal/easy）、不再被 stab 影響
+  const laneDiff = currentLaneQteDiff();
+
+  // 各 QTE 的副標（用 step 算最終時間 / 間距）
   let subline = "";
   if (qteType === "overtake") {
     const circleCount = Math.min(10, Math.round(5 * Math.pow(1.10, step)));
-    const intervalScale = resolvedQteDiff === "easy" ? 1.25 : resolvedQteDiff === "hard" ? 0.75 : 1.0;
+    const intervalScale = laneDiff === "easy" ? 1.25 : laneDiff === "hard" ? 0.75 : 1.0;
     const interval = Math.round(620 * intervalScale);
     subline = `圓圈 ${circleCount} 顆　間隔 ${interval}ms`;
   } else if (qteType === "defense") {
@@ -8900,14 +10328,14 @@ function drawQteDifficultyPanel(qteType) {
     subline = `箭頭 ${arrowCount} 個　時限 ${totalSecs.toFixed(1)} 秒`;
   }
 
-  // 道路節奏只在超車 QTE 顯示（其他兩種不吃 qteDiff）
+  // 道路節奏只在超車 QTE 顯示
   const showQteDiff = (qteType === "overtake");
-  const qteDiff = showQteDiff ? resolvedQteDiff : null;
 
   const panelW = 460 * UI_SCALE;
-  // 有穩定區折扣時、面板額外加一列
+  // 額外列：空力區 + 績效考核（buff/debuff）
   const baseH = showQteDiff ? 220 : 194;
-  const panelH = (baseH + (showStability ? 24 : 0)) * UI_SCALE;
+  const extraRows = (showStability ? 1 : 0) + (showPerfReview ? 1 : 0);
+  const panelH = (baseH + extraRows * 24) * UI_SCALE;
   const panelX = (app.w - panelW) / 2;
   const panelY = app.h * 0.42;
   // 緩存難度面板 rect 給教學 spotlight 用
@@ -8963,28 +10391,36 @@ function drawQteDifficultyPanel(qteType) {
       "rgba(160,175,195,0.6)", "900", "right");
   }
 
-  // 第 3 列：道路節奏（只有超車 QTE 顯示、顯示 resolved 後的結果）
+  // 第 3 列：道路節奏（只有超車 QTE 顯示、顯示本道天然 diff、不再有 stab 過渡）
   if (showQteDiff) {
-    const diffLabel = qteDiff === "easy" ? "易（圓圈間距 ×1.25）"
-                    : qteDiff === "hard" ? "難（圓圈間距 ×0.75 + 抖動）"
+    const diffLabel = laneDiff === "easy" ? "易（圓圈間距 ×1.25）"
+                    : laneDiff === "hard" ? "難（圓圈間距 ×0.75 + 抖動）"
                     : "一般";
-    const diffColor = qteDiff === "easy" ? "rgba(140,230,170,0.95)"
-                    : qteDiff === "hard" ? "rgba(255,150,140,0.95)"
+    const diffColor = laneDiff === "easy" ? "rgba(140,230,170,0.95)"
+                    : laneDiff === "hard" ? "rgba(255,150,140,0.95)"
                     : "rgba(200,215,235,0.85)";
     text(`道路節奏　${diffLabel}`, labelX, rowY3, 12,
       diffColor, "700", "left");
   }
 
   // 第 4 列：空力區折扣（僅當 overtake 且有 charges）
+  // 直接從 tier 扣（不再透過 diff 過渡）
   if (showStability) {
-    const baseLabel = baseQteDiff === "easy" ? "易"
-                    : baseQteDiff === "hard" ? "難" : "一般";
-    const resolvedLabel = resolvedQteDiff === "easy" ? "易"
-                        : resolvedQteDiff === "hard" ? "難" : "一般";
-    text(`✦ 空力區　-${stabCharges} 階（${baseLabel} → ${resolvedLabel}）`,
+    text(`✦ 空力區　QTE 難度 -${stabCharges}`,
       labelX, rowY4, 12, "rgba(140, 255, 160, 0.95)", "800", "left");
     text(`-${stabCharges}`, valueX, rowY4, 14,
       "rgba(140, 255, 160, 0.95)", "900", "right");
+  }
+  // 第 5 列：Boss 績效考核 Buff/Debuff
+  if (showPerfReview) {
+    const rowY5 = rowY4 + (showStability ? 24 : 0) * UI_SCALE;
+    const isBuff = bossBuff > 0;
+    const stacks = isBuff ? bossBuff : bossDebuff;
+    const sign = isBuff ? "-" : "+";
+    const label = isBuff ? `✅ 績效考核達標 ×${stacks}` : `✗ 績效考核未達標 ×${stacks}`;
+    const color = isBuff ? "rgba(140, 230, 170, 0.95)" : "rgba(255, 130, 130, 0.95)";
+    text(`${label}　QTE 難度 ${sign}${stacks}`, labelX, rowY5, 12, color, "800", "left");
+    text(`${sign}${stacks}`, valueX, rowY5, 14, color, "900", "right");
   }
 }
 

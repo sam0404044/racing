@@ -89,6 +89,59 @@ export const STAGE2_OPPONENTS = {
     ],
     flavor: "獨行型 — 自顧自地跑最快路線、邊跑邊加速",
   },
+  // ─── 霓虹多線街區 最終 Boss：NCC-7 ─────────────────────────────────────
+  // 設定文件：BOSS_DESIGN.md
+  // Phase 1：移動層（cd 1 dynamicAvoidOrBlock）✓
+  // Phase 2：企業間諜（cd 2、per-source 抽 50% 玩家加速、轉嫁、Boss 飛字累計）✓
+  // Phase 3（目前）：績效考核（cd 3、任務驅動 + Buff/Debuff 績效螺旋）
+  //   - 觸發：評分當前任務 → 派發新任務
+  //   - 任務難度 = buff stacks + 1（capped at 3、buff=3 時抽兩個任務）
+  //   - Buff（達標）：QTE 難度 -1 / stack、最多 3、清掉 debuff
+  //   - Debuff（未達標）：QTE 難度 +1 / stack、最多 3、清掉 buff
+  // Phase 4（TODO）：focus 1 觸發企業壓制（移動 / 間諜 cd -1、績效考核 cd 不變）
+  BOSS: {
+    id: "BOSS", name: "NCC-7", speed: 50, chaserSpeed: 50, focus: 2,
+    behaviors: [
+      // 移動層：cd 1、每動觸發、依玩家動作前位置決定避或擋
+      { id:"ncc7-move",       cooldown: 1, weight: "weak",    action: "moveSmart", strategy: "dynamicAvoidOrBlock" },
+      // 企業間諜：cd 2、per-source 抽 50% 玩家速度
+      { id:"ncc7-espionage",  cooldown: 2, weight: "passive", action: "espionage", skimRatio: 0.5 },
+      // 績效考核：cd 3、評分當前任務 + 派發新任務
+      { id:"ncc7-perfreview", cooldown: 3, weight: "passive", action: "performanceReview" },
+    ],
+    flavor: "霓虹道路株式會社：NCC-7 — 管制本街區路權的企業 AI",
+  },
+};
+
+// ─── NCC-7 績效考核任務池 ────────────────────────────────────────────
+// 5 大類 × 3 等級。每個任務的 def 包含：
+//   id            — 唯一識別（用於 taskHistory 去重）
+//   type          — move / resource / tactic / output / combat
+//   level         — 1 / 2 / 3
+//   targetN       — 達標需要的進度數字
+//   displayText   — MEMO 紙條顯示文字
+//   special       — 特殊處理標記（uniqueLanes / stabilityOnly / cardPlayOnly / recursive2L1）
+export const BOSS_TASK_POOL = {
+  // 移動類
+  move_l1:    { id:"move_l1",    type:"move",     level:1, targetN:2,  displayText:"換道 2 次" },
+  move_l2:    { id:"move_l2",    type:"move",     level:2, targetN:3,  displayText:"換道 3 次" },
+  move_l3:    { id:"move_l3",    type:"move",     level:3, targetN:3,  displayText:"3 道各踩 1 次", special:"uniqueLanes" },
+  // 資源類
+  resource_l1:{ id:"resource_l1",type:"resource", level:1, targetN:1,  displayText:"棄 1 張到穩定區", special:"stabilityOnly" },
+  resource_l2:{ id:"resource_l2",type:"resource", level:2, targetN:2,  displayText:"棄 2 張到穩定區", special:"stabilityOnly" },
+  resource_l3:{ id:"resource_l3",type:"resource", level:3, targetN:3,  displayText:"棄 3 張牌（穩定區+換道）", special:"stabilityOrLaneChange" },
+  // 戰術類
+  tactic_l1:  { id:"tactic_l1",  type:"tactic",   level:1, targetN:2,  displayText:"打 2 張車隊牌" },
+  tactic_l2:  { id:"tactic_l2",  type:"tactic",   level:2, targetN:3,  displayText:"打 3 張車隊牌" },
+  tactic_l3:  { id:"tactic_l3",  type:"tactic",   level:3, targetN:0,  displayText:"完成兩個 L1 任務", special:"recursive2L1" },
+  // 產出類（淨加速、含 espionage 抽走後的淨值）
+  output_l1:  { id:"output_l1",  type:"output",   level:1, targetN:15, displayText:"累積淨加速 +15" },
+  output_l2:  { id:"output_l2",  type:"output",   level:2, targetN:20, displayText:"累積淨加速 +20" },
+  output_l3:  { id:"output_l3",  type:"output",   level:3, targetN:25, displayText:"累積淨加速 +25" },
+  // 戰鬥類
+  combat_l1:  { id:"combat_l1",  type:"combat",   level:1, targetN:1,  displayText:"吃尾流 1 次" },
+  combat_l2:  { id:"combat_l2",  type:"combat",   level:2, targetN:2,  displayText:"打 2 張指令牌", special:"cardPlayOnly" },
+  combat_l3:  { id:"combat_l3",  type:"combat",   level:3, targetN:1,  displayText:"成功 1 次 QTE" },
 };
 
 // ─── 霓虹多線街區：賽段定義 ──────────────────────────────────────────────
