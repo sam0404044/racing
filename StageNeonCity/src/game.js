@@ -51,12 +51,78 @@ normalBgm.addEventListener("ended", () => {
 function playNormalBgm() { const p = normalBgm.play(); if (p) p.catch(()=>{ app.normalBgmPending = true; }); }
 function stopNormalBgm() { normalBgm.pause(); normalBgm.currentTime = 0; }
 
+// ─── NCC-7 BOSS 登場圖層 ────────────────────────────────────────────────
+// 跟關卡 1 SAND VEIL 一樣、用 8 張像素插畫圖層構成「BOSS 登場過場」。
+// 路徑：../assets/BOSS-NCC7/
+const NCC7_ENTRANCE_LAYER_SRCS = [
+  "../assets/BOSS-NCC7/ncc7-intro-banner.jpg",      // 0 霓虹斜旗（JPG、有背景沒去）
+  "../assets/BOSS-NCC7/ncc7-intro-title-code.png",  // 1 NCC-7 / CODE: 07 標題（PNG 去背）
+  "../assets/BOSS-NCC7/ncc7-intro-quote-panel.png", // 2 標語面板（PNG 去背、文字 runtime 疊）
+  "../assets/BOSS-NCC7/ncc7-intro-data-sweep.png",  // 3 資料流刷掠（PNG 去背）
+  "../assets/BOSS-NCC7/ncc7-intro-bottom-panel.png",// 4 底部資料面板（PNG 去背、detailB）
+  "../assets/BOSS-NCC7/ncc7-intro-stats-bars.png",  // 5 故意不產、整張改由 drawNcc7EntranceTypography 程式畫
+  "../assets/BOSS-NCC7/ncc7-intro-emblem.png",      // 6 企業 emblem（PNG 去背）
+  "../assets/BOSS-NCC7/ncc7-intro-portrait.png",    // 7 立繪（PNG 去背）
+];
+const ncc7EntranceLayers = NCC7_ENTRANCE_LAYER_SRCS.map(src => {
+  const im = new Image();
+  im.src = src;
+  return im;
+});
+
 // ─── 共用視覺工具 ────────────────────────────────────────────────────────
 function smooth01(v) {
   const t = Math.max(0, Math.min(1, v));
   return t * t * (3 - 2 * t);
 }
 
+// 圖層比例繪製（contain / cover），跟關卡 1 同邏輯
+function drawImageInRect(ctx, img, x, y, w, h, alpha = 1, mode = "contain") {
+  if (!img || !img.complete || !(img.naturalWidth || img.width)) return;
+  const iw = img.naturalWidth || img.width || 16;
+  const ih = img.naturalHeight || img.height || 9;
+  const scale = mode === "cover" ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih);
+  const dw = iw * scale;
+  const dh = ih * scale;
+  ctx.save();
+  ctx.globalAlpha *= Math.max(0, Math.min(1, alpha));
+  ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  ctx.restore();
+}
+
+// 灑像素點（資料粒子、對應關卡 1 的 drawSandParticles）
+function drawDataParticles(ctx, x, y, w, h, opts) {
+  const o = opts || {};
+  const count = o.count || 120;
+  const baseAlpha = o.alpha != null ? o.alpha : 0.6;
+  const sz = o.size || 1.4;
+  const drift = o.drift || 40;
+  const fade = o.fade || 90;
+  const seed = o.seedOffset || 0;
+  const t = (performance.now() + seed) * 0.001;
+  ctx.save();
+  for (let i = 0; i < count; i++) {
+    const s = Math.sin(i * 12.9898 + seed) * 43758.5453;
+    const r = s - Math.floor(s);
+    const s2 = Math.sin(i * 78.233 + seed) * 43758.5453;
+    const r2 = s2 - Math.floor(s2);
+    const px = x + (r + t * (0.04 + r2 * 0.06)) % 1 * w;
+    const py = y + (r2 + t * 0.018) % 1 * h;
+    const phase = (Math.sin(t * 1.8 + i * 0.7) + 1) * 0.5;
+    const a = baseAlpha * (0.35 + phase * 0.65);
+    // 配色：洋紅 / 青藍 / 暖橘為主
+    const pick = (r * 7 + r2 * 11) | 0;
+    let col;
+    if      (pick % 5 === 0) col = "rgba(92, 242, 255,";   // cyan
+    else if (pick % 5 === 1) col = "rgba(255, 200, 245,";  // pale magenta
+    else if (pick % 5 === 2) col = "rgba(255, 180, 60,";   // warm amber
+    else                      col = "rgba(255, 60, 232,";  // magenta
+    ctx.fillStyle = col + a + ")";
+    const driftX = Math.sin(t * 0.9 + i * 0.4) * drift * 0.6;
+    ctx.fillRect(px + driftX, py, sz, sz);
+  }
+  ctx.restore();
+}
 
 // ─── 道初始化 ──────────────────────────────────────────────────────────────
 function initLanes(count) {
@@ -2064,6 +2130,9 @@ function applyChaserToApp(chaserId) {
 }
 // 初始化主關卡狀態
 function initStage2State() {
+  // NCC-7 BOSS 登場過場：每次 init（新局）時 reset、確保看得到 intro
+  app.ncc7IntroSeen = false;
+  app.ncc7TransitionStart = 0;
   app.stage2 = {
     // 教學版陣容：P 陪跑員排在最末（pickNextOpponent 取最後一個 → P 第一個面對）
     // 後面接 A 禿鷹 → B 清道夫 → C 破風者 → BOSS NCC-7（共 5 對手、玩家從第 6 名開始）
@@ -3735,8 +3804,12 @@ function stage2StartNewRound() {
   dealStage2Hand();
   // 6. circuitJustChanged 在這回合 reset
   s2.circuitJustChanged = false;
-  // 7. 進 playing
-  app.mode = "playing";
+  // 7. 進 playing — 但若這是第一次遇到 NCC-7 BOSS、改進「過場 → intro」
+  if (s2.currentOpponentId === "BOSS" && !app.ncc7IntroSeen) {
+    startNcc7BossTransition();
+  } else {
+    app.mode = "playing";
+  }
   // 8. 回合開始就和對手同道 → 立刻給尾流
   checkSlipstream();
 }
@@ -4239,6 +4312,18 @@ function setupInput() {
     if (e.button != null && e.button !== 0) return;
     const p = point(e);
     app.mouse = p;
+
+    // ── BOSS 過場 entrance 完成、等任意處點擊觸發 fade-out ──
+    // 在 hitButton 之前先處理、確保 entrance 期間的點擊不會誤觸到其他按鈕
+    if (app.mode === "stage2-boss-transition" && app.ncc7TransitionStart && !app.ncc7TransitionFadeOutStart) {
+      const transitionElapsed = performance.now() - app.ncc7TransitionStart;
+      // 只在 entrance 完成後（blackIn + entranceDur = 700 + 3500 = 4200ms）才響應點擊、避免動畫期間被跳過
+      if (transitionElapsed >= 4200) {
+        app.ncc7TransitionFadeOutStart = performance.now();
+      }
+      return;  // 消化點擊、不傳遞給後續按鈕 / 拖牌邏輯
+    }
+
     // 績效考核 modal 開啟時、點外面（非 modal 內、非 modal 縮小按鈕）→ 關閉 modal、消化點擊
     const prm = app.perfReviewModal;
     if (prm?.visible && prm.state === "open" && prm.bounds) {
@@ -4477,6 +4562,13 @@ function handleButton(id) {
     stage2StartNewRound();
     return;
   }
+  // NCC-7 BOSS intro 確認 → 進 playing、實際開始 BOSS 回合
+  if (id === "ncc7-intro-start" && app.mode === "stage2-boss-intro") {
+    app.ncc7IntroSeen = true;
+    // 把剛才暫存的 BOSS 回合正式啟動（boss 設定已在過場前完成）
+    app.mode = "playing";
+    return;
+  }
   if (id === "stage2-corner-cancel-pick" && app.mode === "stage2-corner-pick-lane") {
     // 不換道：回 playing
     app.mode = "playing";
@@ -4705,6 +4797,8 @@ function drawInner(time) {
   if (m === "start-ready")              { drawStartModal(); drawExpressionDock(time); return; }
   if (m === "rules")                    { drawRulesModal(time); drawExpressionDock(time); return; }
   if (m === "stage-2-intro")            { drawStage2IntroModal(time); drawExpressionDock(time); return; }
+  if (m === "stage2-boss-transition")   { drawNcc7BossTransition(time); return; }
+  if (m === "stage2-boss-intro")        { drawNcc7BossIntroScreen(time); drawExpressionDock(time); return; }
   if (m === "stage2-corner-pick-lane")  { drawStage2CornerLanePick(time); drawExpressionDock(time); return; }
 
   // HUD 常駐
@@ -6421,90 +6515,57 @@ function tireHealthColor(time) {
 function drawCarPartsHud(time) {
   if (!isStage2()) return;
   const ctx = app.ctx;
-  const R = carPartsHudRect();
   const hc = tireHealthColor(time);
 
-  // ── 拖曳互動狀態（無上限，永遠可接收）──
-  const isDragging = !!app.drag && app.drag.card?.cardClass !== "team";
-  const canAccept = isDragging;
-  const inHover = canAccept && app.zones.stabilityZone && inRect(
-    { x: app.drag.x + app.drag.w/2, y: app.drag.y + app.drag.h/2 },
-    app.zones.stabilityZone
-  );
-  const dropFx = app.stabilityDropFx;
-  const dropPulse = dropFx ? Math.max(0, Math.min(1, (dropFx.until - performance.now()) / 520)) : 0;
+  // ── 過濾拖曳：team 牌不能丟進來
+  const dragCard = (app.drag && app.drag.card?.cardClass !== "team") ? app.drag : null;
 
-  // ── 邊框色：永遠綠色（不受輪胎影響）；拖曳可接收時亮 pulse、inHover 最亮
-  let borderAccent = "#5dff7a";
-  let borderGlow = "rgba(93, 255, 122, 0.4)";
-  if (inHover) {
-    borderAccent = "#bfffd0";
-    borderGlow = "rgba(180, 255, 200, 0.85)";
-  } else if (canAccept) {
-    const p = 0.55 + 0.45 * Math.sin(time * 0.006);
-    borderAccent = `rgba(140, 255, 170, ${p})`;
-    borderGlow = `rgba(140, 255, 170, ${0.4 * p + 0.2})`;
-  }
+  // ── 呼叫共用 chassis chrome（panelRect + SC1 切角面板 + 標題 + 充能 + drop fx + 訊息）
+  const viewport = { left: 0, bottom: app.h, width: app.w, height: app.h };
+  const isDragging = !!dragCard;
+  const dragMessage = isDragging ? "棄手牌至此，穩定車身(-1階QTE難度)" : null;
+  const dangerMessage = (!isDragging && hc.danger) ? "⚠ 輪胎危急 · CRITICAL" : null;
+  const chrome = window.FinalDriverChassisHud && window.FinalDriverChassisHud.drawChrome
+    ? window.FinalDriverChassisHud.drawChrome(ctx, viewport, {
+        time,
+        charges: app.stabilityCharges,
+        drag: dragCard,
+        dropFx: app.stabilityDropFx,
+        disabled: false,
+        message: dragMessage || dangerMessage,
+      })
+    : null;
+  if (!chrome) return;  // shared module 還沒載入、保險不畫
 
-  // ── 外框
-  drawTerranPanel(R.x, R.y, R.w, R.h, borderAccent, borderGlow);
+  const R = chrome.rect;
+  const carX = chrome.carRect.x;
+  const carY = chrome.carRect.y;
+  const carW = chrome.carRect.w;
+  const carH = chrome.carRect.h;
 
-  // drop fx：閃光蓋層
-  if (dropPulse > 0) {
-    ctx.save();
-    ctx.fillStyle = `rgba(150, 255, 180, ${0.16 * dropPulse})`;
-    ctx.fillRect(R.x + 4, R.y + 4, R.w - 8, R.h - 8);
-    ctx.restore();
-  }
-
-  // ── 標題列文字（標題綠；空力綠）
-  text("車體狀態 · CHASSIS",
-    R.x + 14, R.y + 20, 12, "rgba(93, 255, 122, 0.75)", "800");
-  textRaw(`空力 ${app.stabilityCharges}`,
-    R.x + R.w - 14, R.y + 19, 11, "#9fff9f", "900", "right", true);
-
-  // ── 主體：俯視掃描圖
-  const carX = R.x + 10;
-  const carY = R.y + 32;
-  const carW = R.w - 20;
-  const carH = R.h - 42;
-
-  // 計算 hover（拖曳中不顯示 tooltip，避免干擾）
+  // ── L2 專屬：部件 hover 偵測（拖曳中不顯示 tooltip）
   let hoverPart = null;
   if (!isDragging && app.mouse && inRect(app.mouse, R)) {
     hoverPart = chassisHoverPart(carX, carY, carW, carH);
   }
   // 拖曳時 inHover 視為 aero 部件 active（aero 全部亮起）
-  const aeroActive = inHover ? "aero" : null;
+  const aeroActive = chrome.hover ? "aero" : null;
   const drawHover = hoverPart || aeroActive;
   app.chassisHover = hoverPart;
 
+  // ── L2 專屬：俯視掃描圖
   drawCarSchematic(carX, carY, carW, carH, hc, time, drawHover);
 
-  // ── 掃描線（垂直方向掃過）
+  // ── L2 專屬：掃描線
   drawScanLine(carX, carY, carW, carH, time, hc);
 
-  // ── 拖牌中的中央提示
-  if (isDragging) {
-    const msgColor = inHover ? "rgba(220, 255, 230, 1)" : "rgba(150, 255, 180, 0.95)";
-    text("棄手牌至此，穩定車身(-1階QTE難度)",
-      R.x + R.w / 2, R.y + R.h - 12, 12, msgColor, "900", "center");
-  } else if (hc.danger) {
-    // 危急時面板下方文字警示（只在這裡警示、不影響其他部位顏色）
-    const a = 0.65 + 0.3 * hc.pulse;
-    text("⚠ 輪胎危急 · CRITICAL",
-      R.x + R.w / 2, R.y + R.h - 12, 12, `rgba(255, 110, 110, ${a})`, "900", "center");
-  }
-
-  // ── tooltip（hover 中且非拖曳）
+  // ── L2 專屬：tooltip
   if (hoverPart && !isDragging) {
     drawChassisTooltip(R, hoverPart);
   }
 
-  // 註冊 stability drop zone：整個面板（標題列以下）都可接受
-  app.zones.stabilityZone = {
-    x: R.x + 6, y: R.y + 30, w: R.w - 12, h: R.h - 36
-  };
+  // 註冊 stability drop zone（沿用 shared 算好的）
+  app.zones.stabilityZone = chrome.dropZone;
 }
 
 // 把 hex / "#rrggbb" 加上 alpha；或把 rgba(...) 改 alpha
@@ -6523,67 +6584,8 @@ function fadeColor(c, a) {
   });
 }
 
-// SC1 Terran 風格的面板：兩層線框、四角斜切、深色玻璃感
-// accent / glow 由呼叫者決定（隨健康色變）
-function drawTerranPanel(x, y, w, h, accent, glow) {
-  const ctx = app.ctx;
-  ctx.save();
-  // 底色：深色玻璃漸層
-  const grad = ctx.createLinearGradient(x, y, x, y + h);
-  grad.addColorStop(0, "rgba(6, 22, 12, 0.92)");
-  grad.addColorStop(1, "rgba(3, 12, 8, 0.94)");
-  ctx.fillStyle = grad;
-  // 用斜切角的 path 取代圓角，更像 SC1
-  const cut = 10;
-  ctx.beginPath();
-  ctx.moveTo(x + cut, y);
-  ctx.lineTo(x + w - cut, y);
-  ctx.lineTo(x + w, y + cut);
-  ctx.lineTo(x + w, y + h - cut);
-  ctx.lineTo(x + w - cut, y + h);
-  ctx.lineTo(x + cut, y + h);
-  ctx.lineTo(x, y + h - cut);
-  ctx.lineTo(x, y + cut);
-  ctx.closePath();
-  ctx.fill();
-  // 外層線框（亮 + 微光）
-  ctx.shadowColor = glow || "rgba(80, 255, 110, 0.45)";
-  ctx.shadowBlur = 10;
-  ctx.strokeStyle = accent || "rgba(80, 255, 110, 0.85)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  // 內層細線
-  ctx.strokeStyle = fadeColor(accent || "rgba(60, 180, 90, 1)", 0.32);
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  const inset = 4;
-  const cut2 = cut - 2;
-  ctx.moveTo(x + inset + cut2, y + inset);
-  ctx.lineTo(x + w - inset - cut2, y + inset);
-  ctx.lineTo(x + w - inset, y + inset + cut2);
-  ctx.lineTo(x + w - inset, y + h - inset - cut2);
-  ctx.lineTo(x + w - inset - cut2, y + h - inset);
-  ctx.lineTo(x + inset + cut2, y + h - inset);
-  ctx.lineTo(x + inset, y + h - inset - cut2);
-  ctx.lineTo(x + inset, y + inset + cut2);
-  ctx.closePath();
-  ctx.stroke();
-  // 標題列底色
-  ctx.fillStyle = fadeColor(accent || "rgba(50, 160, 80, 1)", 0.15);
-  ctx.fillRect(x + 6, y + 6, w - 12, 22);
-  // 標題列下緣分隔線
-  ctx.strokeStyle = fadeColor(accent || "rgba(120, 255, 150, 1)", 0.4);
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + 6, y + 28);
-  ctx.lineTo(x + w - 6, y + 28);
-  ctx.stroke();
-  // 標題列左側裝飾小方塊
-  ctx.fillStyle = fadeColor(accent || "rgba(120, 255, 150, 1)", 0.85);
-  ctx.fillRect(x + 10, y + 12, 4, 10);
-  ctx.restore();
-}
+// SC1 Terran 風格切角面板已搬到 shared/chassis-hud.js（drawChrome 內部呼叫 drawTerranPanel）
+// 這裡保留 fadeColor、tireHealthColor、drawCarSchematic、drawScanLine 等 L2 專屬工具。
 
 // ─── 整輛車的俯視掃描圖 ─────────────────────────────────────────────
 // 看的方向：俯視（top-down）、車頭朝右（→），車尾朝左（←）
@@ -9067,6 +9069,416 @@ function drawSuppressionBanner(time) {
   text("企業間諜頻率倍增、迴避動作每動觸發",
     cx, cy + 44, 13, "rgba(255, 160, 180, 0.85)", "700", "center");
   ctx.restore();
+}
+
+// ─── NCC-7 BOSS 登場過場 ────────────────────────────────────────────────
+// 跟關卡 1 SAND VEIL 平行：8 張圖層 + 多階段動畫 + 進 intro modal。
+// Flow:
+//   stage2-boss-transition：黑幕淡入 → 圖層飛入 → 過渡到 intro screen
+//   stage2-boss-intro：顯示 NCC-7 三大機制、底部「考核開始」按鈕、按下 → playing
+function fillScreenBlack(alpha) {
+  const ctx = app.ctx;
+  ctx.save();
+  ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, alpha))})`;
+  ctx.fillRect(0, 0, app.w, app.h);
+  ctx.restore();
+}
+
+function startNcc7BossTransition() {
+  app.mode = "stage2-boss-transition";
+  app.ncc7TransitionStart = performance.now();
+  app.drag = null;
+}
+
+function drawNcc7BossTransition(time) {
+  const ctx = app.ctx;
+  const start = app.ncc7TransitionStart || time;
+  const elapsed = time - start;
+  // 階段時長（毫秒）：
+  //   0    ─ 700        全黑淡入
+  //   700  ─ 4200       圖層飛入 + 標語打字機（3.5s）
+  //   4200 ─ 玩家點擊   停在最後一幀、等任意處點擊、顯示「點任意處繼續」提示
+  //   點擊後 ─ +900     圖層淡出、銜接到 boss-intro modal（背景是賽道）
+  const blackInDur = 700;
+  const entranceDur = 3500;
+  const fadeOutDur = 900;
+  const entranceStart = blackInDur;
+  const settleAt = blackInDur + entranceDur;
+
+  if (elapsed < blackInDur) {
+    drawHud(time);
+    const a = smooth01(elapsed / blackInDur);
+    fillScreenBlack(a);
+    return;
+  }
+
+  if (elapsed < settleAt) {
+    // entrance 動畫進行中
+    fillScreenBlack(1);
+    drawNcc7EntranceLayers(elapsed - entranceStart, entranceDur, time, 1);
+    return;
+  }
+
+  // entrance 完成、停在最後一幀等玩家點擊
+  if (!app.ncc7TransitionFadeOutStart) {
+    fillScreenBlack(1);
+    drawNcc7EntranceLayers(entranceDur, entranceDur, time, 1);
+    drawNcc7ClickToContinueHint(time);
+    return;
+  }
+
+  // 玩家點過了、進行 fade-out
+  const fadeElapsed = time - app.ncc7TransitionFadeOutStart;
+  if (fadeElapsed < fadeOutDur) {
+    fillScreenBlack(1);
+    const a = 1 - smooth01(fadeElapsed / fadeOutDur);
+    drawNcc7EntranceLayers(entranceDur, entranceDur, time, a);
+    return;
+  }
+
+  // fade-out 完成、切到 boss-intro（modal 浮在賽道上）
+  app.mode = "stage2-boss-intro";
+  app.ncc7TransitionStart = 0;
+  app.ncc7TransitionFadeOutStart = 0;
+}
+
+// 過場最後一幀的「點任意處繼續」閃爍提示
+function drawNcc7ClickToContinueHint(time) {
+  const ctx = app.ctx;
+  const w = app.w;
+  const h = app.h;
+  const blink = (Math.sin(time * 0.005) + 1) * 0.5;  // 0..1
+  ctx.save();
+  ctx.globalAlpha = 0.5 + blink * 0.45;
+  ctx.fillStyle = "#ff3df5";
+  const fontPx = Math.floor(h * 0.022);
+  ctx.font = `900 ${fontPx}px Consolas, "Microsoft JhengHei", monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText("▶ 點任意處繼續 ▶", w / 2, h * 0.965);
+  ctx.restore();
+}
+
+function drawNcc7EntranceLayers(age, totalDur, time, fadeOut = 1) {
+  const ctx = app.ctx;
+  const w = app.w;
+  const h = app.h;
+  const settled = Math.max(0, Math.min(1, fadeOut));
+  const t = n => smooth01((age - n) / 520);  // 各圖層各自延遲淡入
+
+  // 整體底色（深紫黑、跟 portrait 背景一致）
+  ctx.save();
+  ctx.globalAlpha = settled;
+  const bg = ctx.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, "#040414");
+  bg.addColorStop(0.5, "#0a0820");
+  bg.addColorStop(1, "#150728");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, h);
+
+  const banner    = ncc7EntranceLayers[0];
+  const titleCode = ncc7EntranceLayers[1];
+  const quotePlate= ncc7EntranceLayers[2];
+  const detailB   = ncc7EntranceLayers[4];
+  const emblem    = ncc7EntranceLayers[6];
+  const portrait  = ncc7EntranceLayers[7];
+
+  const bannerIn   = t(140);
+  const titleIn    = t(620);
+  const portraitIn = t(820);
+  const infoIn     = t(1280);
+
+  // 整體微震（前半段強、後半段平）
+  const shake = Math.sin(time * 0.006) * 2.5 * (1 - Math.min(1, age / totalDur));
+
+  // 1) 斜旗 banner（從左滑入、與關卡 1 同角度 −0.105 rad）
+  ctx.save();
+  ctx.translate(-w * (1 - bannerIn) * 0.18 + shake, h * 0.02);
+  ctx.rotate(-0.105);
+  if (banner) drawImageInRect(ctx, banner, -w * 0.14, h * 0.10, w * 1.30, h * 0.50, 0.98 * bannerIn, "cover");
+  ctx.restore();
+
+  // 1b) 資料流刷掠 PNG → 移到背景層、alpha 降低、不要蓋住主要元素
+  const dataSweep = ncc7EntranceLayers[3];
+  if (dataSweep) {
+    drawImageInRect(ctx, dataSweep, -w * 0.05, h * 0.22, w * 1.10, h * 0.50, 0.20 * t(900) * settled, "cover");
+  }
+
+  // 2) 標題圖層
+  if (titleCode) drawImageInRect(ctx, titleCode, w * 0.035, h * 0.105, w * 0.58, h * 0.39, titleIn, "contain");
+
+  // 3) 中段橫向細條（裝飾 / 強化資訊密度）
+  ctx.save();
+  ctx.globalAlpha = 0.34 * t(420);
+  ctx.fillStyle = "#ff3df5";
+  for (let i = 0; i < 8; i++) {
+    const x = w * (0.03 + i * 0.135);
+    ctx.fillRect(x, h * 0.22 + (i % 2) * 9, w * 0.055, 8);
+  }
+  ctx.restore();
+
+  // 4) 底部資料面板 — 略過（位置會被 portrait 完全蓋掉、加進來反而讓 DRIVER 字孤兒）
+  // 之前的 detailB 圖跟 drawNcc7BottomPanelLabel 都拿掉、簡化畫面
+
+  // 5) 企業 emblem（右側、半透明、移到 emblem 之前先暗一點）
+  if (emblem) drawImageInRect(ctx, emblem, w * 0.71, h * 0.48, w * 0.24, h * 0.28, 0.45 * infoIn, "contain");
+
+  // 6) 立繪（從右側偏移滑入）
+  if (portrait) {
+    const px = w * (0.56 + (1 - portraitIn) * 0.08);
+    const py = h * (0.00 + (1 - portraitIn) * 0.04);
+    drawImageInRect(ctx, portrait, px, py, w * 0.46, h * 0.88, portraitIn, "contain");
+  }
+
+  // 7) 程式化粒子 — 拿掉、PNG 已經夠了、不要再疊
+
+  // 8) 標語文字（沒有 border、純文字浮在畫面中）
+  drawNcc7QuoteText(age, infoIn, time, settled);
+
+  // 9) 程式畫的副標 / 統計（取代 stats-bars 圖、像關卡 1）
+  drawNcc7EntranceTypography(titleIn, infoIn, time, settled);
+
+  ctx.restore();
+}
+
+function drawNcc7EntranceTypography(titleIn, infoIn, time, fadeOut = 1) {
+  const ctx = app.ctx;
+  const w = app.w;
+  const h = app.h;
+  const fade = Math.max(0, Math.min(1, fadeOut));
+
+  // 右下統計區（替代 stats-bars 圖、跟關卡 1 同結構）
+  ctx.save();
+  ctx.globalAlpha = infoIn * fade;
+  const stripY = h * 0.73;
+  ctx.fillStyle = "rgba(2,2,2,0.82)";
+  ctx.fillRect(0, stripY, w, h * 0.20);
+  ctx.strokeStyle = "rgba(255, 60, 232, 0.78)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.38, stripY + 12);
+  ctx.lineTo(w * 0.32, stripY + h * 0.20 - 12);
+  ctx.stroke();
+
+  ctx.font = '900 18px Consolas, "Microsoft JhengHei", monospace';
+  ctx.fillStyle = "#ff3df5";
+  ctx.fillText("DRIVER", w * 0.43, stripY + 34);
+  ctx.font = '1000 40px Impact, "Arial Black", sans-serif';
+  ctx.fillStyle = "#fff1ff";
+  ctx.fillText("NCC-7", w * 0.43, stripY + 78);
+  ctx.font = '900 19px Consolas, "Microsoft JhengHei", monospace';
+  ctx.fillStyle = "#ff3df5";
+  ctx.fillText("CODE: 07", w * 0.56, stripY + 78);
+
+  // 屬性條（NCC-7 主題、傳統賽車駕駛屬性）
+  const labels = ["速度", "操控", "監控", "耐久"];
+  const fills  = [4, 8, 10, 6];
+  labels.forEach((label, i) => {
+    const y = stripY + 112 + i * 24;
+    ctx.font = '800 16px "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = "#e0b0e0";
+    ctx.fillText(label, w * 0.43, y);
+    for (let j = 0; j < 10; j++) {
+      ctx.fillStyle = j < fills[i] ? "#ff3df5" : "rgba(98, 50, 100, 0.7)";
+      ctx.fillRect(w * 0.49 + j * 18, y - 11, 13, 8);
+    }
+  });
+
+  // 左上角微閃格（裝飾）
+  ctx.globalAlpha = titleIn * fade * (0.55 + Math.sin(time * 0.007) * 0.08);
+  ctx.fillStyle = "#ff3df5";
+  ctx.fillRect(w * 0.02, h * 0.08, w * 0.018, 5);
+  ctx.fillRect(w * 0.045, h * 0.08, w * 0.018, 5);
+  ctx.fillRect(w * 0.07, h * 0.08, w * 0.018, 5);
+  ctx.restore();
+}
+
+// ─── Quote 文字（無邊框、純文字浮在畫面上）─────────────────────────────
+// 中下偏左、強描影增加可讀性、打字機效果。之前依附 quote-panel 圖、現在獨立繪製。
+function drawNcc7QuoteText(age, infoIn, time, fadeOut = 1) {
+  if (infoIn <= 0) return;
+  const ctx = app.ctx;
+  const w = app.w;
+  const h = app.h;
+  const fade = Math.max(0, Math.min(1, fadeOut));
+
+  // 位置：中下偏左、避開 banner 跟立繪
+  const textX  = w * 0.06;
+  const lineH  = h * 0.055;
+  const line1Y = h * 0.50;
+  const line2Y = line1Y + lineH;
+
+  // 兩行文字（在「，」處切斷）
+  const FULL_LINE_1 = "績效考核AI NCC-7，";
+  const FULL_LINE_2 = "考核開始。";
+  const totalChars = FULL_LINE_1.length + FULL_LINE_2.length;
+
+  // 打字機進度：infoIn 完成後再延遲短時間才開始打字
+  // age 是過場 ms、infoIn 在 age ≈ 1280+520=1800 完成
+  // entranceDur = 3500ms、留 ~1s 設定 settled view 給玩家讀
+  const typeStartAge = 1500;
+  const charsPerSecond = 14;
+  const typeElapsed = Math.max(0, age - typeStartAge);
+  const targetChars = Math.min(totalChars, Math.floor(typeElapsed / 1000 * charsPerSecond));
+
+  let visibleL1 = "";
+  let visibleL2 = "";
+  if (targetChars <= FULL_LINE_1.length) {
+    visibleL1 = FULL_LINE_1.substring(0, targetChars);
+  } else {
+    visibleL1 = FULL_LINE_1;
+    visibleL2 = FULL_LINE_2.substring(0, targetChars - FULL_LINE_1.length);
+  }
+
+  ctx.save();
+  ctx.globalAlpha = infoIn * fade;
+  const fontPx = Math.floor(h * 0.038);
+  ctx.font = `900 ${fontPx}px "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif`;
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+
+  // 強描影：黑底偏移 + glow、讓任何背景都能讀
+  ctx.shadowColor = "rgba(0, 0, 0, 0.95)";
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = "#f0e8f8";
+  ctx.fillText(visibleL1, textX, line1Y);
+  if (visibleL2) ctx.fillText(visibleL2, textX, line2Y);
+
+  // 第二層描影、增加分量
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.fillText(visibleL1, textX, line1Y);
+  if (visibleL2) ctx.fillText(visibleL2, textX, line2Y);
+
+  // 打字游標（閃爍洋紅竪線、跟在文字尾端）
+  if (targetChars < totalChars && targetChars > 0) {
+    const blink = (Math.sin(time * 0.012) + 1) * 0.5;  // 0..1
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = infoIn * fade * (0.4 + blink * 0.6);
+    ctx.fillStyle = "#ff3df5";
+    const cursorLine = visibleL2 || visibleL1;
+    const cursorY = visibleL2 ? line2Y : line1Y;
+    const cursorX = textX + ctx.measureText(cursorLine).width + 4;
+    ctx.fillRect(cursorX, cursorY - fontPx * 0.85, 3, fontPx * 0.9);
+  }
+
+  ctx.restore();
+}
+
+// ─── Bottom-panel tab 上疊 DRIVER 字 ──────────────────────────────────
+function drawNcc7BottomPanelLabel(infoIn, time, fadeOut = 1) {
+  if (infoIn <= 0.05) return;
+  const ctx = app.ctx;
+  const w = app.w;
+  const h = app.h;
+  const fade = Math.max(0, Math.min(1, fadeOut));
+
+  // bottom-panel 圖位置：x=w*0.64, y=h*0.17, 寬 w*0.38, 高 h*0.42
+  // 圖內的 DRIVER tab 大約在框內左上、根據 Gemini 出來的圖測：tab 從框內 20% x、6% y 開始、寬約 16%、高約 9%
+  const panelX = w * 0.64;
+  const panelY = h * 0.17;
+  const panelW = w * 0.38;
+  const panelH = h * 0.42;
+  const tabX = panelX + panelW * 0.22;
+  const tabY = panelY + panelH * 0.07;
+  const tabW = panelW * 0.16;
+  const tabH = panelH * 0.10;
+
+  ctx.save();
+  // 整體 detailB 圖是用 0.38 alpha 畫的，所以文字也對應半透明
+  ctx.globalAlpha = infoIn * fade * 0.85;
+  const fontPx = Math.floor(tabH * 0.50);
+  ctx.font = `900 ${fontPx}px Consolas, Monaco, "Microsoft JhengHei", monospace`;
+  ctx.fillStyle = "#0a0418";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  ctx.fillText("DRIVER", tabX + tabW / 2, tabY + tabH / 2);
+  ctx.restore();
+}
+
+// ─── NCC-7 BOSS Intro Screen（玩家可讀、按下「考核開始」進 playing） ────
+// 過場結束後的提示 modal、背景是賽道（drawInner 已畫過 race + modal backdrop blur）
+function drawNcc7BossIntroScreen(time) {
+  // outer drawInner 已經畫過：1) 賽道 race scene  2) modal backdrop（"intro" 命中 m.includes("intro")）
+  // 這裡只要畫 modal 本體
+  drawNcc7BossIntroModal();
+}
+
+function drawNcc7BossIntroModal() {
+  const box = getCenteredModalBox(680, 480);
+  // 自訂面板：洋紅邊框
+  roundPanel(box.x, box.y, box.w, box.h, 16,
+    "rgba(6, 4, 18, 0.97)", "rgba(255, 60, 232, 0.6)", 3);
+  const cx = box.x + box.w / 2;
+  const padX = 48 * UI_SCALE;
+
+  // 標題
+  text("最終 BOSS：NCC-7", cx, box.y + 64 * UI_SCALE, 32, "#ff8df5", "1000", "center");
+  text("績效考核 AI ／ 霓虹道路株式會社", cx, box.y + 100 * UI_SCALE, 16, "#e0b0e0", "800", "center");
+
+  // 分隔線
+  const ctx = app.ctx;
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 60, 232, 0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(box.x + padX, box.y + 124 * UI_SCALE);
+  ctx.lineTo(box.x + box.w - padX, box.y + 124 * UI_SCALE);
+  ctx.stroke();
+  ctx.restore();
+
+  // 三條敘述（無標題、純洋紅菱形 + 敘述文字）
+  const lines = [
+    "NCC-7 會抽成你行動所獲得的速度。",
+    "NCC-7 會突然派發新任務來審核你的績效。",
+    "審核的內容、NCC-7 的行動都會根據你的 KPI 而有所變化。",
+  ];
+  const itemX = box.x + padX;
+  const y0 = box.y + 168 * UI_SCALE;
+  const lineGap = 56 * UI_SCALE;
+  lines.forEach((line, i) => {
+    const y = y0 + i * lineGap;
+    drawNcc7IntroLine(itemX, y, line);
+  });
+
+  // 按鈕
+  button("ncc7-intro-start", "考核開始", cx - 130*UI_SCALE, box.y + box.h - 76*UI_SCALE, 260*UI_SCALE, 52*UI_SCALE, false, "primary");
+}
+
+function drawNcc7IntroLine(x, y, desc) {
+  const ctx = app.ctx;
+  // 洋紅菱形 bullet
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 60, 232, 0.92)";
+  ctx.beginPath();
+  ctx.moveTo(x + 10, y - 4);
+  ctx.lineTo(x + 20, y + 6);
+  ctx.lineTo(x + 10, y + 16);
+  ctx.lineTo(x, y + 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  text(desc, x + 36, y + 12, 18, "#f4e8ff", "700");
+}
+
+function drawNcc7IntroBullet(x, y, title, desc) {
+  const ctx = app.ctx;
+  // 洋紅菱形 bullet
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 60, 232, 0.92)";
+  ctx.beginPath();
+  ctx.moveTo(x + 10, y - 4);
+  ctx.lineTo(x + 20, y + 6);
+  ctx.lineTo(x + 10, y + 16);
+  ctx.lineTo(x, y + 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  text(title, x + 36, y + 12, 19, "#ffd0f5", "900");
+  text(desc, x + 156, y + 12, 17, "#f4e8ff", "700");
 }
 
 // 路面 AR 加成標籤：每道在道路上方（天空區）顯示 add / mult / 強制 QTE / 隱藏 ?
