@@ -223,14 +223,14 @@ export const STAGE2_NORMAL_CIRCUITS_POOL = [0,1,2,3,4];
 export const STAGE2_COMMAND_CARDS = {
   turbo:         { type:"turbo",         cardClass:"action", name:"渦輪增壓", speedValue:30, note:"", color:"red" },
   tailwind:      { type:"tailwind",      cardClass:"action", name:"加速",     speedValue:20, note:"", color:"basic" },
-  drag:          { type:"drag",          cardClass:"action", name:"風阻減免", speedValue:15, note:"", color:"basic" },
-  laneRhythm:    { type:"laneRhythm",    cardClass:"action", name:"換道節奏", speedValue:15, note:"打加速後換道", canChangeLane:true, requiresTires:true, color:"red" },
-  nitro:         { type:"nitro",         cardClass:"action", name:"氮氣噴射", speedValue:60, note:"", color:"red" },
+  drag:          { type:"drag",          cardClass:"action", name:"風阻減免", speedValue:15, note:"若使用此牌換道而吃到對手尾流、尾流加成 +20", canChangeLane:true, slipstreamBonusOnLaneChange:20, color:"basic" },
+  laneRhythm:    { type:"laneRhythm",    cardClass:"action", name:"換道節奏", speedValue:15, note:"加速後換道且消耗 1 胎（Demo 先改為消耗 1 手牌）", canChangeLane:true, discardOnPlay:1, color:"red" },
+  nitro:         { type:"nitro",         cardClass:"action", name:"氮氣噴射", speedValue:60, note:"消耗 1 胎（Demo 先改為消耗 1 手牌）", discardOnPlay:1, color:"red" },
   reignite:      { type:"reignite",      cardClass:"action", name:"重燃引擎", speedValue:25, note:"下回合手牌 +1", drawNextHand:1, color:"green" },
-  drift:         { type:"drift",         cardClass:"action", name:"甩尾過彎", speedValue:0,  note:"僅彎道：必觸 QTE，依結果調整賽道加成（成功 +60 / Good +30 / Miss -10）", driftQte:true, requireBend:true, color:"blue" },
+  drift:         { type:"drift",         cardClass:"action", name:"甩尾過彎", speedValue:0,  note:"僅彎道可使用：必定觸發彎道 QTE、依結果獲得額外賽道加成（通過 +30、失敗 -20）", driftQte:true, requireBend:true, driftBonusPass:30, driftBonusFail:-20, color:"blue" },
   chill:         { type:"chill",         cardClass:"action", name:"冷靜應對", speedValue:10, note:"本動 QTE 容錯 +50%", qteForgive:0.5, color:"yellow" },
-  smoothOp:      { type:"smoothOp",      cardClass:"action", name:"賽車節奏", speedValue:20, note:"前一動作也是指令牌 → +40", smoothOperator:true, color:"black" },
-  mistake:       { type:"mistake",       cardClass:"action", name:"失誤",     speedValue:0,  note:"無效果", color:"basic" },
+  smoothOp:      { type:"smoothOp",      cardClass:"action", name:"賽車節奏", speedValue:20, note:"若前一行動有結算指令效果、此牌結算加速度為 40", smoothOperator:true, color:"black" },
+  mistake:       { type:"mistake",       cardClass:"action", name:"失誤",     speedValue:0,  note:"無效果（由彎道 QTE 失敗加入牌庫）", color:"basic" },
 };
 
 
@@ -251,6 +251,6 @@ export const STAGE2_TEAM_CARDS = {
   backup:           { type:"backup",           cardClass:"team", name:"後援車隊",     note:"裝備後生效；防守失敗時不掉名次，觸發一次後消失",   effect:"saveOnDefeat",        value:1,                          trigger:"equip", persistence:"oneShot",    persistenceLabel:"觸發後棄",  color:"team" },
   // === 打出類（trigger: play）— 進牌庫、需要打出才生效 ===
   fuelMaster:       { type:"fuelMaster",       cardClass:"team", name:"燃料管理大師", note:"本回合內、所有指令牌 +5 速度",                   effect:"cardBonusThisRound",  value:5,                          trigger:"play",  persistence:"thisRound",  persistenceLabel:"本回合",    color:"team" },
-  rhythmCoach:      { type:"rhythmCoach",      cardClass:"team", name:"節奏教練",     note:"本回合內、連續同名指令牌：第 2 張 +10、第 3 張 +20", effect:"comboBonusThisRound", value:10,                         trigger:"play",  persistence:"thisRound",  persistenceLabel:"本回合",    color:"team" },
+  rhythmCoach:      { type:"rhythmCoach",      cardClass:"team", name:"節奏教練",     note:"本回合內、連續結算指令牌：第 2 張 +10、第 3 張 +20", effect:"comboBonusThisRound", value:10,                         trigger:"play",  persistence:"thisRound",  persistenceLabel:"本回合",    color:"team" },
 };
 export const STAGE2_ALL_CARDS = { ...STAGE2_COMMAND_CARDS, ...STAGE2_TEAM_CARDS };

@@ -1915,9 +1915,11 @@ function checkBendSpeedLimit() {
 //   兩階段：
 //     A. 立即：準備好 arrows / secs、設旗標 _pendingBendQteTrigger
 //     B. 飛字播完後：實際切 mode = "splash-bend"、確認按鈕才會出現
+//   context: "circuit" — 進入彎道段時自動觸發、失敗給失誤牌
+//            "drift"   — 打 drift 卡時觸發、結果調整玩家速度（+30 / -20）、不給失誤牌
 //   設計意圖：避免賽道結算飛字（中道 +10、×1.25 等）跟「油污！」警告飛字
 //             還在播時、QTE 確認按鈕就跑出來、視覺亂且在小視窗會被擋。
-function triggerBendQTE() {
+function triggerBendQTE(context = "circuit") {
   const step = speedTierStep(app.playerSpeed);
   const baseSecs = 6;
   const secs = Math.max(2, baseSecs * Math.pow(0.90, step));
@@ -1926,6 +1928,8 @@ function triggerBendQTE() {
     arrows: generateBendArrows(step),
     secs,
   };
+  // 記錄 QTE 的觸發來源（影響結算與後續流程）
+  app._bendQteContext = context;
   // 設旗標：advanceCircuitOnCard 末端會看這個、不去排切段閘門
   // 飛字閘門解開後才真正進 splash-bend
   app._pendingBendQteTrigger = true;
@@ -1933,7 +1937,7 @@ function triggerBendQTE() {
     if (!app._pendingBendQteTrigger) return;  // 被取消（保險）
     app._pendingBendQteTrigger = false;
     app.mode = "splash-bend";
-    app.message = "緊急過彎！";
+    app.message = (context === "drift") ? "甩尾過彎！" : "緊急過彎！";
     app.qteStart = performance.now();
   });
 }
@@ -1957,10 +1961,18 @@ function consumeSlipstreamDelta() {
     return 0;
   }
   s2.slipstreamUsed = true;
-  app.opponentActionFx = { label: "尾流！速度 +30", until: performance.now() + 1800, positive: true };
+  // 風阻減免：若本回合用過 drag 換道、尾流加成 +bonus（套一次後清旗標）
+  const bonus = s2.dragSlipstreamBonus || 0;
+  const total = 30 + bonus;
+  if (bonus > 0) {
+    s2.dragSlipstreamBonus = 0;
+    app.opponentActionFx = { label: `尾流！速度 +${total}（風阻減免 +${bonus}）`, until: performance.now() + 1800, positive: true };
+  } else {
+    app.opponentActionFx = { label: "尾流！速度 +30", until: performance.now() + 1800, positive: true };
+  }
   // 教學：通知尾流事件
   tutorialNotify("slipstream");
-  return 30;
+  return total;
 }
 // 尾流視覺檢查（不改速度，只用於 UI 顯示同道提示）
 function checkSlipstream() {
@@ -2386,6 +2398,11 @@ function playCardToLane(cardIdx, targetLane) {
       s2.lastActionWasCard = false;
       s2.lastCardType = null;
       s2.lastCardSameStreak = 0;
+      s2.cardComboStreak = 0;
+      // 風阻減免：用此牌換道時、本回合後續吃尾流時 +bonus
+      if (card.slipstreamBonusOnLaneChange) {
+        s2.dragSlipstreamBonus = card.slipstreamBonusOnLaneChange;
+      }
       // 記錄玩家動作後是否跟對手同道（用於步驟 3 嘲諷檢測）
       const wasSameLane = (app.playerLane === app.opponentLane);
       // 標記待結算動作 → 對手過場結束後執行步驟 3+4
@@ -2425,6 +2442,22 @@ function playCardToLane(cardIdx, targetLane) {
       // 反 allIn：下回合多抽 1 張
       s2.penaltyNextHand = (s2.penaltyNextHand || 0) + card.drawNextHand;
     }
+    // drift（甩尾過彎）：強制觸發彎道 QTE、結果由 endBendQte 的 "drift" 分支結算
+    // pendingAction 延後到 QTE 結束後再執行（保留 wasSameLane 判定給嘲諷流程）
+    if (card.driftQte) {
+      const wasSameLane = (app.playerLane === app.opponentLane);
+      app._driftQteCard = card;
+      app._driftQtePendingAction = { kind: "card", card, wasSameLane };
+      // 標記指令牌連擊鏈仍在（drift 也是指令牌、應該連到 smoothOp / rhythmCoach）
+      s2.lastActionWasCard = true;
+      s2.cardComboStreak = (s2.cardComboStreak || 0) + 1;
+      // 教學
+      tutorialNotify("playCard");
+      tutorialNotify("playerAction");
+      // 觸發彎道 QTE（context = "drift"）
+      triggerBendQTE("drift");
+      return;
+    }
     // ─ 各速度來源 per-source 結算（pop + 套用 + Boss 抽成） ─
     // 1. 卡牌主效果
     const baseCardSpd = card.speedValue || 0;
@@ -2436,24 +2469,20 @@ function playCardToLane(cardIdx, targetLane) {
     if (hasFuelMaster) {
       playerSpeedSource(5, "燃料管理大師");
     }
-    // 3. rhythmCoach：連續同名指令牌 +10 / +20
+    // 3. rhythmCoach：連續結算指令牌 +10 / +20（不限同名）
     const hasRhythmCoach = s2.teamCardsActive.some(c => c.effect === "comboBonusThisRound");
     if (hasRhythmCoach) {
-      // 計算「本回合連續同名打的張數」（含當前這張）
-      const lastSameNameStreak = (s2.lastCardType === card.type)
-        ? (s2.lastCardSameStreak || 1) + 1
-        : 1;
-      s2.lastCardType = card.type;
-      s2.lastCardSameStreak = lastSameNameStreak;
-      if (lastSameNameStreak === 2) {
+      // 本回合連續結算指令牌的張數（含當前這張）
+      const streak = (s2.lastActionWasCard ? (s2.cardComboStreak || 1) + 1 : 1);
+      s2.cardComboStreak = streak;
+      if (streak === 2) {
         playerSpeedSource(10, "連擊");
-      } else if (lastSameNameStreak >= 3) {
+      } else if (streak >= 3) {
         playerSpeedSource(20, "連擊×3");
       }
     } else {
-      // 沒裝 rhythmCoach 也要記錄、玩家可能後續再裝
-      s2.lastCardType = card.type;
-      s2.lastCardSameStreak = (s2.lastCardType === card.type) ? (s2.lastCardSameStreak || 1) + 1 : 1;
+      // 沒裝 rhythmCoach 也要記錄 streak、玩家可能後續打車隊牌再啟用
+      s2.cardComboStreak = (s2.lastActionWasCard ? (s2.cardComboStreak || 1) + 1 : 1);
     }
     // 4. smoothOperator（賽車節奏）：若前一動作也是指令牌（不論種類） → 額外 +20
     if (card.smoothOperator && s2.lastActionWasCard) {
@@ -2462,6 +2491,17 @@ function playCardToLane(cardIdx, targetLane) {
     // chill（冷靜應對）：本動 QTE 容錯 +qteForgive（用 flag 傳到 QTE 結算處）
     if (card.qteForgive) {
       s2.chillForgiveActive = card.qteForgive;
+    }
+    // discardOnPlay：打出時棄 N 張手牌（Demo 用、未來會改為扣輪胎）
+    // 例：nitro / laneRhythm 都是 discardOnPlay:1
+    if (card.discardOnPlay && app.hand.length > 0) {
+      const n = Math.min(card.discardOnPlay, app.hand.length);
+      for (let i = 0; i < n; i++) {
+        const idx = Math.floor(Math.random() * app.hand.length);
+        const discarded = app.hand.splice(idx, 1)[0];
+        if (s2) s2.discardPile.push(discarded);
+      }
+      pushSpeedPop("player", `棄 ${n} 張（${card.name}）`, "rgba(255,170,90,0.95)");
     }
     // 標記「上一動作是指令牌」給下次 smoothOperator 用
     s2.lastActionWasCard = true;
@@ -2486,6 +2526,18 @@ function playCardToLane(cardIdx, targetLane) {
     app.cornerPickFromLane = app.playerLane;  // 紀錄選道前位置（取消用）
     app.mode = "stage2-corner-pick-lane";
     // 對手回合在玩家選完道後才觸發（見選道完成處）
+    return;
+  }
+
+  // drift 卡：打到自己道、必觸發甩尾 QTE、結果決定額外速度（+30 / -20）
+  // 走完標準卡牌結算（speedValue=0、smoothOp/combo 已套用）、但先 hold 對手回合
+  // 等 drift QTE 結算完才推進對手回合
+  if (card.driftQte && isStage2()) {
+    // 把 pendingAction 暫存到 drift 流程中、QTE 結算完才送出
+    app._driftQteCard = card;
+    app._driftQtePendingAction = app.pendingAction;
+    app.pendingAction = null;  // 避免 finishPlayerAction 被誤觸
+    triggerBendQTE("drift");
     return;
   }
 
@@ -3673,6 +3725,8 @@ function stage2StartNewRound() {
   s2.teamCardsActive = s2.teamCardsActive.filter(c => c.persistence !== "thisRound");
   s2.lastCardType = null;
   s2.lastCardSameStreak = 0;
+  s2.cardComboStreak = 0;          // 新版 rhythmCoach 連擊計數（不限同名）
+  s2.dragSlipstreamBonus = 0;      // drag 換道時暫存的尾流加成
   s2.lastActionWasCard = false;
   // 空力區（穩定區）：每回合歸零
   app.stabilityCharges = 0;
@@ -4434,11 +4488,23 @@ function handleButton(id) {
   if (id === "stage2-to-reward" && app.mode === "stage2-overtake-result") {
     // 棄掉「名次上升時棄」的車隊牌
     discardOnRankUp();
+    // 先檢查勝利條件：如果剛剛超過的是最後一位（含 BOSS）、直接進勝利、不彈獎勵
+    const s2 = app.stage2;
+    if (s2 && s2.ahead.length === 0) {
+      stage2OnGameWin();
+      return;
+    }
     stage2BeginRewardPick();
     return;
   }
   // 沒超車（一般 result） → 進新回合
   if (id === "stage2-next-round" && (app.mode === "stage2-no-overtake" || app.mode === "stage2-defense-result" || app.mode === "stage2-overtake-result")) {
+    // 勝利條件早檢查：超過 Boss 後 ahead 為空 → 直接勝利
+    const s2 = app.stage2;
+    if (s2 && s2.ahead.length === 0) {
+      stage2OnGameWin();
+      return;
+    }
     stage2StartNewRound();
     return;
   }
@@ -9856,6 +9922,41 @@ function drawStage2DefenseResultModal() {
 
 // ─── 彎道 QTE（Helldivers 箭頭風格）──────────────────────────────────────
 function endBendQte(success) {
+  const context = app._bendQteContext || "circuit";
+  // ── Drift 卡 QTE 結算分支 ──
+  if (context === "drift") {
+    const card = app._driftQteCard;
+    const bonus = success
+      ? (card?.driftBonusPass || 30)
+      : (card?.driftBonusFail || -20);
+    // 套用速度變動（會走 Boss 抽成、飛字）
+    playerSpeedSource(bonus, success ? "甩尾通過" : "甩尾失敗");
+    app.bendQteResult = { success, mistakeCount: 0, slippedTo: null, context: "drift" };
+    app.mode = "bend-qte-result";
+    tutorialNotify("driftAttempt");
+    // 1.5 秒後自動繼續：啟動延後的對手回合
+    setTimeout(() => {
+      if (app.mode === "bend-qte-result") {
+        app.mode = "playing";
+        const pending = app._driftQtePendingAction;
+        app._driftQtePendingAction = null;
+        app._driftQteCard = null;
+        app._bendQteContext = null;
+        if (pending) {
+          app.pendingAction = pending;
+          // 等飛字播完才啟動對手回合（drift bonus 飛字仍可能在播）
+          deferUntilSpeedPopsClear(() => {
+            triggerOpponentActions();
+            checkAutoPrompt();
+          });
+        } else {
+          checkAutoPrompt();
+        }
+      }
+    }, 1500);
+    return;
+  }
+  // ── 賽道進場彎道 QTE 結算（原本邏輯）──
   let mistakeCount = 0;
   if (!success) {
     // 失敗：1 張失誤牌進牌庫頂（輪胎機制已移除）
@@ -9866,7 +9967,7 @@ function endBendQte(success) {
       app.stage2.drawPile.unshift(makeCard("mistake", uid));
     }
   }
-  app.bendQteResult = { success, mistakeCount, slippedTo: null };
+  app.bendQteResult = { success, mistakeCount, slippedTo: null, context: "circuit" };
   app.mode = "bend-qte-result";
   // 教學：彎道 QTE 完成（成功/失敗）→ 推進
   tutorialNotify("bendAttempt");
@@ -9879,6 +9980,7 @@ function endBendQte(success) {
         app.stage2.pendingCircuitAdvance = false;
         advanceCircuitToNextSegment();
       }
+      app._bendQteContext = null;
       checkAutoPrompt();
     }
   }, 1500);
@@ -9912,13 +10014,25 @@ function drawBendQteResult() {
   const ctx = app.ctx;
   ctx.fillStyle = "rgba(0,0,0,0.5)";
   ctx.fillRect(0, 0, app.w, app.h);
-  const extraRows = (r.mistakeCount > 0 ? 1 : 0);
+  const isDrift = r.context === "drift";
+  const extraRows = (r.mistakeCount > 0 || isDrift) ? 1 : 0;
   const boxW = 360, boxH = 130 + extraRows * 26;
   const boxX = app.w/2 - boxW/2;
   const boxY = app.h/2 - boxH/2;
   const border = r.success ? "rgba(100,255,160,0.6)" : "rgba(255,80,80,0.7)";
   roundPanel(boxX, boxY, boxW, boxH, 12, "rgba(6,14,28,0.97)", border, 2);
   const cx = boxX + boxW/2;
+  if (isDrift) {
+    // Drift 結算顯示
+    if (r.success) {
+      text("甩尾通過！", cx, boxY + 48, 24, "#7be0a0", "1000", "center");
+      text("漂亮過彎、額外速度 +30", cx, boxY + 82, 13, "rgba(180,230,200,0.85)", "700", "center");
+    } else {
+      text("甩尾失敗！", cx, boxY + 48, 24, "#ff8a8a", "1000", "center");
+      text("打滑、速度 -20", cx, boxY + 82, 13, "rgba(255,200,180,0.85)", "700", "center");
+    }
+    return;
+  }
   if (r.success) {
     text("彎道通過！", cx, boxY + 48, 24, "#7be0a0", "1000", "center");
     text("安全過彎", cx, boxY + 82, 13, "rgba(180,230,200,0.8)", "700", "center");
