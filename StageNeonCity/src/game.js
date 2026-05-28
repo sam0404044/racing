@@ -4023,6 +4023,8 @@ function stage2OnDefenseEnd(success) {
 // 通關 = 整個遊戲勝利
 function stage2OnGameWin() {
   app.mode = "all-clear";
+  // 記錄第二關通關 → 解鎖第三關（progress.js）
+  window.FinalDriverProgress?.markLevelCleared?.(2);
 }
 // 跑完設定的最大回合數 = 越過終點線、依當前名次結束
 function stage2OnFinishLineReached() {
@@ -4756,6 +4758,8 @@ function handleButton(id) {
   }
   // 重新來過
   if (id === "replay") { reset(); return; }
+  // 通關勝利畫面：返回關卡選擇（比照第一關）
+  if (id === "back-to-levels") { window.location.href = "../index.html?levels=1"; return; }
 }
 
 // ─── Update ────────────────────────────────────────────────────────────────
@@ -7799,7 +7803,7 @@ function drawStartModal() {
   const box = getCenteredModalBox(420, 300);
   drawModalPanel(box);
   const cx = box.x+box.w/2;
-  text("最後車手", cx, box.y+62*UI_SCALE, 36, "#dfeeff", "900", "center");
+  text("霓虹城市賽道", cx, box.y+62*UI_SCALE, 36, "#dfeeff", "900", "center");
   text("Final Driver — 機制驗證場", cx, box.y+88*UI_SCALE, 12, "rgba(150,180,220,0.55)", "700", "center");
   const ctx = app.ctx;
   ctx.save(); ctx.strokeStyle="rgba(120,170,220,0.3)"; ctx.lineWidth=1; ctx.setLineDash([5,5]);
@@ -7888,9 +7892,9 @@ function drawDefenseResultModal() {
 function drawAllClear() {
   const ctx = app.ctx;
   ctx.fillStyle = "rgba(0,0,0,0.72)"; ctx.fillRect(0,0,app.w,app.h);
-  text("通關！", app.w/2, app.h*0.38, 56, "#ffd94f", "1000", "center");
-  text("Final Driver — 機制驗證場", app.w/2, app.h*0.52, 20, "rgba(200,220,255,0.8)", "700", "center");
-  button("replay", "再玩一次", app.w/2-110, app.h*0.62, 220, 52, false, "start");
+  text("桿位", app.w/2, app.h*0.38, 56, "#ffd94f", "1000", "center");
+  text("在霓虹城市賽道獲得第一名", app.w/2, app.h*0.52, 20, "rgba(200,220,255,0.8)", "700", "center");
+  button("back-to-levels", "返回關卡選擇", app.w/2-110, app.h*0.62, 220, 52, false, "start");
 }
 
 // ─── 第五關繪製 ────────────────────────────────────────────────────────────
@@ -9264,7 +9268,7 @@ function drawStage2SidePanel(time) {
   const panelH = 16 + 34 + 22 + rankBlockH + 16 + teamCardsH + 80;
   roundPanel(x, y, w, panelH, 12, "rgba(10,18,28,0.88)", "rgba(120,170,220,0.35)", 1.5);
   curY = y + 16;
-  text("機制驗證場", x + 14, curY + 14, 17, "rgba(255,220,120,0.85)", "900");
+  text("霓虹城市賽道", x + 14, curY + 14, 17, "rgba(255,220,120,0.85)", "900");
   // 回合計時：顯示「回合 X / MAX」，最後 3 回合時用警示色
   const maxR = s2.maxRounds || 20;
   const curR = Math.min(maxR, Math.max(1, s2.roundsPlayed || 1));
