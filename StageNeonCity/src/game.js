@@ -11,6 +11,7 @@
 
 import {
   RHYTHM_DURATIONS,
+  RHYTHM_BASE_INTERVAL,
   RHYTHM_BEAT_ERROR_PERFECT,
   RHYTHM_BEAT_ERROR_GOOD,
   RHYTHM_FORMAL_EASY_PERFECT,
@@ -660,11 +661,12 @@ function getCardEffectiveSpeed(card) {
   const base = card.speedValue || 0;
   if (!isStage2() || card.cardClass !== "action") return { value: base, modified: false, delta: 0 };
   const s2 = app.stage2;
-  if (!s2 || !s2.teamCardsActive) return { value: base, modified: false, delta: 0 };
+  if (!s2) return { value: base, modified: false, delta: 0 };
   let delta = 0;
-  for (const c of s2.teamCardsActive) {
-    // fuelMaster：所有指令牌 +5
-    if (c.effect === "cardBonusThisRound") delta += (c.value || 0);
+  // fuelMaster（紅色行動牌）：已啟用時、之後打出的指令牌 +10
+  //   fuelMaster 自己（effect==="cardBonusThisRound"、speedValue 0）不吃加成
+  if (s2.fuelMasterBonusThisRound && card.effect !== "cardBonusThisRound") {
+    delta += s2.fuelMasterBonusThisRound;
   }
   return { value: base + delta, modified: delta !== 0, delta };
 }
@@ -993,7 +995,7 @@ const TUTORIAL_STEPS = [
     advance: "continue",
   },
   // 超車——丟牌到穩定區（降 QTE 難度）
-  //   要丟 2 張才推進（requireCount: 2）
+  //   穩定區已有 2 張才推進（advanceCheck，看區內當前張數、非玩家放牌次數）
   //   dropToStabilityOnly: 玩家可拖牌、但只能丟到穩定區（其他地方都擋）
   {
     id: "tryOvertakeStability",
@@ -1021,7 +1023,8 @@ const TUTORIAL_STEPS = [
     },
     textPos: () => ({ x: app.w * 0.5, y: app.h * 0.35 }),
     advance: "stabilityDrop",
-    requireCount: 2,
+    // 判定改為「穩定區已有 2 張」而非「玩家放了 2 張」
+    advanceCheck: () => (app.stabilityCharges || 0) >= 2,
     dropToStabilityOnly: true,
     strictGate: true,  // 擋超車鈕、Pass 鈕
   },
@@ -1712,6 +1715,12 @@ function tutorialNotify(event) {
   const step = TUTORIAL_STEPS[t.stepIndex];
   if (!step) return;
   if (step.advance === event) {
+    // step.advanceCheck：以「當前狀態」判定是否推進（取代事件次數累加）
+    //   例：放牌到穩定區那步，看的是「穩定區已有 N 張」而非「玩家放了 N 次」
+    if (typeof step.advanceCheck === "function") {
+      if (step.advanceCheck()) tutorialAdvance();
+      return;
+    }
     // 支援 step.requireCount：要這個 event 觸發 N 次才推進
     const need = step.requireCount || 1;
     if (need > 1) {
@@ -2155,6 +2164,7 @@ function initStage2State() {
     drawPile: [],     // 抽牌堆（真實 deck，會逐張消耗）
     discardPile: [],  // 棄牌堆（打出的牌進這）
     teamCardsActive: [],
+    fuelMasterBonusThisRound: 0,
     rewardOptions: [],
     rewardPickAnim: null,
     rewardSlotHover: -1,
@@ -2536,10 +2546,13 @@ function playCardToLane(cardIdx, targetLane) {
     if (baseCardSpd) {
       playerSpeedSource(baseCardSpd, card.name || "加速");
     }
-    // 2. fuelMaster：本回合內所有指令牌 +5
-    const hasFuelMaster = s2.teamCardsActive.some(c => c.effect === "cardBonusThisRound");
-    if (hasFuelMaster) {
-      playerSpeedSource(5, "燃料管理大師");
+    // 2. fuelMaster（紅色行動牌）：打出後本回合內、之後打出的指令牌 +10
+    //    打出 fuelMaster 當下設旗標（行動牌打出即棄、不進 teamCardsActive）
+    if (card.effect === "cardBonusThisRound") {
+      s2.fuelMasterBonusThisRound = card.value || 10;
+    } else if (s2.fuelMasterBonusThisRound) {
+      // 已啟用 fuelMaster → 之後打出的指令牌吃加成
+      playerSpeedSource(s2.fuelMasterBonusThisRound, "燃料管理大師");
     }
     // 3. rhythmCoach：連續結算指令牌 +10 / +20（不限同名）
     const hasRhythmCoach = s2.teamCardsActive.some(c => c.effect === "comboBonusThisRound");
@@ -2564,17 +2577,8 @@ function playCardToLane(cardIdx, targetLane) {
     if (card.qteForgive) {
       s2.chillForgiveActive = card.qteForgive;
     }
-    // discardOnPlay：打出時棄 N 張手牌（Demo 用、未來會改為扣輪胎）
-    // 例：nitro / laneRhythm 都是 discardOnPlay:1
-    if (card.discardOnPlay && app.hand.length > 0) {
-      const n = Math.min(card.discardOnPlay, app.hand.length);
-      for (let i = 0; i < n; i++) {
-        const idx = Math.floor(Math.random() * app.hand.length);
-        const discarded = app.hand.splice(idx, 1)[0];
-        if (s2) s2.discardPile.push(discarded);
-      }
-      pushSpeedPop("player", `棄 ${n} 張（${card.name}）`, "rgba(255,170,90,0.95)");
-    }
+    // discardOnPlay：打出時棄 N 張手牌 — 改為玩家自選（在本動作後段開 modal）
+    // 例：nitro / laneRhythm 都是 discardOnPlay:1。實際棄牌由 resolveStage2DiscardPick 處理。
     // 標記「上一動作是指令牌」給下次 smoothOperator 用
     s2.lastActionWasCard = true;
     // 記錄玩家動作後是否跟對手同道（用於步驟 3 嘲諷檢測）
@@ -2588,12 +2592,27 @@ function playCardToLane(cardIdx, targetLane) {
     app.playerSpeed += card.speedValue;
   }
 
+  // discardOnPlay：改為玩家自選棄牌。先開選牌 modal、選完才接後段流程（換道 / 對手回合）。
+  //   - 手牌為空時不需棄（等同免費）、直接進後段。
+  //   - nitro：選完棄牌 → 直接對手回合；laneRhythm：選完棄牌 → 再進選道 modal。
+  if (isStage2() && card.discardOnPlay && app.hand.length > 0) {
+    const n = Math.min(card.discardOnPlay, app.hand.length);
+    app._discardPick = { card, remaining: n, total: n };
+    app.mode = "stage2-discard-pick";
+    return;  // 等玩家點手牌；resolveStage2DiscardPick 棄完後接 proceedAfterCardPlay
+  }
+
+  proceedAfterCardPlay(card);
+}
+
+// 卡牌打出後段流程：換道 modal / drift QTE / 開啟對手回合。
+// 從 playCardToLane 末端抽出、讓「玩家自選棄牌」modal 能插在中間、選完再回來接。
+function proceedAfterCardPlay(card) {
   // v0.9 canChangeLane（換道節奏 laneRhythm）：
-  //   - 拖本道  → 加 speedValue、扣胎、然後進選道 modal 讓玩家選要換去哪
+  //   - 拖本道  → 加 speedValue、然後進選道 modal 讓玩家選要換去哪
   //   - 拖別道  → 在前面已被當成標準棄牌換道處理過、根本進不到這裡
   // 注意：不能先 checkAutoPrompt！若這張是手牌最後一張，checkAutoPrompt 會把
   // mode 切到 prompt-overtake-or-pass、導致選道分支被跳過、永遠進不了選道。
-  // 直接進選道 modal、選完道之後（line 2505 區）才會呼叫 checkAutoPrompt。
   if (card.canChangeLane && app.laneCount > 1) {
     app.cornerPickFromLane = app.playerLane;  // 紀錄選道前位置（取消用）
     app.mode = "stage2-corner-pick-lane";
@@ -2601,11 +2620,9 @@ function playCardToLane(cardIdx, targetLane) {
     return;
   }
 
-  // drift 卡：打到自己道、必觸發甩尾 QTE、結果決定額外速度（+30 / -20）
-  // 走完標準卡牌結算（speedValue=0、smoothOp/combo 已套用）、但先 hold 對手回合
+  // drift 卡：打到自己道、必觸發甩尾 QTE、結果決定額外速度
   // 等 drift QTE 結算完才推進對手回合
   if (card.driftQte && isStage2()) {
-    // 把 pendingAction 暫存到 drift 流程中、QTE 結算完才送出
     app._driftQteCard = card;
     app._driftQtePendingAction = app.pendingAction;
     app.pendingAction = null;  // 避免 finishPlayerAction 被誤觸
@@ -2618,6 +2635,25 @@ function playCardToLane(cardIdx, targetLane) {
     triggerOpponentActions();
     checkAutoPrompt();
   });
+}
+
+// 玩家在 stage2-discard-pick modal 點了某張手牌 → 棄掉它
+function resolveStage2DiscardPick(handIdx) {
+  const dp = app._discardPick;
+  if (!dp) return;
+  if (handIdx < 0 || handIdx >= app.hand.length) return;
+  const discarded = app.hand.splice(handIdx, 1)[0];
+  const s2 = app.stage2;
+  if (s2 && discarded) s2.discardPile.push(discarded);
+  dp.remaining -= 1;
+  pushSpeedPop("player", `棄「${discarded?.name || "1 張"}」（${dp.card.name}）`, "rgba(255,170,90,0.95)");
+  // 還要再棄、且手牌還有 → 留在 modal 繼續選
+  if (dp.remaining > 0 && app.hand.length > 0) return;
+  // 棄完：清狀態、回 playing、接後段流程
+  const card = dp.card;
+  app._discardPick = null;
+  app.mode = "playing";
+  proceedAfterCardPlay(card);
 }
 
 // 動作後半：對手過場結束後執行
@@ -3633,6 +3669,13 @@ function isStage2() {
 function stage2BeginRewardPick() {
   const s2 = app.stage2;
   if (!s2) return;
+  // 新手教學期間不出現選牌：直接開始新回合
+  if (s2.tutorial?.active) {
+    s2.rewardOptions = [];
+    s2.rewardSlotHover = -1;
+    stage2StartNewRound();
+    return;
+  }
   // 牌池：1 指令 + 1 車隊 + 1 隨機（三張之間互不重複）
   //   - 排除 mistake：失誤牌只能從 QTE 懲罰取得、絕不在獎勵階段出現
   //   - 排除 color === "basic"：基本牌（加速、風阻減免）不在獎勵出現、玩家初始牌庫已有
@@ -3798,6 +3841,7 @@ function stage2StartNewRound() {
   s2.lastCardType = null;
   s2.lastCardSameStreak = 0;
   s2.cardComboStreak = 0;          // 新版 rhythmCoach 連擊計數（不限同名）
+  s2.fuelMasterBonusThisRound = 0; // 燃料管理大師（行動牌）本回合加成、每回合歸零
   s2.dragSlipstreamBonus = 0;      // drag 換道時暫存的尾流加成
   s2.lastActionWasCard = false;
   // 空力區（穩定區）：每回合歸零
@@ -4069,23 +4113,15 @@ function resetRhythmState() {
   app.qteScoreMax = null;
   app.qteScorePass = null;
   app.qteScatterPos = generateRowScatterPositions();
-  // 按鍵分配（QWER，避免連續重複）
-  const keys = ['q','w','e','r'];
-  const assigned = [];
-  for (let i = 0; i < circleCount; i++) {
-    let pick;
-    do { pick = keys[Math.floor(Math.random() * keys.length)]; }
-    while (assigned.length > 0 && pick === assigned[assigned.length - 1]);
-    assigned.push(pick);
-  }
-  app.qteKeys = assigned;
+  // 超車 QTE 改為純滑鼠點擊（不再分配 QWER 按鍵）
+  app.qteKeys = [];
   app.qteCircleCount = circleCount;  // 儲存供繪製和結算用
 }
 
 function rhythmStarts(start, circleCount) {
   circleCount = circleCount || 5;
-  // 基礎間隔 620ms，依圓圈數生成
-  const baseInterval = 620;
+  // 基礎間隔：依圓圈數生成（值由 config.js RHYTHM_BASE_INTERVAL 控制）
+  const baseInterval = RHYTHM_BASE_INTERVAL;
   const diff = currentLaneQteDiffResolved();
   let scale = 1;
   if (diff === "easy") scale = 1.25;
@@ -4107,7 +4143,6 @@ function isRhythmMode() { return app.mode === "rhythm-formal"; }
 
 function rhythmOutcomeFromTap(tap, startMs, durationMs, judgeT) {
   if (!tap || tap.t > judgeT) return "miss";
-  if (tap.wrong) return "miss"; // 按錯鍵
   const beatT = startMs + durationMs;
   const errSec = Math.abs(tap.t - beatT) / 1000;
   const win = rhythmBeatWindowSec();
@@ -4309,6 +4344,14 @@ function setupInput() {
     const p = point(e);
     app.mouse = p;
     if (app.drag) { app.drag.x = p.x - app.drag.dx; app.drag.y = p.y - app.drag.dy; }
+    // 三選一卡片 hover（依繪製時記錄的矩形，確保命中與顯示一致）
+    if (app.mode === "stage2-reward" && app.stage2) {
+      let hovSlot = -1;
+      for (const r of (app._rewardCardRects || [])) {
+        if (inRect(p, r)) { hovSlot = r.slot; break; }
+      }
+      app.stage2.rewardSlotHover = hovSlot;
+    }
   });
 
   function onDown(e) {
@@ -4337,6 +4380,13 @@ function setupInput() {
     }
     const hit = hitButton(p);
     if (hit) { handleButton(hit); return; }
+    // 三選一：直接點卡片即選擇（略過鈕已由上方 hitButton 處理）
+    if (app.mode === "stage2-reward") {
+      for (const r of (app._rewardCardRects || [])) {
+        if (inRect(p, r)) { stage2OnRewardPicked(r.slot); return; }
+      }
+      return;  // 點空白處不做事、消化點擊
+    }
     // corner-pick mode：檢查是否點到某道
     if (app.mode === "stage2-corner-pick-lane" && app.cornerLaneRects) {
       for (const lr of app.cornerLaneRects) {
@@ -4351,6 +4401,12 @@ function setupInput() {
           return;
         }
       }
+      return;
+    }
+    // discard-pick mode：點手牌選擇要棄的牌（modal 期間消化所有點擊）
+    if (app.mode === "stage2-discard-pick") {
+      const cardHit = [...(app.zones.cards || [])].reverse().find(item => inRect(p, item.rect));
+      if (cardHit) resolveStage2DiscardPick(cardHit.index);
       return;
     }
     if (isRhythmMode()) { hitCircle(p); return; }
@@ -4379,6 +4435,7 @@ function setupInput() {
     // 必須先檢查、因為 stability zone 在左下、會被下方寬版的「取消區」y 範圍包住
     const stabZone = app.zones.stabilityZone;
     if (stabZone && inRect(p, stabZone)) {
+      if (tutorialBlocksStabilityDrop()) { app.drag = null; return; }
       dropCardToStability(app.drag.from);
       app.drag = null;
       return;
@@ -4413,6 +4470,7 @@ function setupInput() {
     // 空力區（穩定區）優先（理由同上）
     const stabZone = app.zones.stabilityZone;
     if (stabZone && inRect(p, stabZone)) {
+      if (tutorialBlocksStabilityDrop()) { app.drag = null; return; }
       dropCardToStability(app.drag.from);
       app.drag = null;
       return;
@@ -4437,7 +4495,7 @@ function setupInput() {
     app.drag = null;
   });
 
-  // QWER 按鍵 QTE
+  // 鍵盤輸入：僅彎道 QTE（WASD）；超車 QTE 已改純滑鼠點擊
   document.addEventListener("keydown", e => {
     // 彎道 QTE 鍵盤輸入（WASD）
     if (app.mode === "bend-qte") {
@@ -4449,26 +4507,27 @@ function setupInput() {
       handleBendQteInput(dir);
       return;
     }
-    if (!isRhythmMode()) return;
-    const key = e.key.toLowerCase();
-    if (!['q','w','e','r'].includes(key)) return;
-    const now = performance.now();
-    const circleCount = app.qteCircleCount || 5;
-    for (let i = 0; i < circleCount; i++) {
-      if (app.qteFinalized[i]) continue;
-      const start = app.qteCircleStarts[i] ?? app.qteStart;
-      if (now < start) continue;
-      const dur = getRhythmDuration(i);
-      const judgeT = start + dur;
-      if (now > judgeT) continue;
-      const expectedKey = app.qteKeys[i];
-      if (key === expectedKey) {
-        if (!app.qteTapPending[i]) app.qteTapPending[i] = { t: now };
-      } else {
-        if (!app.qteTapPending[i]) app.qteTapPending[i] = { t: now, wrong: true };
+    // 空白鍵：當教學「繼續」按鈕可見時、等同按下繼續
+    if (e.key === " " || e.code === "Space") {
+      const t = app.stage2?.tutorial;
+      const step = t?.active ? TUTORIAL_STEPS[t.stepIndex] : null;
+      let continueVisible = false;
+      if (step) {
+        if (step.advance === "continue") {
+          continueVisible = true;
+        } else if (step.advance === "countdownThenContinue") {
+          const delay = step.autoDelay ?? 3000;
+          const elapsed = performance.now() - (t.stepShownAt ?? performance.now());
+          continueVisible = elapsed >= delay;
+        }
       }
-      break;
+      if (continueVisible) {
+        e.preventDefault();
+        tutorialAdvance();
+      }
+      return;
     }
+    // 超車 QTE 改為純滑鼠點擊（見 hitCircle）；鍵盤不再參與
   });
 }
 
@@ -4487,6 +4546,24 @@ function point(e) {
   return SCV.screenToWorld(cssPoint, app.viewport);
 }
 
+// 取教學步驟的 index（依 id；找不到回 -1）
+function tutorialStepIndexOf(id) {
+  return TUTORIAL_STEPS.findIndex(s => s.id === id);
+}
+
+// 教學限制：是否禁止丟到穩定區？
+// 1) 「超車 5/11」(tryOvertakeStability) 之前都禁止
+// 2) 「對手 6/10」(opponentTryAction) 該步要玩家換道躲避、也禁止丟空力分心
+function tutorialBlocksStabilityDrop() {
+  const t = app.stage2?.tutorial;
+  if (!t?.active) return false;
+  const step = TUTORIAL_STEPS[t.stepIndex];
+  if (step?.id === "opponentTryAction" || step?.id === "slipstream") return true;
+  const stabStep = tutorialStepIndexOf("tryOvertakeStability");
+  if (stabStep < 0) return false;
+  return t.stepIndex < stabStep;
+}
+
 // 教學限制：是否要禁止丟到這個道？
 // playCard 步：只能丟自己道
 // changeLane 步：只能丟「沒對手、也不是玩家」的道（避開對手 + 演示換道）
@@ -4503,7 +4580,18 @@ function tutorialBlocksDropOnLane(laneIdx) {
   if (stepId === "changeLane"
       && (laneIdx === app.playerLane || laneIdx === app.opponentLane)) return true;
   if (stepId === "opponentTryAction" && laneIdx === app.playerLane) return true;
+  if (stepId === "slipstream" && laneIdx !== app.playerLane) return true;  // 吃尾流：只能留在本道、不能切道
   if (stepId === "bendTry" && laneIdx !== 0) return true;  // 只允許丟到內彎
+  // 換道教學（換道 2/2 laneCost）起、到「opponentTryAction」之前：禁止再換道
+  //   laneCost 為 noOverlay 步、玩家仍可拖牌、故含這步本身（>=）
+  //   （opponentTryAction 那步才又需要換道躲避）
+  const laneCostIdx = tutorialStepIndexOf("laneCost");
+  const oppTryIdx = tutorialStepIndexOf("opponentTryAction");
+  if (laneCostIdx >= 0 && oppTryIdx >= 0
+      && t.stepIndex >= laneCostIdx && t.stepIndex < oppTryIdx
+      && laneIdx !== app.playerLane) {
+    return true;  // 只能打自己道、不能換道
+  }
   return false;
 }
 
@@ -4603,12 +4691,7 @@ function handleButton(id) {
     stage2StartNewRound();
     return;
   }
-  // 三選一：選擇 / 略過
-  if (id && id.startsWith("stage2-reward-pick-") && app.mode === "stage2-reward") {
-    const slot = parseInt(id.replace("stage2-reward-pick-", ""), 10);
-    stage2OnRewardPicked(slot);
-    return;
-  }
+  // 三選一：選牌已改為「直接點卡片」（見 onDown）；此處僅保留略過
   if (id === "stage2-reward-skip" && app.mode === "stage2-reward") {
     stage2OnRewardSkip();
     return;
@@ -4803,14 +4886,16 @@ function drawInner(time) {
   if (m === "stage2-boss-transition")   { drawNcc7BossTransition(time); return; }
   if (m === "stage2-boss-intro")        { drawNcc7BossIntroScreen(time); drawExpressionDock(time); return; }
   if (m === "stage2-corner-pick-lane")  { drawStage2CornerLanePick(time); drawExpressionDock(time); return; }
+  if (m === "stage2-discard-pick")      { drawStage2DiscardPick(time); drawExpressionDock(time); return; }
 
-  // HUD 常駐
+  // HUD 常駐（超車 QTE 時收掉車部件 HUD 保持畫面乾淨；狀態 HUD 比照第一關保留）
   drawHud(time);
-  drawCarPartsHud(time);
+  if (!isRhythmMode()) drawCarPartsHud(time);
   // 主關卡常駐：右上角下一賽段預告 + 賽況面板
+  //   超車 QTE 期間全部收掉（不相關、避免畫面雜亂）
   if (m === "playing" || m === "prompt-overtake-or-pass" || m === "stage2-overtake-result"
       || m === "stage2-no-overtake" || m === "stage2-defense-result" || m === "stage2-reward"
-      || m === "bend-qte" || m === "bend-qte-result" || m.startsWith("splash") || isRhythmMode() || m === "defense") {
+      || m === "bend-qte" || m === "bend-qte-result" || m.startsWith("splash") || m === "defense") {
     drawSpeedLimitAR(time);
     drawStage2SidePanel(time);
     drawStage2NextCircuit(time);
@@ -6198,8 +6283,8 @@ function drawDragHighlight(time, h, horizon) {
 
 // ─── HUD ───────────────────────────────────────────────────────────────────
 function statusHudRect() {
-  // 輪胎搬到左下「車子部件」面板後、本面板高度從 250 縮成 200
-  return { x: app.w - 300, y: app.h - 200 - 24, w: 276, h: 200 };
+  // 名次 / 速度 / 對手 / 穩定（穩定列為與第一關面板項目一致而新增）
+  return { x: app.w - 300, y: app.h - 236 - 24, w: 276, h: 236 };
 }
 
 function drawHud(time) {
@@ -6277,6 +6362,12 @@ function drawHud(time) {
                                    : `下動 → ${nextOppSpd}（${deltaStr}）`;
     text(predictStr, s.x+s.w-20, s.y+178, 11, arrowColor, "800", "right");
   }
+
+  // ── 穩定性 ── (y 200-) 與第一關面板項目一致；數值取自空力區充能
+  hr(s.y+198);
+  const stab = app.stabilityCharges || 0;
+  text("穩定性", s.x+20, s.y+222, 13, "rgba(120,220,160,0.7)", "700");
+  text(`${stab}`, s.x+s.w-20, s.y+222, 15, "rgba(150,240,180,0.95)", "900", "right");
 }
 
 // ─── 車子部件 HUD（左下、SC1 復古未來主義線框風）──────────────────────
@@ -7705,7 +7796,7 @@ function drawModalPanel(box, accent) {
 }
 
 function drawStartModal() {
-  const box = getCenteredModalBox(460, 440);
+  const box = getCenteredModalBox(420, 300);
   drawModalPanel(box);
   const cx = box.x+box.w/2;
   text("最後車手", cx, box.y+62*UI_SCALE, 36, "#dfeeff", "900", "center");
@@ -7714,13 +7805,11 @@ function drawStartModal() {
   ctx.save(); ctx.strokeStyle="rgba(120,170,220,0.3)"; ctx.lineWidth=1; ctx.setLineDash([5,5]);
   ctx.beginPath(); ctx.moveTo(box.x+40*UI_SCALE,box.y+102*UI_SCALE); ctx.lineTo(box.x+box.w-40*UI_SCALE,box.y+102*UI_SCALE); ctx.stroke();
   ctx.setLineDash([]); ctx.restore();
-  text("你是車隊領隊，透過打牌以指揮車手", cx, box.y+140*UI_SCALE, 16, "#e8f0ff", "700", "center");
-  text("駕駛賽車超過前車。", cx, box.y+164*UI_SCALE, 16, "#e8f0ff", "700", "center");
-  button("start-game", "開始遊戲", cx-110, box.y+220*UI_SCALE, 220, 48, false, "start");
-  // 測試按鈕區
-  text("[ 測試模式 ]", cx, box.y+290*UI_SCALE, 11, "rgba(255,140,180,0.6)", "700", "center");
-  button("test-skip-tutorial", "跳過新手教學", cx-90, box.y+302*UI_SCALE, 180, 36, false, "gray");
-  button("test-skip-to-boss",  "直接打 NCC-7",   cx-90, box.y+346*UI_SCALE, 180, 36, false, "gray");
+  // 敘述：置中於框中段
+  text("你是車隊領隊，透過打牌以指揮車手", cx, box.y+162*UI_SCALE, 16, "#e8f0ff", "700", "center");
+  text("駕駛賽車超過前車。", cx, box.y+186*UI_SCALE, 16, "#e8f0ff", "700", "center");
+  // 開始按鈕：置底
+  button("start-game", "開始遊戲", cx-110, box.y+box.h-48-24, 220, 48, false, "start");
 }
 
 function drawPromptModal() {
@@ -9754,63 +9843,71 @@ function drawStage2FinishLineModal() {
   button("replay", "再試一次", cx - 110, cy + 130, 220, 50, false, isWin ? "start" : "primary");
 }
 
-// 三選一獎勵
+// 三選一獎勵（卡片風格與手牌一致：直接用 drawCard 等比放大繪製）
 function drawStage2RewardModal(time) {
   const s2 = app.stage2;
   if (!s2) return;
-  const box = getCenteredModalBox(720, 540);
+  const ctx = app.ctx;
+  const box = getCenteredModalBox(720, 490);
   drawModalPanel(box, "rgba(255,200,80,0.5)");
   const cx = box.x + box.w/2;
-  text("✦ 三選一:成長與調整 ✦", cx, box.y+50*UI_SCALE, 22, "#ffd980", "1000", "center");
-  text("這場比賽中，你...", cx, box.y+80*UI_SCALE, 13, "rgba(255,230,160,0.75)", "700", "center");
-  // 三張卡
-  const cardW = 200;
-  const cardH = 340;
-  const gap = 24;
+  text("車手持續在賽場上成長", cx, box.y+44*UI_SCALE, 22, "#ffd980", "1000", "center");
+  text("選擇 1 張加入車手牌組", cx, box.y+72*UI_SCALE, 13, "rgba(255,230,160,0.75)", "700", "center");
+
+  // 卡片本體沿用手牌 drawCard 的內部佈局，水平放大 ×1.45（字級維持此放大下的大小）
+  // 「卡片變長」靠加大傳入的高度（baseH），而非調整 SCALE → 字體不會跟著變大。
+  //   drawCard 頭部偏移為固定值（不吃 h）所以不動；速度大字/圖示用 h 比例 → 自然往中段分散；
+  //   note 貼底往上排 → 自動跟著新底部。
+  const SCALE = 1.45;
+  const baseW = 122, baseH = 210;   // 原 164 → 210，卡片變長、字級不變
+  const cardW = baseW * SCALE;   // ≈ 177
+  const cardH = baseH * SCALE;   // ≈ 305
+  const gap = 30;
   const totalW = cardW * 3 + gap * 2;
   const startX = cx - totalW/2;
-  const cardY = box.y+110*UI_SCALE;
+  const cardY = box.y + 100*UI_SCALE;
+  app._rewardCardRects = [];
+
   for (let i = 0; i < 3; i++) {
     const c = s2.rewardOptions[i];
     if (!c) continue;
     const cx0 = startX + i * (cardW + gap);
     const hov = (s2.rewardSlotHover === i);
-    // 卡牌底
-    const cardBg = hov ? "rgba(255,220,140,0.95)" : "rgba(245,235,210,0.95)";
-    const cardBorder = c.cardClass === "team" ? "rgba(80,160,120,0.9)" : "rgba(200,100,40,0.9)";
-    roundPanel(cx0, cardY, cardW, cardH, 14, cardBg, cardBorder, 2);
-    // 類別（放大 11→14）
-    const typeLabel = c.cardClass === "team" ? "車隊牌" : "指令牌";
-    const typeColor = c.cardClass === "team" ? "#3a7a5a" : "#a85020";
-    text(typeLabel, cx0 + cardW/2, cardY + 26, 14, typeColor, "800", "center");
-    // 名字
-    text(c.name, cx0 + cardW/2, cardY + 66, 18, "#2a2418", "900", "center");
-    // 中央大字速度（v0.9 UI；speedValue=0 或車隊牌不顯示）
-    if (typeof c.speedValue === "number" && c.speedValue !== 0) {
-      const sv = c.speedValue;
-      const speedStr = sv > 0 ? `+${sv}` : `${sv}`;
-      const speedColor = sv > 0 ? "#1a7a30" : "#a02030";
-      text(speedStr, cx0 + cardW/2, cardY + 120, 38, speedColor, "1000", "center");
+    app._rewardCardRects.push({ slot: i, x: cx0, y: cardY, w: cardW, h: cardH });
+
+    // hover：整張微抬升 + 用 drawCard 的 dragging 態（更亮背景、加粗邊框）當高亮
+    const lift = hov ? 8 : 0;
+    const drawX = cx0;
+    const drawY = cardY - lift;
+
+    ctx.save();
+    ctx.translate(drawX, drawY);
+    ctx.scale(SCALE, SCALE);
+    // 在 122×164 的本地座標系畫卡，風格與手牌完全一致
+    drawCard(c, 0, 0, baseW, baseH, hov);
+    ctx.restore();
+
+    // hover 外圈光暈（畫在縮放外、避免線寬被放大）
+    if (hov) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,220,140,0.9)";
+      ctx.lineWidth = 2.5;
+      const hx = drawX - 2, hy = drawY - 2, hw = cardW + 4, hh = cardH + 4, rr = 12;
+      ctx.beginPath();
+      ctx.moveTo(hx + rr, hy);
+      ctx.arcTo(hx + hw, hy, hx + hw, hy + hh, rr);
+      ctx.arcTo(hx + hw, hy + hh, hx, hy + hh, rr);
+      ctx.arcTo(hx, hy + hh, hx, hy, rr);
+      ctx.arcTo(hx, hy, hx + hw, hy, rr);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
     }
-    // 效果敘述（放大 11→14，行距 16→20）
-    const lines = wrapTextLines(c.note || "", cardW - 24, 14);
-    let ly = cardY + 168;
-    for (const ln of lines) {
-      text(ln, cx0 + cardW/2, ly, 14, "#3a3020", "700", "center");
-      ly += 20;
-    }
-    // 持續時機 + 進場方式（車隊牌）— 放大 10→13
-    if (c.cardClass === "team" && c.persistenceLabel) {
-      const isInstant = c.persistence === "permanent";
-      const instantLabel = isInstant ? "★ 選後直接進場" : "進牌庫，打出後生效";
-      const lblColor = isInstant ? "rgba(180,120,60,0.95)" : "rgba(60,120,90,0.85)";
-      text(`⌛ ${c.persistenceLabel}`, cx0 + cardW/2, cardY + cardH - 96, 13, "rgba(60,120,90,0.85)", "700", "center");
-      text(instantLabel, cx0 + cardW/2, cardY + cardH - 76, 13, lblColor, "800", "center");
-    }
-    // 選擇按鈕 - 給足完整高度
-    button(`stage2-reward-pick-${i}`, "選這張", cx0 + 14, cardY + cardH - 56, cardW - 28, 44, false, "start");
+
+    // hover 提示：點卡片即可選擇（取代原本的「選這張」按鈕）
   }
-  button("stage2-reward-skip", "略過（不拿）", cx - 90, box.y+box.h-58*UI_SCALE, 180, 42, false, "gray");
+  // 略過鈕置底
+  button("stage2-reward-skip", "略過（不拿）", cx - 90, box.y + box.h - 56, 180, 40, false, "gray");
 }
 
 // 簡易文字斷行
@@ -9907,6 +10004,38 @@ function drawStage2CornerLanePick(time) {
   text("完美過彎：選擇要切換到的道", boxX + boxW/2, boxY + 30, 18, "#ffd980", "1000", "center");
   text("點選任一道（含原道）以結束本次行動", boxX + boxW/2, boxY + 58, 12, "rgba(220,230,255,0.85)", "700", "center");
   button("stage2-corner-cancel-pick", "不換道", app.w - 130, 26, 110, 36, false, "gray");
+}
+
+// 玩家自選棄牌 modal：點手牌任一張將其棄置（nitro / laneRhythm 的代價）
+// 沒有取消按鈕——棄牌是已打出牌的強制代價、必須選一張。
+function drawStage2DiscardPick(time) {
+  const ctx = app.ctx;
+  // 底層場景（手牌稍後畫在遮罩上方、保持明亮可點）
+  drawRace(time);
+  drawHud(time);
+  drawCarPartsHud(time);
+  drawStage2SidePanel(time);
+  drawStage2NextCircuit(time);
+
+  // 半透明遮罩
+  ctx.save();
+  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  ctx.fillRect(0, 0, app.w, app.h);
+  ctx.restore();
+
+  // 手牌畫在遮罩上方 → 玩家從中點選要棄的牌
+  drawHand(time);
+
+  // 頂部提示框
+  const dp = app._discardPick;
+  const boxW = 480, boxH = 92;
+  const boxX = app.w/2 - boxW/2;
+  const boxY = 30;
+  roundPanel(boxX, boxY, boxW, boxH, 12, "rgba(6,14,28,0.95)", "rgba(255,170,90,0.65)", 2);
+  const cardName = dp?.card?.name || "";
+  text(`${cardName}：選擇要棄掉的手牌`, boxX + boxW/2, boxY + 30, 18, "#ffc070", "1000", "center");
+  const sub = (dp && dp.total > 1) ? `還需棄 ${dp.remaining} 張 — 點選手牌` : "點選一張手牌將其棄置";
+  text(sub, boxX + boxW/2, boxY + 58, 12, "rgba(220,230,255,0.85)", "700", "center");
 }
 
 
@@ -10013,7 +10142,7 @@ function drawQteDifficultyPanel(qteType) {
   if (qteType === "overtake") {
     const circleCount = Math.min(10, Math.round(5 * Math.pow(1.10, step)));
     const intervalScale = laneDiff === "easy" ? 1.25 : laneDiff === "hard" ? 0.75 : 1.0;
-    const interval = Math.round(620 * intervalScale);
+    const interval = Math.round(RHYTHM_BASE_INTERVAL * intervalScale);
     subline = `圓圈 ${circleCount} 顆　間隔 ${interval}ms`;
   } else if (qteType === "defense") {
     const totalSecs = Math.max(3, 10 * Math.pow(0.90, step));
@@ -10190,18 +10319,9 @@ function drawOvertakeAnim(time) {
 }
 
 function drawRhythm(time) {
+  const ctx = app.ctx;
   const pos = app.qteScatterPos;
   app.zones.circles = [];
-
-  // 底部按鍵提示列
-  const keyLabels = ['Q','W','E','R'];
-  const kbY = app.h - 42;
-  text("按鍵：", app.w/2 - 160, kbY, 14, "rgba(180,180,180,0.7)", "700", "center");
-  keyLabels.forEach((k, i) => {
-    const kx = app.w/2 - 60 + i * 44;
-    roundPanel(kx-16, kbY-18, 32, 28, 6, "rgba(20,30,50,0.9)", "rgba(255,217,79,0.55)", 1.5);
-    text(k, kx, kbY, 16, "rgba(255,217,79,0.9)", "900", "center");
-  });
 
   const circleCount = app.qteCircleCount || 5;
   for (let i = 0; i < circleCount; i++) {
@@ -10222,35 +10342,42 @@ function drawRhythm(time) {
       y = app.h * 0.44;
     }
     app.zones.circles.push({ i, x, y, r: outerR, duration: dur });
-    const ctx = app.ctx;
-    const keyLabel = (app.qteKeys[i] ?? '?').toUpperCase();
-    ctx.save();
 
-    // 外圈
-    ctx.beginPath(); ctx.arc(x, y, outerR, 0, Math.PI*2);
-    ctx.strokeStyle="rgba(255,217,79,0.9)"; ctx.lineWidth=3; ctx.stroke();
-
-    // 收縮內圈
     if (!finalized) {
+      // 進行中（比照第一關）：內部半透明圓盤由大縮小 + 細黃外圈（外圈 = 點擊判定範圍）
+      ctx.save();
       const innerR = outerR * (1 - progress);
-      ctx.beginPath(); ctx.arc(x, y, Math.max(2, innerR), 0, Math.PI*2);
-      ctx.strokeStyle="rgba(255,150,80,0.7)"; ctx.lineWidth=2; ctx.stroke();
-      // 圓圈中央顯示按鍵字母
-      text(keyLabel, x, y+8, 22, "rgba(255,217,79,0.95)", "900", "center");
-      // 下方小鍵盤圖示
-      roundPanel(x-14, y+outerR+6, 28, 22, 5, "rgba(20,30,50,0.9)", "rgba(255,217,79,0.5)", 1.5);
-      text(keyLabel, x, y+outerR+20, 13, "rgba(255,217,79,0.9)", "900", "center");
-    }
-
-    // 判定結果
-    if (finalized && dismissAt && time <= dismissAt) {
+      if (innerR > 0.8) {
+        ctx.beginPath(); ctx.arc(x, y, innerR, 0, Math.PI*2);
+        ctx.fillStyle = "rgba(255,210,95,0.38)"; ctx.fill();
+        ctx.strokeStyle = "rgba(255,190,70,0.42)"; ctx.lineWidth = 1; ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(x, y, outerR, 0, Math.PI*2);
+      ctx.strokeStyle = "rgba(255,236,170,0.92)"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.restore();
+    } else if (dismissAt && time <= dismissAt) {
+      // 判定結果：整顆外圈填半透明色 + 細外框（perfect 淺綠 / good 淺黃 / miss 淺紅）
       const result = app.qteResults[i];
-      const col = result==="perfect"?"#ffd94f":result==="good"?"#80ef70":"#ff6b7a";
-      const label = result==="perfect"?"Perfect!":result==="good"?"Good":"Miss";
-      text(label, x, y+6, 16, col, "900", "center");
+      let fill, stroke, txtCol, label;
+      if (result === "perfect") {
+        fill = "rgba(130,235,150,0.32)"; stroke = "rgba(160,245,180,0.95)"; txtCol = "#a6efb6"; label = "Perfect";
+      } else if (result === "good") {
+        fill = "rgba(255,228,120,0.30)"; stroke = "rgba(255,235,150,0.95)"; txtCol = "#ffe89a"; label = "Good";
+      } else {
+        fill = "rgba(255,120,130,0.30)"; stroke = "rgba(255,160,170,0.95)"; txtCol = "#ff9aa6"; label = "Miss";
+      }
+      ctx.save();
+      ctx.beginPath(); ctx.arc(x, y, outerR, 0, Math.PI*2);
+      ctx.fillStyle = fill; ctx.fill();
+      ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.restore();
+      // 文字放在圈圈外部的底下
+      text(label, x, y + outerR + 22, 16, txtCol, "900", "center");
     }
-    ctx.restore();
   }
+
+  // 輕量操作提示（取代原本的 QWER 鍵盤列）
+  text("圓圈縮到外圈時點擊它", app.w/2, app.h - 36, 13, "rgba(200,210,230,0.55)", "700", "center");
 }
 
 function drawDefense() {

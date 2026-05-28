@@ -20,7 +20,7 @@ const CanvasQteTest = (() => {
    * CARD_REWARD_CHOICE / toast → card-reward-choice, card-reward-toast
    * FINAL_RESULT → final-win
    */
-  const OPPONENT_SPEED = 80;  // 對手速度（超車條件：玩家速度需超過此值）；目前固定、未來可動態化
+  const OVERTAKE_TARGET = 8;
   const BLIND_DESERT_CG_SRC = "../assets/blind-card-desert-boss.png";
   const BOSS_ENTRANCE_LAYER_SRCS = [
     "../assets/BOSS/boss-intro-red-banner.png",
@@ -48,23 +48,22 @@ const CanvasQteTest = (() => {
   bindBgmLoopFallback(normalBgm);
   bindBgmLoopFallback(bossBgm);
   /** 加速條滿刻度（數值仍可超過門檻與滿格） */
-  const ACCEL_METER_DISPLAY_MAX = 100;
+  const ACCEL_METER_DISPLAY_MAX = 10;
   const CARD_TYPES = {
-    accel: { type: "accel", name: "加速", value: "+20", note: "", color: "basic" },
-    throttle: { type: "throttle", name: "Push! Push!", value: "+10", note: "本回合所有加速牌 +10", color: "red" },
-    hyper_accel: { type: "hyper_accel", name: "渦輪增壓", value: "+30", note: "", color: "red" },
-    mistake: { type: "mistake", name: "失誤", value: "+0", note: "", color: "basic" },
-    reward_buff: { type: "reward_buff", name: "", value: "", note: "", color: "basic" },
+    accel: { type: "accel", name: "加速", value: "+2", note: "" },
+    throttle: { type: "throttle", name: "踩下油門", value: "", note: "本回合加速 +1" },
+    hyper_accel: { type: "hyper_accel", name: "超加速", value: "+3", note: "" },
+    mistake: { type: "mistake", name: "失誤", value: "+0", note: "" },
+    reward_buff: { type: "reward_buff", name: "", value: "", note: "" },
   };
 
   const COMMON_REWARD_BLUEPRINTS = [
-    { rewardId: "accel", type: "accel", name: "加速", category: "速度", rarity: "普通", effect: "", value: "+20", note: "", color: "basic" },
-    { rewardId: "hyper_accel", type: "hyper_accel", name: "渦輪增壓", category: "速度", rarity: "普通", effect: "", value: "+30", note: "", color: "red" },
+    { rewardId: "hyper_accel", type: "hyper_accel", name: "超加速", category: "速度", rarity: "普通", effect: "+3 速度", value: "+3", note: "" },
     { rewardId: "rhythm_preview", type: "reward_buff", name: "節奏預判", category: "超車 QTE", rarity: "普通", effect: "最後 1 顆圓圈變慢；Perfect 區 +25%", value: "", note: "" },
+    { rewardId: "stable_chassis", type: "reward_buff", name: "穩定底盤", category: "防守 QTE", rarity: "普通", effect: "綠區變寬、紅區變窄", value: "", note: "" },
   ];
   const RARE_REWARD_BLUEPRINTS = [
-    { rewardId: "fuel_boost", type: "throttle", name: "Push! Push!", category: "強化", rarity: "稀有", effect: "本回合所有加速牌 +10 速度", value: "+10", note: "本回合所有加速牌 +10", color: "red" },
-    { rewardId: "stable_chassis", type: "reward_buff", name: "穩定底盤", category: "防守 QTE", rarity: "稀有", effect: "綠區變寬、紅區變窄", value: "", note: "" },
+    { rewardId: "fuel_boost", type: "throttle", name: "踩下油門", category: "強化", rarity: "稀有", effect: "本回合所有加速牌 +1 速度", value: "", note: "本回合加速 +1" },
     { rewardId: "burst_tap", type: "reward_buff", name: "爆發踩點", category: "超車 QTE", rarity: "稀有", effect: "每次 Perfect 額外推進超車目標", value: "", note: "" },
     { rewardId: "precision_steer", type: "reward_buff", name: "精準轉向", category: "防守 QTE", rarity: "稀有", effect: "防守指標晃動幅度降低", value: "", note: "" },
     { rewardId: "focus_mode", type: "reward_buff", name: "專注模式", category: "通用 QTE", rarity: "稀有", effect: "本回合所有 QTE 節奏變慢 15%", value: "", note: "" },
@@ -117,8 +116,7 @@ const CanvasQteTest = (() => {
   }
 
   function effectiveOvertakeTarget() {
-    // 要超過的對手速度（爆發踩點 perk 可降低、讓超車更易）
-    return Math.max(50, OPPONENT_SPEED - app.burstTargetReduction);
+    return Math.max(5, OVERTAKE_TARGET - app.burstTargetReduction);
   }
 
   const app = {
@@ -175,9 +173,7 @@ const CanvasQteTest = (() => {
     resultFromOvertake: false,
     defenseRound: 0,
     defenseSucceeded: false,
-    carriedAcceleration: 10,
-    cardsPlayedThisLap: 0,      // 本回合已打牌數（行動制：取代 played.length 計數）
-    throttleBonusActive: false, // 燃料管理大師已啟用 → 之後打出的加速牌 +10
+    carriedAcceleration: 0,
     rewardOptions: [],
     rewardHoverSlot: -1,
     rewardPickAnim: null,
@@ -235,8 +231,7 @@ const CanvasQteTest = (() => {
   }
 
   function statusHudRect() {
-    // 狀態面板移到右下（比照第二關）：名次 / 速度 / 對手 / 穩定性
-    return { x: app.w - 280 - 24, y: app.h - 270 - 24, w: 280, h: 270 };
+    return { x: app.w - 312, y: 24, w: 288, h: 214 };
   }
 
   function cardTableVisible() {
@@ -364,8 +359,6 @@ const CanvasQteTest = (() => {
     app.deckSeq = 0;
     dealTutorialOpeningHand();
     app.played = [];
-    app.cardsPlayedThisLap = 0;
-    app.throttleBonusActive = false;
     app.stable = [];
     app.mode = "start-ready";
     app.bossStage = false;
@@ -400,7 +393,7 @@ const CanvasQteTest = (() => {
     app.resultFromOvertake = false;
     app.defenseRound = 0;
     app.defenseSucceeded = false;
-    app.carriedAcceleration = 10;  // 每回合起始速度 10
+    app.carriedAcceleration = 0;
     app.rewardOptions = [];
     app.rewardHoverSlot = -1;
     app.rewardPickAnim = null;
@@ -434,8 +427,6 @@ const CanvasQteTest = (() => {
     app.bossHitFx = null;
     app.mode = nextMode;
     app.played = [];
-    app.cardsPlayedThisLap = 0;
-    app.throttleBonusActive = false;
     app.stable = [];
     app.drag = null;
     app.tutorialAck = {};
@@ -453,7 +444,7 @@ const CanvasQteTest = (() => {
     app.resultFromOvertake = false;
     app.defenseRound = 1;
     app.defenseSucceeded = false;
-    app.carriedAcceleration = 10;  // 每回合起始速度 10
+    app.carriedAcceleration = 0;
     app.rewardOptions = [];
     app.rewardHoverSlot = -1;
     app.rewardPickAnim = null;
@@ -727,7 +718,7 @@ const CanvasQteTest = (() => {
           card.revealed = true;
           app.bossBlindPlaysRemaining -= 1;
         }
-        if (target === "play") applyCardImmediate(card);  // 行動制：即時結算、不留場上
+        if (target === "play") app.played.push(card);
         if (target === "stable") app.stable.push(card);
         advanceCards();
       }
@@ -798,7 +789,7 @@ const CanvasQteTest = (() => {
   }
 
   function advanceCards() {
-    if (app.mode === "tutorial-play" && app.cardsPlayedThisLap >= 4) {
+    if (app.mode === "tutorial-play" && app.played.length >= 4) {
       app.mode = "tutorial-stable";
       return;
     }
@@ -873,45 +864,18 @@ const CanvasQteTest = (() => {
     }
   }
 
-  // 行動制：打一張牌即時結算速度到 carriedAcceleration（牌不留場上）
-  function applyCardImmediate(card) {
-    const bonus = app.throttleBonusActive ? 10 : 0;
-    let gained = 0;
-    let effectStr = "";
-    if (card.type === "accel") {
-      gained = 20 + bonus;
-      app.carriedAcceleration += gained;
-    } else if (card.type === "hyper_accel") {
-      gained = 30 + bonus;
-      app.carriedAcceleration += gained;
-    } else if (card.type === "throttle") {
-      gained = 10;                            // Push! Push! 本牌 +10
-      app.carriedAcceleration += gained;
-      app.throttleBonusActive = true;          // 之後打出的加速牌 +10
-      effectStr = "本回合加速牌 +10";
-    }
-    // mistake：+0
-    app.cardsPlayedThisLap += 1;
-
-    // 打牌回饋：打出區上方浮動提示（名字 + 速度 + 效果、飄出淡出）
-    const buffed = bonus > 0 && (card.type === "accel" || card.type === "hyper_accel");
-    app.cardPlayToast = {
-      name: card.name || "",
-      speedStr: gained > 0 ? `+${gained}` : "",
-      buffed,
-      effectStr,
-      t0: performance.now(),
-    };
-  }
-
   function accelValue() {
-    // 行動制：速度已即時結算進 carriedAcceleration
-    return app.carriedAcceleration;
+    const bonus = app.played.some(card => card.type === "throttle") ? 1 : 0;
+    let sum = app.carriedAcceleration;
+    for (const card of app.played) {
+      if (card.type === "accel") sum += 2 + bonus;
+      if (card.type === "hyper_accel") sum += 3 + bonus;
+    }
+    return sum;
   }
 
   function canStartOvertake() {
-    // 超過對手速度即可超車
-    return accelValue() > effectiveOvertakeTarget();
+    return accelValue() >= effectiveOvertakeTarget();
   }
 
   function startOvertake() {
@@ -952,7 +916,7 @@ const CanvasQteTest = (() => {
       }
       if (ok) return pts;
     }
-    const minY = RHYTHM_OUTER_R + RHYTHM_UI_AVOID_PAD + 60;  // 畫面上方留白（不再參照狀態面板）
+    const minY = statusHudRect().y + statusHudRect().h + RHYTHM_OUTER_R + RHYTHM_UI_AVOID_PAD;
     const maxY = app.h - RHYTHM_OUTER_R - RHYTHM_UI_AVOID_PAD;
     const y = Math.min(maxY, Math.max(app.h * 0.42, minY));
     const gap = Math.min(130, app.w * 0.085);
@@ -985,8 +949,6 @@ const CanvasQteTest = (() => {
     else dealFiveFromDeck();
     if (app.bossStage) app.bossBlindPlaysRemaining = 2;
     app.played = [];
-    app.cardsPlayedThisLap = 0;
-    app.throttleBonusActive = false;
     app.stable = [];
   }
 
@@ -1057,7 +1019,7 @@ const CanvasQteTest = (() => {
     if (!isRhythmMode()) return;
     refreshDeckPerks();
     if (app.perkBurst) {
-      app.burstTargetReduction = Math.min(30, app.burstPerfectsThisRhythm * 10);
+      app.burstTargetReduction = Math.min(3, app.burstPerfectsThisRhythm);
     } else {
       app.burstTargetReduction = 0;
     }
@@ -1072,10 +1034,8 @@ const CanvasQteTest = (() => {
       reachedFirstPlace = nextRank === 1;
       app.rank = nextRank;
     }
-    app.carriedAcceleration = 10;  // 每回合起始速度 10
+    app.carriedAcceleration = 0;
     app.played = [];
-    app.cardsPlayedThisLap = 0;
-    app.throttleBonusActive = false;
     app.qteResolveAt = 0;
     app.qtesSinceReward += 1;
     app.winAfterOvertake = reachedFirstPlace;
@@ -1208,10 +1168,8 @@ const CanvasQteTest = (() => {
     else app.defenseProgress = Math.max(0, app.defenseProgress - diff.missPenalty);
     if (time - app.defenseStart >= 10000 || app.defenseProgress >= 100) {
       app.defenseSucceeded = app.defenseProgress >= 100;
-      app.carriedAcceleration = app.defenseSucceeded ? accelValue() : 10;  // 成功保留速度、失敗回到 10
+      app.carriedAcceleration = app.defenseSucceeded ? accelValue() : 0;
       app.played = [];
-      app.cardsPlayedThisLap = 0;
-      app.throttleBonusActive = false;
       app.qtesSinceReward += 1;
       app.mode = "defense-result";
     }
@@ -1280,7 +1238,7 @@ const CanvasQteTest = (() => {
     drawHud();
     if (cardTableVisible()) {
       drawPlayArea(time);
-      // drawDeckArea(time);  // 牌組 UI 已移除
+      drawDeckArea(time);
       if (stabilityDropVisible()) drawStabilityDrop(time);
       drawHand(time);
     }
@@ -1359,8 +1317,8 @@ const CanvasQteTest = (() => {
     if (m === "tutorial-defense-qte") return { mood: "nervous", label: "防守教學" };
     if (CARD_SURFACE_MODES.includes(m)) {
       if (m === "tutorial-play") {
-        if (app.cardsPlayedThisLap === 0) return { mood: "nervous", label: "緊張" };
-        if (app.cardsPlayedThisLap <= 2) return { mood: "nervous", label: "出牌偏難" };
+        if (app.played.length === 0) return { mood: "nervous", label: "緊張" };
+        if (app.played.length <= 2) return { mood: "nervous", label: "出牌偏難" };
         return { mood: "relaxed", label: "出牌變簡單" };
       }
       if (m === "tutorial-stable") {
@@ -1368,13 +1326,13 @@ const CanvasQteTest = (() => {
         return { mood: "relaxed", label: "穩定區簡單" };
       }
       if (m === "round2-cards") {
-        if (app.cardsPlayedThisLap === 0) return { mood: "nervous", label: "緊張" };
+        if (app.played.length === 0) return { mood: "nervous", label: "緊張" };
         const tgt = effectiveOvertakeTarget();
         const ax = accelValue();
         if (ax >= tgt) return { mood: "relaxed", label: "加速門檻簡單" };
-        if (app.cardsPlayedThisLap <= 2 && ax < tgt * 0.55) return { mood: "sweat", label: "組牌極難" };
-        if (app.cardsPlayedThisLap >= 3 && ax < tgt * 0.88) return { mood: "sweat", label: "時間壓力大" };
-        if (app.cardsPlayedThisLap <= 2) return { mood: "nervous", label: "組牌偏難" };
+        if (app.played.length <= 2 && ax < tgt * 0.55) return { mood: "sweat", label: "組牌極難" };
+        if (app.played.length >= 3 && ax < tgt * 0.88) return { mood: "sweat", label: "時間壓力大" };
+        if (app.played.length <= 2) return { mood: "nervous", label: "組牌偏難" };
         return { mood: "relaxed", label: "組牌尚可" };
       }
       if (m === "overtake-ready") {
@@ -1481,12 +1439,13 @@ const CanvasQteTest = (() => {
   }
 
   function qteAvoidRects(time) {
+    const hud = statusHudRect();
     const R = Math.min(56, app.w * 0.072);
     const cx = 18 + R;
     const cy = stabilityDropVisible() ? app.h - 240 - R : app.h - 20 - R - 10;
     const label = getExpressionState(typeof time === "number" ? time : performance.now()).label;
-    // 狀態面板（statusHudRect）在 QTE 階段不繪製、且已移到右下，故不再列為避讓對象
     const rects = [
+      inflateRect(hud, RHYTHM_UI_AVOID_PAD),
       inflateRect(rectFromBounds(expressionDockBounds(cx, cy, R, label)), RHYTHM_UI_AVOID_PAD),
     ];
     if (stabilityDropVisible()) {
@@ -1665,7 +1624,7 @@ const CanvasQteTest = (() => {
     drawHud();
     if (cardTableVisible()) {
       drawPlayArea(time);
-      // drawDeckArea(time);  // 牌組 UI 已移除
+      drawDeckArea(time);
       if (stabilityDropVisible()) drawStabilityDrop(time);
       drawHand(time);
     }
@@ -2131,7 +2090,7 @@ const CanvasQteTest = (() => {
     const val = accelValue();
     const cap = ACCEL_METER_DISPLAY_MAX;
     const thresh = effectiveOvertakeTarget();
-    text("速度", x, y, 18, "#d7e6f8", "800");
+    text("加速值", x, y, 18, "#d7e6f8", "800");
     text(`${val} / ${cap}`, x + 226, y, 18, "#f4f8ff", "800", "right");
     panel(x, y + 16, 232, 18, "rgba(10,16,28,0.9)", "rgba(154,190,232,0.62)");
     const innerX = x + 4;
@@ -2153,40 +2112,15 @@ const CanvasQteTest = (() => {
   }
 
   function drawHud() {
-    const s = statusHudRect();
-    panel(s.x, s.y, s.w, s.h, "rgba(8,18,32,0.88)", "rgba(105,164,224,0.50)");
-    const ctx = app.ctx;
-    const hr = y => {
-      ctx.save(); ctx.strokeStyle = "rgba(105,164,224,0.18)"; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(s.x + 16, y); ctx.lineTo(s.x + s.w - 16, y); ctx.stroke(); ctx.restore();
-    };
-
-    // ── 名次 ── 數值靠右（比照第二關）
-    text("名次", s.x + 22, s.y + 38, 18, "rgba(160,190,230,0.65)", "700");
-    text(`${app.rank} / ${app.rankTotal}`, s.x + s.w - 22, s.y + 38, 22, "rgba(214,228,255,0.95)", "900", "right");
-    hr(s.y + 60);
-
-    // ── 速度 ── 玩家當前速度（純數值、無 Bar）
-    const val = accelValue();
-    const oppSpd = effectiveOvertakeTarget();
-    text("速度", s.x + 22, s.y + 94, 18, "rgba(100,200,255,0.7)", "700");
-    text(`${val}`, s.x + s.w - 22, s.y + 102, 40, "rgba(120,220,255,0.95)", "900", "right");
-    hr(s.y + 128);
-
-    // ── 對手 ── 對手車速（超過即可超車；玩家速度超過時轉綠提示）
-    const canPass = val > oppSpd;
-    const oppColor = canPass ? "rgba(140,255,180,0.95)" : "rgba(255,150,150,0.95)";
-    text("對手", s.x + 22, s.y + 160, 18, "rgba(255,160,160,0.7)", "700");
-    text(`${oppSpd}`, s.x + s.w - 22, s.y + 166, 34, oppColor, "900", "right");
-    hr(s.y + 196);
-
-    // ── 穩定性 ── 純數值靠右、無 Bar、無 /5（比照第二關）
-    text("穩定性", s.x + 22, s.y + 230, 18, "rgba(120,220,160,0.7)", "700");
-    text(`${app.stable.length}`, s.x + s.w - 22, s.y + 230, 22, "rgba(150,240,180,0.95)", "900", "right");
-
+    const status = statusHudRect();
+    panel(status.x, status.y, status.w, status.h, "rgba(8,18,32,0.88)", "rgba(105,164,224,0.50)");
+    text("狀態", status.x + 22, status.y + 34, 24, "#cfe7ff", "700");
+    text(`本局名次 ${app.rank} / ${app.rankTotal}`, status.x + 22, status.y + 58, 14, "rgba(214,228,255,0.82)", "700");
+    drawAccelMeterRow(status.x + 22, status.y + 76);
+    meter("穩定性", `${app.stable.length} / 5`, status.x + 22, status.y + 134, app.stable.length * 20, "#80ef70");
     if (app.bossStage) {
-      text(app.bossStageName, s.x + 22, s.y + 258, 12, "#ffd94f", "900");
-      text("沙暴遮蔽", s.x + s.w - 22, s.y + 258, 11, "rgba(255,232,180,0.88)", "800", "right");
+      text(app.bossStageName, status.x + 22, status.y + 194, 15, "#ffd94f", "900");
+      text("沙暴：手牌與 QTE 遮蔽", status.x + 142, status.y + 194, 13, "rgba(255,232,180,0.88)", "800");
     }
   }
 
@@ -2209,33 +2143,6 @@ const CanvasQteTest = (() => {
       text("▲   ▲   ▲", x + width / 2, arrowY, 32, "rgba(255,179,187,0.78)", "900", "center");
     }
     drawMiniCards(app.played, x, y + 34, width, 58);
-
-    // 打牌回饋浮動提示：名字 + 速度 + 效果，從打出區上方往上飄、約 1.1 秒淡出
-    const toast = app.cardPlayToast;
-    if (toast) {
-      const DUR = 1100;
-      const age = (typeof time === "number" ? time : performance.now()) - toast.t0;
-      if (age >= 0 && age < DUR) {
-        const p = age / DUR;
-        const alpha = p < 0.15 ? p / 0.15 : (1 - (p - 0.15) / 0.85);  // 快進、慢出
-        const rise = 18 + p * 46;                                      // 往上飄
-        const baseY = y - 44 - rise;
-        const ctx = app.ctx;
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-        const speedCol = toast.buffed ? "rgba(140,255,180,0.98)" : "rgba(255,220,90,0.98)";
-        // 名字 + 速度（同一行）
-        const head = toast.speedStr ? `${toast.name}　${toast.speedStr}${toast.buffed ? " ▲" : ""}` : toast.name;
-        text(head, x + width / 2, baseY, 22, toast.speedStr ? speedCol : "rgba(210,220,235,0.95)", "1000", "center", true);
-        // 效果說明（第二行小字）
-        if (toast.effectStr) {
-          text(toast.effectStr, x + width / 2, baseY + 24, 14, "rgba(200,220,255,0.9)", "800", "center", true);
-        }
-        ctx.restore();
-      } else if (age >= DUR) {
-        app.cardPlayToast = null;
-      }
-    }
   }
 
   function drawStabilityDrop(time) {
@@ -2477,7 +2384,7 @@ const CanvasQteTest = (() => {
    * @param {object} [opts] `pickOffer`：進站選牌（顯示稀有度角標、分類小字，版面與手牌 reward 一致）
    */
   function cardViewModel(card) {
-    const value = card.value || (card.type === "hyper_accel" ? "+30" : card.type === "mistake" ? "+0" : card.type === "accel" ? "+20" : card.type === "throttle" ? "+10" : "");
+    const value = card.value || (card.type === "hyper_accel" ? "+3" : card.type === "mistake" ? "+0" : card.type === "accel" ? "+2" : "");
     const description = card.effect || card.note || value || "";
     return {
       name: card.name || "",
@@ -2736,99 +2643,79 @@ const CanvasQteTest = (() => {
     const blind = !!(opts && opts.blind);
     let view = cardViewModel(card);
     if (blind) {
-      view = { name: "盲牌", category: "沙暴遮蔽", rarity: "", description: "?" };
+      view = {
+        name: "盲牌",
+        category: "沙暴遮蔽",
+        rarity: "",
+        description: "?",
+      };
     }
-
-    // ── 色系主題（對齊第二關）：整張卡深色背景 + 亮色邊框依 card.color 變化 ──
-    const COLOR_THEMES = {
-      red:    { bg: "rgba(50, 12, 14, 0.96)",   bgDrag: "rgba(58, 14, 16, 0.98)",  border: "rgba(255, 100, 100, 0.85)", label: "rgba(255, 130, 130, 0.95)" },
-      black:  { bg: "rgba(18, 18, 22, 0.97)",   bgDrag: "rgba(24, 24, 28, 0.98)",  border: "rgba(170, 170, 200, 0.7)",  label: "rgba(200, 200, 220, 0.95)" },
-      yellow: { bg: "rgba(46, 36, 8, 0.96)",    bgDrag: "rgba(54, 42, 10, 0.98)",  border: "rgba(255, 215, 90, 0.85)",  label: "rgba(255, 225, 130, 0.98)" },
-      green:  { bg: "rgba(10, 38, 22, 0.96)",   bgDrag: "rgba(12, 44, 26, 0.98)",  border: "rgba(120, 230, 150, 0.85)", label: "rgba(150, 240, 180, 0.98)" },
-      blue:   { bg: "rgba(10, 26, 50, 0.96)",   bgDrag: "rgba(12, 30, 58, 0.98)",  border: "rgba(110, 180, 255, 0.85)", label: "rgba(140, 200, 255, 0.98)" },
-    };
-    const isRb = card.type === "reward_buff";
-    let bg, border;
-    const theme = card.color ? COLOR_THEMES[card.color] : null;
-    if (theme) {
-      bg = dragging ? theme.bgDrag : theme.bg;
-      border = theme.border;
-    } else {
-      // basic / reward_buff / 失誤 → 中性藍背景
-      bg = dragging ? "rgba(14,28,50,0.98)" : isRb ? "rgba(16,26,44,0.96)" : "rgba(14,28,50,0.96)";
-      border = isRb ? "rgba(110,150,210,0.6)" : "rgba(105,164,224,0.55)";
-    }
-
     ctx.save();
-    ctx.globalAlpha = dragging ? 0.92 : 1;
+    ctx.globalAlpha = dragging ? 0.88 : 1;
     ctx.shadowColor = "rgba(0,0,0,0.34)";
     ctx.shadowBlur = dragging ? 18 : 12;
     ctx.shadowOffsetX = dragging ? 5 : 4;
     ctx.shadowOffsetY = dragging ? 10 : 7;
-    roundPanel(x, y, w, h, 10, bg, border, dragging ? 2.5 : 2);
+    const g = ctx.createLinearGradient(x, y, x, y + h);
+    if (card.type === "throttle") {
+      g.addColorStop(0, "#fff6e8");
+      g.addColorStop(1, "#ecd8b6");
+    } else if (card.type === "hyper_accel") {
+      g.addColorStop(0, "#fff9f0");
+      g.addColorStop(1, "#f0dcc8");
+    } else if (card.type === "reward_buff") {
+      g.addColorStop(0, "#f4f8ff");
+      g.addColorStop(1, "#dce6f2");
+    } else {
+      g.addColorStop(0, "#faf8f4");
+      g.addColorStop(1, "#e8e2d6");
+    }
+    fillRoundRect(x, y, w, h, 12, g);
     ctx.shadowColor = "transparent";
-    ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
-
-    // 類型標籤（置中於頂部）：「X色 ‧ 動作」/ 強化 / 基礎
-    const COLOR_LABELS = { red: "紅色", black: "黑色", yellow: "黃色", green: "綠色", blue: "藍色" };
-    let typeLabel, typeColor;
-    if (blind) {
-      typeLabel = "沙暴遮蔽"; typeColor = "rgba(255,224,150,0.9)";
-    } else if (isRb) {
-      typeLabel = "強化"; typeColor = "rgba(140,190,255,0.85)";
-    } else if (theme && COLOR_LABELS[card.color]) {
-      typeLabel = `${COLOR_LABELS[card.color]} ‧ 動作`;
-      typeColor = theme.label;
-    } else {
-      typeLabel = "基礎 ‧ 動作"; typeColor = "rgba(100,180,255,0.7)";
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    const barH = 4;
+    const barGap = 7;
+    const barTop = y + h - barH;
+    ctx.save();
+    beginRoundRectPath(ctx, x, y, w, h, 12);
+    ctx.clip();
+    const rarityBar = view.rarity === "稀有"
+      ? "#d9a72f"
+      : view.rarity === "普通"
+        ? "#7f90a8"
+        : card.type === "throttle" ? "#8f7d62" : card.type === "hyper_accel" ? "#c45c28" : card.type === "reward_buff" ? "#4a6a9e" : "#5c6f63";
+    ctx.fillStyle = rarityBar;
+    ctx.fillRect(x, barTop, w, barH);
+    ctx.restore();
+    text(view.name, x + 14, y + 26, 16, "#3d3528", "900", "left", true);
+    if (view.category) {
+      text(view.category, x + 14, y + 46, 12, "#5a6b82", "800", "left", true);
     }
-    text(typeLabel, x + w/2, y + 16, 10, typeColor, "700", "center", true);
-
-    // 卡名（置中）
-    text(blind ? "盲牌" : view.name, x + w/2, y + 42, 15, "#e8f0ff", "900", "center", true);
-
-    if (blind) {
-      drawBlindCardSandVeil(x, y, w, h);
-      ctx.restore();
-      return;
-    }
-
-    // 中央大字：速度數值（accel/throttle/hyper_accel 用 card.value，如 "+20"）
-    //   Push! Push!（throttle）已啟用時，其他加速牌即時 +10 → 數字變綠 + ▲（比照第二關）
-    const _v = card.value || "";
-    const showSpeed = !isRb && /[+-]?\d/.test(_v) && _v !== "+0";
-    if (showSpeed) {
-      const base = parseInt(_v, 10) || 0;
-      // 只有 accel / hyper_accel 會吃 Push! Push! 加成（throttle 自己是觸發者、不吃）
-      const buffed = app.throttleBonusActive && (card.type === "accel" || card.type === "hyper_accel");
-      const eff = buffed ? base + 10 : base;
-      const speedStr = eff > 0 ? `+${eff}` : `${eff}`;
-      const speedColor = buffed ? "rgba(140,255,160,0.95)" : "rgba(255,220,90,0.98)";
-      text(speedStr, x + w/2, y + h*0.56, 40, speedColor, "1000", "center", true);
-      if (buffed) {
-        text("▲", x + w*0.84, y + h*0.40, 13, "rgba(140,255,160,0.85)", "900", "center", true);
-      }
-    } else {
-      // reward_buff / 失誤 → 中央圖示
-      const iconSize = isRb && pickOffer ? 34 : isRb ? 42 : 46;
-      const iconCy = isRb ? y + h*(pickOffer ? 0.34 : 0.36) : y + h*0.44;
-      drawCardCenterIcon(card, x + w/2, iconCy, iconSize);
-    }
-
-    // 效果敘述（從底部往上排）
-    if (view.description && view.description !== _v) {
-      const descSize = isRb ? (pickOffer ? 10 : 10.5) : pickOffer ? 10.5 : 12;
-      const lineH = descSize + 4;
-      const maxLines = isRb ? 3 : pickOffer ? 3 : 2;
-      const lines = wrapTextToLines(view.description, w - 24, descSize, maxLines);
-      const bottomY = y + h - 12;
-      let ty = bottomY - (lines.length - 1) * lineH;
-      for (const ln of lines) {
-        text(ln, x + w/2, ty, descSize, "rgba(200,220,255,0.78)", "700", "center", true);
+    const cx = x + w / 2;
+    const isRb = card.type === "reward_buff";
+    const hasDescription = !!view.description;
+    const iconSize = isRb && pickOffer ? 34 : isRb ? 42 : 50;
+    let iconCy = isRb ? y + h * (pickOffer ? 0.33 : 0.34) : y + h * 0.42;
+    if (hasDescription && !isRb) iconCy -= pickOffer ? 2 : 4;
+    if (!blind) drawCardCenterIcon(card, cx, iconCy, iconSize);
+    let descriptionTop = barTop - 12;
+    if (hasDescription) {
+      const descSize = blind ? 38 : isRb ? (pickOffer ? 10 : 10.5) : pickOffer ? 10.5 : 13;
+      const lineH = isRb ? descSize + 3 : descSize + 5;
+      const padX = 14;
+      const maxLines = blind ? 1 : isRb ? 3 : pickOffer ? 3 : 2;
+      const lines = wrapTextToLines(view.description, w - padX * 2, descSize, maxLines);
+      const totalH = lines.length * lineH;
+      descriptionTop = blind ? y + h * 0.56 - totalH / 2 : isRb ? barTop - 10 - totalH : barTop - 16 - totalH;
+      let ty = descriptionTop + descSize * 0.82;
+      for (let li = 0; li < lines.length; li++) {
+        text(lines[li], cx, ty, descSize, blind ? "#fff0b8" : "#3a4558", blind ? "1000" : "800", "center", true);
         ty += lineH;
       }
     }
-
+    if (blind) drawBlindCardSandVeil(x, y, w, h);
     ctx.restore();
   }
 
@@ -3058,16 +2945,14 @@ const CanvasQteTest = (() => {
     text("教學提示", box.x + padX, box.y + 58, 30, "#dfeeff", "900");
     text(teachingPageText(), box.x + padX, box.y + 100, 28, "#ffd94f", "900");
 
-    const cardW = 122;
-    const cardH = 164;
+    const cardW = 86;
+    const cardH = 116;
     const demoY = box.y + box.h * 0.55;
-    const gap = 40;
-    const textW = 360;
-    const rowW = cardW + gap + textW;
+    const rowW = cardW + 36 + 360;
     const rowLeft = box.x + (box.w - rowW) / 2;
     drawCard({ ...CARD_TYPES.mistake, id: "tutorial-mistake-demo" }, rowLeft, demoY - cardH / 2, cardW, cardH, false);
 
-    const tx = rowLeft + cardW + gap;
+    const tx = rowLeft + cardW + 36;
     text("再厲害的車手也難免有失誤。", tx, demoY - 34, 19, "#f4f8ff", "900");
     text("打出失誤是不能加速的，", tx, demoY + 2, 18, "#f4f8ff", "800");
     text("好好善用它吧。", tx, demoY + 36, 18, "#d1d5db", "900");
@@ -3078,9 +2963,9 @@ const CanvasQteTest = (() => {
     const box = getCenteredModalBox(520, 260);
     drawModalPanel(box);
     text("超車準備", box.x + 36, box.y + 56, 28, "#dfeeff", "900");
-    text(`速度超過對手（${effectiveOvertakeTarget()}），`, box.x + 36, box.y + 112, 18, "#f4f8ff", "800");
+    text(`加速度達到指定值（${effectiveOvertakeTarget()}），`, box.x + 36, box.y + 112, 18, "#f4f8ff", "800");
     text("可以開始超車", box.x + 36, box.y + 138, 18, "#ffd94f", "900");
-    text(`目前速度：${accelValue()}`, box.x + 36, box.y + 174, 16, "rgba(214,228,255,0.82)", "700");
+    text(`目前加速值：${accelValue()}`, box.x + 36, box.y + 174, 16, "rgba(214,228,255,0.82)", "700");
     drawOvertakeReadyIcon(box.x + box.w - 152, box.y + 86, 104, 88);
     button("overtake", "開始超車", box.x + box.w / 2 - 110, box.y + box.h - 64, 220, 52, !canStartOvertake());
   }
@@ -3268,7 +3153,7 @@ const CanvasQteTest = (() => {
       app.zones.circles = [];
       return;
     }
-    const minY = RHYTHM_OUTER_R + RHYTHM_UI_AVOID_PAD + 60;  // 畫面上方留白（不再參照已移到右下的狀態面板）
+    const minY = statusHudRect().y + statusHudRect().h + RHYTHM_OUTER_R + RHYTHM_UI_AVOID_PAD;
     const maxY = app.h - RHYTHM_OUTER_R - RHYTHM_UI_AVOID_PAD;
     const yLine = Math.min(maxY, Math.max(app.h * 0.42, minY));
     const gap = Math.min(130, app.w * 0.085);
@@ -3543,46 +3428,49 @@ const CanvasQteTest = (() => {
 
   function drawCardRewardScreen(time) {
     const ctx = app.ctx;
-    // 半透明遮罩（比照第二關，但第二關用 drawModalPanel 置中卡片）
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillStyle = "rgba(0,0,0,0.68)";
     ctx.fillRect(0, 0, app.w, app.h);
-
-    const box = getCenteredModalBox(720, 490);
-    drawModalPanel(box, "rgba(255,200,80,0.5)");
-    const cx = box.x + box.w / 2;
-    text("車手持續在賽場上成長", cx, box.y + 44, 22, "#ffd980", "1000", "center");
-    text("選擇 1 張加入車手牌組", cx, box.y + 72, 13, "rgba(255,230,160,0.75)", "700", "center");
-
-    // 卡片本體沿用手牌 drawCard 內部佈局、水平放大 ×1.45、加長 baseH（與第二關一致）
-    const SCALE = 1.45;
-    const baseW = 122, baseH = 210;
-    const cardW = baseW * SCALE;   // ≈ 177
-    const cardH = baseH * SCALE;   // ≈ 305
-    const gap = 30;
-    const totalW = cardW * 3 + gap * 2;
-    const startX = cx - totalW / 2;
-    const cardY = box.y + 100;
+    const titleY = app.h * 0.1;
+    text("進站調校", app.w / 2, titleY, 36, "#ffe082", "1000", "center");
+    text("選擇一張卡加入牌庫", app.w / 2, titleY + 44, 18, "#d7e6f8", "700", "center");
+    if (!app.seenRewardTutorial) {
+      text("每圈結束後，你可以選擇一張卡加入牌庫。", app.w / 2, titleY + 82, 15, "rgba(244,248,255,0.88)", "700", "center");
+      text("新的卡牌會影響之後的速度、超車 QTE 或防守 QTE。", app.w / 2, titleY + 104, 15, "rgba(244,248,255,0.88)", "700", "center");
+      text("每次三選一都會出現一張稀有卡（固定在最右側）。", app.w / 2, titleY + 126, 15, "rgba(180, 210, 255, 0.92)", "800", "center");
+    }
+    const cardW = 140;
+    const cardH = 188;
+    const gap = Math.max(18, Math.min(26, app.w * 0.018));
+    const total = 3 * cardW + 2 * gap;
+    const baseX = app.w / 2 - total / 2;
+    const baseY = app.h * 0.35;
     app.zones.rewardSlots = [];
-
     const pick = app.rewardPickAnim;
     const pickSlot = pick ? pick.slot : -1;
     const pickAge = pick ? (time - pick.t0) / 520 : 0;
     const pulse = 0.5 + 0.5 * Math.sin(time * 0.006);
-
     for (let s = 0; s < 3; s++) {
       const card = app.rewardOptions[s];
       if (!card) continue;
-      const cx0 = startX + s * (cardW + gap);
+      let x = baseX + s * (cardW + gap);
+      let y = baseY;
+      let sc = 1;
       const hover = app.rewardHoverSlot === s && !pick;
-      const isRare = card.rarity === "稀有";
-      const lift = hover ? 8 : 0;
-      const drawX = cx0;
-      const drawY = cardY - lift;
-      app.zones.rewardSlots.push({ x: cx0, y: cardY, w: cardW, h: cardH });
-
+      if (hover) {
+        sc = 1.06;
+        y -= 8;
+      }
+      if (pick && pickSlot === s) {
+        sc = 1 + 0.14 * Math.min(1, pickAge * 1.8);
+        y -= 12 * Math.min(1, pickAge * 2);
+      }
+      const cx = x + cardW / 2;
+      const cy = y + cardH / 2;
       ctx.save();
-      // 稀有卡發光 / 選中動畫（第一關特有，保留）
-      if (isRare && !(pick && pickSlot === s)) {
+      ctx.translate(cx, cy);
+      ctx.scale(sc, sc);
+      const isRare = card.rarity === "稀有";
+      if (isRare) {
         ctx.shadowColor = `rgba(255, 210, 80, ${0.35 + pulse * 0.35})`;
         ctx.shadowBlur = 22 + pulse * 12;
       }
@@ -3591,33 +3479,15 @@ const CanvasQteTest = (() => {
         ctx.shadowColor = `rgba(255, 240, 120, ${0.5 + g * 0.45})`;
         ctx.shadowBlur = 28 + g * 40;
       }
-      ctx.translate(drawX, drawY);
-      ctx.scale(SCALE, SCALE);
-      drawCard(card, 0, 0, baseW, baseH, hover);
+      ctx.translate(-cx, -cy);
+      drawRewardOfferCard(card, x, y, cardW, cardH, isRare);
       ctx.restore();
-
-      // hover 外圈光暈（畫在縮放外、避免線寬被放大）
-      if (hover) {
-        ctx.save();
-        ctx.strokeStyle = "rgba(255,220,140,0.9)";
-        ctx.lineWidth = 2.5;
-        const hx = drawX - 2, hy = drawY - 2, hw = cardW + 4, hh = cardH + 4, rr = 12;
-        ctx.beginPath();
-        ctx.moveTo(hx + rr, hy);
-        ctx.arcTo(hx + hw, hy, hx + hw, hy + hh, rr);
-        ctx.arcTo(hx + hw, hy + hh, hx, hy + hh, rr);
-        ctx.arcTo(hx, hy + hh, hx, hy, rr);
-        ctx.arcTo(hx, hy, hx + hw, hy, rr);
-        ctx.closePath();
-        ctx.stroke();
-        ctx.restore();
-      }
+      app.zones.rewardSlots.push({ x, y, w: cardW, h: cardH });
     }
-
     if (app.mode === "card-reward-toast") {
-      text("已加入牌組", cx, box.y + box.h - 30, 20, "#ffe082", "1000", "center");
+      text("已加入牌庫", app.w / 2, app.h * 0.78, 28, "#ffe082", "1000", "center");
     } else {
-      button("reward-skip", "略過（不拿）", cx - 90, box.y + box.h - 56, 180, 40, !!app.rewardPickAnim, "gray");
+      button("reward-skip", "略過", app.w / 2 - 72, baseY + cardH + 34, 144, 44, !!app.rewardPickAnim, "gray");
     }
   }
 
