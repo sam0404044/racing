@@ -1,2 +1,2 @@
-http://localhost:8000/StageNeonCity/index.html
-http://localhost:8000/%E7%AC%AC%E4%B8%80%E9%97%9C/index.html
+﻿http://localhost:8000/StageNeonCity/index.html
+http://localhost:8000/Stage%201/index.html

@@ -1,13 +1,13 @@
-function initQteTest() {
+﻿function initQteTest() {
   const root = document.querySelector("#qteTestRoot");
   const btn = document.querySelector("#qteTestButton");
-  if (btn) btn.addEventListener("click", () => { window.location.href = "第一關.html"; });
+  if (btn) btn.addEventListener("click", () => { window.location.href = "Stage%201.html"; });
   if (root) CanvasQteTest.start(root);
 }
 
 const CanvasQteTest = (() => {
   /**
-   * 第一關狀態流（簡化字串 mode，對應說明）：
+   * Stage 1狀態流（簡化字串 mode，對應說明）：
    * start-ready（準備起跑）→ 按「開始遊戲」→ tutorial-play, tutorial-stable, overtake-ready
    *   手牌：橫列略抬高，可與賽道重疊（不打 QTE 時）。
    * OVERTAKE_QTE_INTRO / OVERTAKE_QTE → splash-overtake, rhythm-formal
@@ -271,12 +271,12 @@ const CanvasQteTest = (() => {
     app.root = root;
     document.body.classList.add("qte-active", "qte-canvas-only");
     root.classList.remove("hidden");
-    root.innerHTML = `<canvas class="qte-full-canvas" aria-label="第一關：盲牌沙漠"></canvas>
+    root.innerHTML = `<canvas class="qte-full-canvas" aria-label="Stage 1：盲牌沙漠"></canvas>
 <div id="qteWinOverlay" class="qte-win-overlay hidden" aria-hidden="true">
   <div class="qte-win-ribbons" aria-hidden="true"></div>
   <div class="qte-win-content">
     <p class="qte-win-sub"></p>
-    <h1 class="qte-win-title">第一關完成</h1>
+    <h1 class="qte-win-title">Stage 1完成</h1>
     <button type="button" class="qte-win-replay" id="qteWinReplay">${isCampaignRun() ? "返回關卡選擇" : "再玩一次"}</button>
   </div>
 </div>`;

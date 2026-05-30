@@ -1,4 +1,4 @@
-# 賽車 / Racing
+﻿# 賽車 / Racing
 
 卡牌與賽道為主的 HTML5 專案：**最後車手 / Final Driver**（`index.html`）已成為正式版本與後續迭代基礎；原本的 **New York New York** 試玩版保留為歷史參考檔。
 
@@ -33,10 +33,10 @@ npx --yes serve .
 |-------------|------|
 | `index.html` | 最後車手正式版入口 |
 | `final-driver.js`, `final-driver.css` | 最後車手正式版 Canvas 遊戲 |
-| `第一關/第一關.html` | 第一關相容入口，載入正式版資源 |
+| `Stage 1/Stage 1.html` | Stage 1 相容入口，載入正式版資源 |
 | `index-legacy-new-york-playtest.html` | New York New York 歷史試玩頁 |
 | `game.js`, `cards.js`, `track.js`, `styles.css` | New York New York 歷史試玩資源 |
-| `第一關-preview.png` | 第一關分享預覽圖 |
+| `stage-1-preview.png` | Stage 1 分享預覽圖 |
 | `GAME_RULES.md`, `GAME_RULES.html` | 最後車手規則 |
 | `GAME_RULES_NEW_YORK.md` | New York New York 歷史規則 |
 

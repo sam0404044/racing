@@ -1,9 +1,12 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="The Final Driver">
+  <meta property="og:image" content="https://sam0404044.github.io/racing/stage-1-preview.png">
+  <meta name="twitter:image" content="https://sam0404044.github.io/racing/stage-1-preview.png">
+  <link rel="image_src" href="stage-1-preview.png">
   <meta name="color-scheme" content="dark">
   <title>The Final Driver</title>
   <style>
@@ -437,10 +440,10 @@
           <span>選項</span>
           <span class="arrow" aria-hidden="true">›</span>
         </a>
-        <button class="action" type="button" id="openAbout">
+        <a class="action" href="https://docs.google.com/document/d/1jz6QmAQN866ZjcWhrqFvALVUn-4Lhyp1s5V1R4y3JAM/edit?usp=sharing" target="_blank" rel="noopener noreferrer">
           <span>關於遊戲</span>
           <span class="arrow" aria-hidden="true">›</span>
-        </button>
+        </a>
         <button class="action" type="button" id="exitGame">
           <span>離開</span>
           <span class="arrow" aria-hidden="true">›</span>
@@ -460,16 +463,16 @@
       </header>
 
       <div class="level-grid">
-        <a class="level-card" data-level="1" href="Story-Stage/story-stage.html?start=play_test_1&end=play_test_2&next=../%E7%AC%AC%E4%B8%80%E9%97%9C/%E9%81%B8%E6%93%87%E8%BB%8A%E6%89%8B.html%3Fcampaign%3D1">
+        <a class="level-card" data-level="1" href="Story-Stage/story-stage.html?start=play_test_1&end=play_test_2&next=../Stage%201/%E9%81%B8%E6%93%87%E8%BB%8A%E6%89%8B.html%3Fcampaign%3D1">
           <div>
             <div class="level-meta">
-              <span>第一關</span>
+              <span>Stage 1</span>
               <span>Blind Desert</span>
             </div>
             <h3>盲牌沙漠</h3>
             <p>能見度被風沙切碎的荒漠賽道，盲牌會遮住關鍵資訊，只能靠節奏、判斷與臨場反應守住車體穩定。</p>
           </div>
-          <span class="level-enter">開始第一關 <span aria-hidden="true">›</span></span>
+          <span class="level-enter">開始 Stage 1 <span aria-hidden="true">›</span></span>
         </a>
 
         <a class="level-card" data-level="2" href="Story-Stage/story-stage.html?start=play_test_3&end=play_test_3&next=../StageNeonCity/index.html%3Fcampaign%3D2">
@@ -498,16 +501,6 @@
       </div>
     </section>
 
-    <section class="dialog" id="aboutDialog" aria-label="關於遊戲" aria-hidden="true">
-      <div class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
-        <p class="eyebrow">About</p>
-        <h2 id="aboutTitle">The Final Driver</h2>
-        <p>這是一款結合劇情、卡牌決策與賽車 QTE 的完整版遊戲。你會從人類車手最後的賽季出發，在不同關卡中面對演算法車隊、盲牌壓力與逐步升級的賽道規則。</p>
-        <div class="dialog-actions">
-          <button class="level-close" type="button" id="closeAbout">關閉</button>
-        </div>
-      </div>
-    </section>
   </main>
 
   <script src="shared/progress.js"></script>
@@ -515,9 +508,6 @@
     const openLevelSelect = document.querySelector("#openLevelSelect");
     const closeLevelSelect = document.querySelector("#closeLevelSelect");
     const levelSelect = document.querySelector("#levelSelect");
-    const openAbout = document.querySelector("#openAbout");
-    const closeAbout = document.querySelector("#closeAbout");
-    const aboutDialog = document.querySelector("#aboutDialog");
     const exitGame = document.querySelector("#exitGame");
 
     document.addEventListener("contextmenu", (event) => {
@@ -562,13 +552,6 @@
       else openLevelSelect.focus();
     }
 
-    function setAboutOpen(open) {
-      aboutDialog.classList.toggle("open", open);
-      aboutDialog.setAttribute("aria-hidden", open ? "false" : "true");
-      if (open) closeAbout.focus();
-      else openAbout.focus();
-    }
-
     openLevelSelect.addEventListener("click", () => setLevelSelectOpen(true));
     document.querySelectorAll(".level-card[data-level]").forEach((card) => {
       card.addEventListener("click", (event) => {
@@ -578,16 +561,12 @@
       });
     });
     closeLevelSelect.addEventListener("click", () => setLevelSelectOpen(false));
-    openAbout.addEventListener("click", () => setAboutOpen(true));
-    closeAbout.addEventListener("click", () => setAboutOpen(false));
     exitGame.addEventListener("click", () => {
       window.close();
       document.body.innerHTML = '<main class="game-shell" style="display:grid;place-items:center;padding:24px;text-align:center;"><p class="subtitle">已離開 The Final Driver。</p></main>';
     });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && aboutDialog.classList.contains("open")) {
-        setAboutOpen(false);
-      } else if (event.key === "Escape" && levelSelect.classList.contains("open")) {
+      if (event.key === "Escape" && levelSelect.classList.contains("open")) {
         setLevelSelectOpen(false);
       }
     });

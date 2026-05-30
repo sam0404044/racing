@@ -1,0 +1,208 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" role="img" aria-label="Mechanical pit lane background">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d7dde1"/>
+      <stop offset="0.42" stop-color="#b9c2c8"/>
+      <stop offset="0.68" stop-color="#6e7375"/>
+      <stop offset="1" stop-color="#2c2c2b"/>
+    </linearGradient>
+    <linearGradient id="wallLeft" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2b3035"/>
+      <stop offset="0.45" stop-color="#a8adb0"/>
+      <stop offset="1" stop-color="#dad9d3"/>
+    </linearGradient>
+    <linearGradient id="wallRight" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#252a30"/>
+      <stop offset="0.42" stop-color="#969da2"/>
+      <stop offset="1" stop-color="#ddd9d1"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f0e8"/>
+      <stop offset="0.35" stop-color="#b9b9b5"/>
+      <stop offset="0.75" stop-color="#70777d"/>
+      <stop offset="1" stop-color="#343a40"/>
+    </linearGradient>
+    <linearGradient id="redPaint" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7b1d16"/>
+      <stop offset="0.52" stop-color="#d64b3f"/>
+      <stop offset="1" stop-color="#8c241c"/>
+    </linearGradient>
+    <radialGradient id="exitGlow" cx="50%" cy="38%" r="45%">
+      <stop offset="0" stop-color="#fff1c8" stop-opacity="0.78"/>
+      <stop offset="0.45" stop-color="#ff9d62" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ff5a00" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#111315" flood-opacity="0.38"/>
+    </filter>
+    <filter id="haze">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <pattern id="checkers" width="40" height="40" patternUnits="userSpaceOnUse">
+      <rect width="20" height="20" fill="#f4f0e8" opacity="0.7"/>
+      <rect x="20" y="20" width="20" height="20" fill="#f4f0e8" opacity="0.7"/>
+      <rect x="20" width="20" height="20" fill="#31373c" opacity="0.7"/>
+      <rect y="20" width="20" height="20" fill="#31373c" opacity="0.7"/>
+    </pattern>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#24282c"/>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <rect x="0" y="250" width="1920" height="230" fill="url(#exitGlow)" opacity="0.9"/>
+  <path d="M0 0H1920V410H0Z" fill="rgba(255,255,255,0.08)"/>
+
+  <!-- Far desert exit, entirely behind the road horizon. -->
+  <g opacity="0.78">
+    <path d="M765 326 C840 298 1015 293 1117 318 C1190 336 1235 359 1305 382 L620 382 C665 358 707 344 765 326Z" fill="#d8956a" opacity="0.65"/>
+    <path d="M1128 313 C1212 288 1295 302 1388 340 C1430 356 1475 377 1517 400 L980 400 C1015 365 1062 335 1128 313Z" fill="#bd714c" opacity="0.43"/>
+    <path d="M680 348 C742 324 825 326 905 350 C955 365 1005 386 1040 410 L520 410 C560 385 608 365 680 348Z" fill="#c9825c" opacity="0.36"/>
+  </g>
+
+  <!-- Pit walls and ceiling frame. The lower edges line up near the game horizon. -->
+  <path d="M0 0H610L456 410H0Z" fill="url(#wallLeft)"/>
+  <path d="M1920 0H1310L1464 410H1920Z" fill="url(#wallRight)"/>
+  <path d="M540 0H1380L1288 238H632Z" fill="#b9b7b0"/>
+  <path d="M575 20H1345L1274 196H646Z" fill="#565d63" opacity="0.35"/>
+  <path d="M602 196H1318L1295 249H625Z" fill="#23282d" opacity="0.8"/>
+  <path d="M0 408H864" stroke="#d04536" stroke-width="10" opacity="0.75"/>
+  <path d="M1056 408H1920" stroke="#d04536" stroke-width="10" opacity="0.75"/>
+  <path d="M0 423H864M1056 423H1920" stroke="#f4f0e8" stroke-width="4" opacity="0.45"/>
+
+  <!-- Overhead gantry. -->
+  <g filter="url(#softShadow)">
+    <rect x="667" y="90" width="586" height="90" rx="10" fill="#d8d5cd"/>
+    <rect x="696" y="112" width="528" height="48" rx="4" fill="url(#redPaint)"/>
+    <text x="960" y="148" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="40" fill="#fff8ee" letter-spacing="3">MECH-PIT</text>
+    <rect x="1136" y="118" width="58" height="34" fill="url(#checkers)" opacity="0.85"/>
+    <rect x="728" y="118" width="42" height="34" rx="20" fill="#f2efe8"/>
+    <path d="M748 124 a13 13 0 1 0 0 22 a9 9 0 1 1 0-18Z" fill="#bd3028"/>
+    <rect x="815" y="184" width="290" height="40" rx="6" fill="#343a40"/>
+    <text x="960" y="211" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#e8ecef">EXIT</text>
+    <path d="M842 204h-24m0 0 10-9m-10 9 10 9M1078 204h24m0 0-10-9m10 9-10 9" stroke="#ff6a1a" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Structural columns behind the road end. -->
+  <g opacity="0.88">
+    <g fill="#c9c7bf" stroke="#62686d" stroke-width="5">
+      <path d="M330 35H420L455 408H272Z"/>
+      <path d="M1500 35H1590L1648 408H1465Z"/>
+      <path d="M566 160H625L650 410H525Z" opacity="0.8"/>
+      <path d="M1295 160H1354L1395 410H1270Z" opacity="0.8"/>
+    </g>
+    <path d="M293 236H444M1478 236H1626" stroke="#cf3e35" stroke-width="16" opacity="0.68"/>
+    <text x="356" y="194" font-family="Arial Black, sans-serif" font-size="66" fill="#7d858b" opacity="0.5">03</text>
+    <text x="1532" y="194" font-family="Arial Black, sans-serif" font-size="66" fill="#7d858b" opacity="0.5">03</text>
+  </g>
+
+  <!-- Hanging cables and hoses. -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M58 -20 C50 42 70 87 38 156 C10 214 13 275 30 339" stroke="#1d2024" stroke-width="15" opacity="0.65"/>
+    <path d="M112 -12 C130 70 105 122 140 183 C169 236 136 300 164 374" stroke="#9e281f" stroke-width="9" opacity="0.74"/>
+    <path d="M240 -22 C218 52 252 92 232 151 C205 230 240 305 212 392" stroke="#2d3032" stroke-width="11" opacity="0.65"/>
+    <path d="M520 -15 C498 70 575 105 530 175 C491 236 540 288 505 360" stroke="#9e281f" stroke-width="8" opacity="0.65"/>
+    <path d="M1420 -18 C1450 58 1405 120 1445 190 C1478 250 1438 306 1474 385" stroke="#15171a" stroke-width="13" opacity="0.68"/>
+    <path d="M1630 -14 C1592 62 1648 132 1615 194 C1580 260 1632 318 1588 398" stroke="#a83026" stroke-width="9" opacity="0.78"/>
+    <path d="M1814 -20 C1845 62 1808 112 1835 185 C1867 268 1820 326 1855 410" stroke="#1d2024" stroke-width="15" opacity="0.62"/>
+    <path d="M740 -10 C730 45 750 91 735 142" stroke="#1a1d20" stroke-width="8" opacity="0.5"/>
+    <path d="M1190 -10 C1210 42 1180 90 1198 143" stroke="#94241f" stroke-width="7" opacity="0.56"/>
+  </g>
+
+  <!-- Robotic arm symbol: base, joints and segmented metal arms. -->
+  <g id="arm-left-near" filter="url(#softShadow)" transform="translate(188 318) rotate(-7)">
+    <ellipse cx="0" cy="68" rx="78" ry="18" fill="#171b1f" opacity="0.35"/>
+    <rect x="-54" y="30" width="108" height="52" rx="10" fill="#32383e"/>
+    <rect x="-40" y="-20" width="80" height="64" rx="12" fill="url(#metal)" stroke="#535b62" stroke-width="4"/>
+    <circle cx="0" cy="-24" r="30" fill="#c9c8c1" stroke="#4e565e" stroke-width="5"/>
+    <circle cx="0" cy="-24" r="14" fill="#a22a22"/>
+    <g transform="rotate(-42)">
+      <rect x="-16" y="-178" width="32" height="160" rx="15" fill="url(#metal)" stroke="#4f565c" stroke-width="4"/>
+      <rect x="-7" y="-168" width="14" height="138" rx="7" fill="#8f9699" opacity="0.35"/>
+      <circle cx="0" cy="-188" r="25" fill="#c5c2bb" stroke="#4e565e" stroke-width="5"/>
+      <circle cx="0" cy="-188" r="11" fill="#9f261f"/>
+      <g transform="translate(0 -188) rotate(74)">
+        <rect x="-13" y="-128" width="26" height="132" rx="13" fill="url(#metal)" stroke="#4f565c" stroke-width="4"/>
+        <circle cx="0" cy="-134" r="22" fill="#c8c5bd" stroke="#4e565e" stroke-width="5"/>
+        <path d="M-18-153 C-42-168-54-190-60-218M18-153 C42-168 54-190 60-218" stroke="#2a2f34" stroke-width="8" fill="none"/>
+      </g>
+    </g>
+  </g>
+
+  <g id="arm-right-near" filter="url(#softShadow)" transform="translate(1720 318) scale(-1 1) rotate(-7)">
+    <ellipse cx="0" cy="68" rx="78" ry="18" fill="#171b1f" opacity="0.35"/>
+    <rect x="-54" y="30" width="108" height="52" rx="10" fill="#32383e"/>
+    <rect x="-40" y="-20" width="80" height="64" rx="12" fill="url(#metal)" stroke="#535b62" stroke-width="4"/>
+    <circle cx="0" cy="-24" r="30" fill="#c9c8c1" stroke="#4e565e" stroke-width="5"/>
+    <circle cx="0" cy="-24" r="14" fill="#a22a22"/>
+    <g transform="rotate(-42)">
+      <rect x="-16" y="-178" width="32" height="160" rx="15" fill="url(#metal)" stroke="#4f565c" stroke-width="4"/>
+      <rect x="-7" y="-168" width="14" height="138" rx="7" fill="#8f9699" opacity="0.35"/>
+      <circle cx="0" cy="-188" r="25" fill="#c5c2bb" stroke="#4e565e" stroke-width="5"/>
+      <circle cx="0" cy="-188" r="11" fill="#9f261f"/>
+      <g transform="translate(0 -188) rotate(74)">
+        <rect x="-13" y="-128" width="26" height="132" rx="13" fill="url(#metal)" stroke="#4f565c" stroke-width="4"/>
+        <circle cx="0" cy="-134" r="22" fill="#c8c5bd" stroke="#4e565e" stroke-width="5"/>
+        <path d="M-18-153 C-42-168-54-190-60-218M18-153 C42-168 54-190 60-218" stroke="#2a2f34" stroke-width="8" fill="none"/>
+      </g>
+    </g>
+  </g>
+
+  <g id="arm-left-far" opacity="0.68" transform="translate(650 390) scale(0.55) rotate(10)">
+    <rect x="-48" y="-10" width="96" height="56" rx="10" fill="#5f666b"/>
+    <circle cx="0" cy="-28" r="26" fill="#c9c8c1" stroke="#60666d" stroke-width="5"/>
+    <circle cx="0" cy="-28" r="12" fill="#a22a22"/>
+    <g transform="rotate(-65)">
+      <rect x="-14" y="-142" width="28" height="126" rx="12" fill="#d8d5cd" stroke="#656c72" stroke-width="4"/>
+      <circle cx="0" cy="-154" r="22" fill="#c9c8c1" stroke="#60666d" stroke-width="5"/>
+      <g transform="translate(0 -154) rotate(78)">
+        <rect x="-11" y="-105" width="22" height="108" rx="10" fill="#d8d5cd" stroke="#656c72" stroke-width="4"/>
+        <circle cx="0" cy="-111" r="18" fill="#c9c8c1" stroke="#60666d" stroke-width="4"/>
+      </g>
+    </g>
+  </g>
+  <g id="arm-right-far" opacity="0.68" transform="translate(1270 390) scale(-0.55 0.55) rotate(10)">
+    <rect x="-48" y="-10" width="96" height="56" rx="10" fill="#5f666b"/>
+    <circle cx="0" cy="-28" r="26" fill="#c9c8c1" stroke="#60666d" stroke-width="5"/>
+    <circle cx="0" cy="-28" r="12" fill="#a22a22"/>
+    <g transform="rotate(-65)">
+      <rect x="-14" y="-142" width="28" height="126" rx="12" fill="#d8d5cd" stroke="#656c72" stroke-width="4"/>
+      <circle cx="0" cy="-154" r="22" fill="#c9c8c1" stroke="#60666d" stroke-width="5"/>
+      <g transform="translate(0 -154) rotate(78)">
+        <rect x="-11" y="-105" width="22" height="108" rx="10" fill="#d8d5cd" stroke="#656c72" stroke-width="4"/>
+        <circle cx="0" cy="-111" r="18" fill="#c9c8c1" stroke="#60666d" stroke-width="4"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Tool carts, tires and tanks sit behind the road end on the side platforms. -->
+  <g opacity="0.78">
+    <g transform="translate(440 332)">
+      <rect x="-58" y="0" width="116" height="62" rx="6" fill="#bd3028" stroke="#60211e" stroke-width="4"/>
+      <path d="M-48 18H48M-48 38H48" stroke="#e9e4db" stroke-width="5" opacity="0.65"/>
+      <circle cx="-36" cy="70" r="12" fill="#252a2f"/>
+      <circle cx="36" cy="70" r="12" fill="#252a2f"/>
+    </g>
+    <g transform="translate(1485 332)">
+      <rect x="-58" y="0" width="116" height="62" rx="6" fill="#bd3028" stroke="#60211e" stroke-width="4"/>
+      <path d="M-48 18H48M-48 38H48" stroke="#e9e4db" stroke-width="5" opacity="0.65"/>
+      <circle cx="-36" cy="70" r="12" fill="#252a2f"/>
+      <circle cx="36" cy="70" r="12" fill="#252a2f"/>
+    </g>
+    <g fill="#1b1f23" stroke="#63696d" stroke-width="4">
+      <ellipse cx="525" cy="404" rx="44" ry="13"/>
+      <ellipse cx="525" cy="382" rx="42" ry="12"/>
+      <rect x="483" y="382" width="84" height="22"/>
+      <ellipse cx="1395" cy="404" rx="44" ry="13"/>
+      <ellipse cx="1395" cy="382" rx="42" ry="12"/>
+      <rect x="1353" y="382" width="84" height="22"/>
+    </g>
+  </g>
+
+  <!-- Atmospheric haze, bright center and vignette. -->
+  <g filter="url(#haze)" opacity="0.45">
+    <ellipse cx="960" cy="382" rx="430" ry="82" fill="#fff4d8"/>
+    <ellipse cx="960" cy="428" rx="560" ry="62" fill="#ff6a1a" opacity="0.18"/>
+  </g>
+  <rect width="1920" height="1080" fill="none" stroke="#ffffff" stroke-opacity="0.05" stroke-width="2"/>
+  <rect width="1920" height="1080" fill="#05070c" opacity="0.13"/>
+  <path d="M0 0H1920V1080H0Z" fill="none"/>
+</svg>

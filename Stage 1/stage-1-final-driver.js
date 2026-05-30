@@ -1,15 +1,15 @@
 ﻿function initQteTest() {
   const root = document.querySelector("#qteTestRoot");
   const btn = document.querySelector("#qteTestButton");
-  if (btn) btn.addEventListener("click", () => { window.location.href = "第一關.html"; });
+  if (btn) btn.addEventListener("click", () => { window.location.href = "Stage%201.html"; });
   if (root) CanvasQteTest.start(root);
 }
 
 const CanvasQteTest = (() => {
   /**
-   * 第一關狀態流（簡化字串 mode，對應說明）：
+   * Stage 1狀態流（簡化字串 mode，對應說明）：
    * start-ready（準備起跑）→ 按「開始遊戲」→ tutorial-play, tutorial-stable, overtake-ready
-   *   手牌：橫列略抬高；卡牌拖到賽道上打出（不打 QTE 時）。
+   *   手牌：橫列略抬高，可與賽道重疊（不打 QTE 時）。
    * OVERTAKE_QTE_INTRO / OVERTAKE_QTE → splash-overtake, rhythm-formal
    *   手牌：僅 rhythm-* 時右下角小扇形（不註冊點擊區）；節奏判定為 |點擊時間−拍點| 秒誤差。
    * OVERTAKE_RESULT → result + resultFromOvertake
@@ -22,7 +22,6 @@ const CanvasQteTest = (() => {
    */
   const OPPONENT_SPEED = 80;  // 對手速度（超車條件：玩家速度需超過此值）；目前固定、未來可動態化
   const BLIND_DESERT_CG_SRC = "../assets/blind-card-desert-boss.png";
-  const DESERT_STAGE_BG_SRC = "../assets/first-stage-desert-background.svg";
   const BOSS_ENTRANCE_LAYER_SRCS = [
     "../assets/BOSS/boss-intro-red-banner.png",
     "../assets/BOSS/boss-intro-title-code.png",
@@ -35,8 +34,6 @@ const CanvasQteTest = (() => {
   ];
   const bossCgImage = new Image();
   bossCgImage.src = BLIND_DESERT_CG_SRC;
-  const desertStageImage = new Image();
-  desertStageImage.src = DESERT_STAGE_BG_SRC;
   const bossEntranceLayers = BOSS_ENTRANCE_LAYER_SRCS.map(src => {
     const img = new Image();
     img.src = src;
@@ -279,12 +276,12 @@ const CanvasQteTest = (() => {
     app.root = root;
     document.body.classList.add("qte-active", "qte-canvas-only");
     root.classList.remove("hidden");
-    root.innerHTML = `<canvas class="qte-full-canvas" aria-label="第一關：盲牌沙漠"></canvas>
+    root.innerHTML = `<canvas class="qte-full-canvas" aria-label="Stage 1：盲牌沙漠"></canvas>
 <div id="qteWinOverlay" class="qte-win-overlay hidden" aria-hidden="true">
   <div class="qte-win-ribbons" aria-hidden="true"></div>
   <div class="qte-win-content">
     <p class="qte-win-sub"></p>
-    <h1 class="qte-win-title">第一關完成</h1>
+    <h1 class="qte-win-title">Stage 1完成</h1>
     <button type="button" class="qte-win-replay" id="qteWinReplay">${isCampaignRun() ? "返回關卡選擇" : "再玩一次"}</button>
   </div>
 </div>`;
@@ -575,24 +572,6 @@ const CanvasQteTest = (() => {
     };
   }
 
-  function trackPlayBand() {
-    const horizon = app.h * 0.38;
-    const yFar = horizon + (app.h - horizon) * 0.24;
-    const yNear = horizon + (app.h - horizon) * 0.66;
-    const far = roadLaneBoundsAt(yFar);
-    const near = roadLaneBoundsAt(yNear);
-    return { yFar, yNear, far, near };
-  }
-
-  function pointOnTrackPlayArea(p) {
-    if (!p) return false;
-    const band = trackPlayBand();
-    if (p.y < band.yFar || p.y > band.yNear) return false;
-    const lane = roadLaneBoundsAt(p.y);
-    const pad = 12;
-    return p.x >= lane.left + pad && p.x <= lane.right - pad;
-  }
-
   function carLaneX(kind, time, y, carW) {
     const motion = app.carMotion && app.carMotion[kind];
     const lane = roadLaneBoundsAt(y);
@@ -741,7 +720,7 @@ const CanvasQteTest = (() => {
       if (!app.drag) return;
       const p = point(e);
       const stableDrop = app.zones.stableHit || app.zones.stable;
-      const target = inRect(p, stableDrop) ? "stable" : pointOnTrackPlayArea(p) ? "play" : "";
+      const target = inRect(p, app.zones.play) ? "play" : inRect(p, stableDrop) ? "stable" : "";
       if (target && !dropDisabled(target)) {
         const [card] = app.hand.splice(app.drag.from, 1);
         if (app.bossStage && app.bossBlindPlaysRemaining > 0) {
@@ -763,10 +742,6 @@ const CanvasQteTest = (() => {
     const rect = app.canvas.getBoundingClientRect();
     if (e.touches && e.touches[0]) {
       const t = e.touches[0];
-      return { x: t.clientX - rect.left, y: t.clientY - rect.top };
-    }
-    if (e.changedTouches && e.changedTouches[0]) {
-      const t = e.changedTouches[0];
       return { x: t.clientX - rect.left, y: t.clientY - rect.top };
     }
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -2065,63 +2040,6 @@ const CanvasQteTest = (() => {
     drawLayer(1, 14);
   }
 
-  function drawDesertStageBackdrop(time, alpha = 1) {
-    const ctx = app.ctx;
-    const w = app.w;
-    const h = app.h;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    if (desertStageImage.complete && desertStageImage.naturalWidth) {
-      const scale = Math.max(w / desertStageImage.naturalWidth, h / desertStageImage.naturalHeight);
-      const dw = desertStageImage.naturalWidth * scale;
-      const dh = desertStageImage.naturalHeight * scale;
-      ctx.drawImage(desertStageImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
-    } else {
-      const bg = ctx.createLinearGradient(0, 0, 0, h);
-      bg.addColorStop(0, "#101f2a");
-      bg.addColorStop(0.52, "#b35b2f");
-      bg.addColorStop(1, "#3b3131");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, w, h);
-    }
-    ctx.restore();
-  }
-
-  function drawFloatingSand(time, strength = 1) {
-    const ctx = app.ctx;
-    const w = app.w;
-    const h = app.h;
-    ctx.save();
-    ctx.lineCap = "round";
-    ctx.globalCompositeOperation = "screen";
-    for (let i = 0; i < 72; i++) {
-      const seed = i * 97.31;
-      const x = ((seed * 13 + time * (0.035 + (i % 5) * 0.006)) % (w + 220)) - 110;
-      const yBase = (seed * 5.7) % h;
-      const y = (yBase + Math.sin(time * 0.0012 + seed) * 18 + time * 0.012) % h;
-      const len = 18 + (i % 6) * 9;
-      const a = (0.05 + (i % 4) * 0.018) * strength;
-      ctx.strokeStyle = `rgba(255, 220, 155, ${a})`;
-      ctx.lineWidth = 1 + (i % 3) * 0.55;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x - len, y + len * 0.34);
-      ctx.stroke();
-    }
-    ctx.globalCompositeOperation = "source-over";
-    for (let i = 0; i < 42; i++) {
-      const seed = i * 53.19;
-      const x = ((seed * 17 + time * 0.025) % (w + 160)) - 80;
-      const y = (h * 0.46 + ((seed * 9 + time * 0.018) % (h * 0.48)));
-      const r = 1.1 + (i % 4) * 0.45;
-      ctx.fillStyle = `rgba(255, 190, 112, ${(0.04 + (i % 5) * 0.012) * strength})`;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
   function drawRace(time) {
     if (app.bossStage && app.bossStageName === "盲牌沙漠") {
       drawBlindDesertRace(time);
@@ -2131,10 +2049,16 @@ const CanvasQteTest = (() => {
     const w = app.w;
     const h = app.h;
     ctx.clearRect(0, 0, w, h);
+    const bg = ctx.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, "#06101d");
+    bg.addColorStop(0.45, "#122033");
+    bg.addColorStop(1, "#05090d");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
     const horizon = h * 0.38;
-    drawDesertStageBackdrop(time);
+    drawCitySkyline(ctx, w, h, horizon, time);
 
-    ctx.fillStyle = "rgba(52, 40, 28, 0.78)";
+    ctx.fillStyle = "#202934";
     ctx.beginPath();
     ctx.moveTo(w * 0.45, horizon);
     ctx.lineTo(w * 0.55, horizon);
@@ -2142,7 +2066,7 @@ const CanvasQteTest = (() => {
     ctx.lineTo(w * 0.06, h);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = "rgba(255, 217, 79, 0.62)";
+    ctx.strokeStyle = "rgba(255,217,79,0.7)";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(w * 0.45, horizon);
@@ -2155,7 +2079,7 @@ const CanvasQteTest = (() => {
       const p = ((i / 24) + (time * 0.00045) % 1) % 1;
       const y = horizon + p * p * (h - horizon);
       const spread = p * w * 0.42;
-      ctx.strokeStyle = `rgba(255,226,150,${0.12 + p * 0.38})`;
+      ctx.strokeStyle = `rgba(230,241,255,${0.12 + p * 0.38})`;
       ctx.lineWidth = Math.max(1, p * 5);
       ctx.beginPath();
       ctx.moveTo(w * 0.5 - spread * 0.25, y);
@@ -2171,9 +2095,8 @@ const CanvasQteTest = (() => {
     const whiteW = 126;
     drawCar(carLaneX("red", time, redY, redW), redY, redW, 28, "#e94d48");
     drawCar(carLaneX("white", time, whiteY, whiteW), whiteY, whiteW, 58, "#dceaff");
-    drawFloatingSand(time, 0.82);
 
-    ctx.strokeStyle = "rgba(255, 230, 170, 0.22)";
+    ctx.strokeStyle = "rgba(129,180,255,0.22)";
     ctx.lineWidth = 1;
     for (let i = 0; i < 60; i++) {
       const x = ((i * 71 + time * 0.08) % (w + 160)) - 80;
@@ -2275,82 +2198,38 @@ const CanvasQteTest = (() => {
   }
 
   function drawPlayArea(time) {
-    const ctx = app.ctx;
-    const band = trackPlayBand();
-    const minX = Math.min(band.far.left, band.near.left);
-    const maxX = Math.max(band.far.right, band.near.right);
-    app.zones.play = { x: minX, y: band.yFar, w: maxX - minX, h: band.yNear - band.yFar };
-    const disabled = dropDisabled("play");
-    const dragCenter = app.drag ? { x: app.drag.x + app.drag.w / 2, y: app.drag.y + app.drag.h / 2 } : null;
-    const hover = !!app.drag && !disabled && pointOnTrackPlayArea(dragCenter);
-    const pulse = 0.72 + Math.sin(time * 0.006) * 0.18;
-    const fill = disabled
-      ? "rgba(97, 101, 105, 0.13)"
-      : hover
-        ? `rgba(57, 255, 136, ${0.16 + pulse * 0.08})`
-        : "rgba(0, 217, 255, 0.10)";
-    const stroke = disabled
-      ? "rgba(97, 101, 105, 0.34)"
-      : hover
-        ? "rgba(57, 255, 136, 0.95)"
-        : `rgba(0, 217, 255, ${0.42 + pulse * 0.28})`;
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(band.far.left, band.yFar);
-    ctx.lineTo(band.far.right, band.yFar);
-    ctx.lineTo(band.near.right, band.yNear);
-    ctx.lineTo(band.near.left, band.yNear);
-    ctx.closePath();
-    ctx.fillStyle = fill;
-    ctx.fill();
-    ctx.setLineDash([14, 10]);
-    ctx.lineWidth = hover ? 3 : 2;
-    ctx.strokeStyle = stroke;
-    ctx.shadowColor = hover ? "rgba(57, 255, 136, 0.52)" : "rgba(0, 217, 255, 0.32)";
-    ctx.shadowBlur = hover ? 20 : 12;
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const centerY = band.yFar + (band.yNear - band.yFar) * 0.46;
-    const centerBounds = roadLaneBoundsAt(centerY);
-    const cx = (centerBounds.left + centerBounds.right) / 2;
-    ctx.translate(cx, centerY);
-    ctx.scale(1, 0.34);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = `900 28px system-ui, "Microsoft JhengHei", sans-serif`;
-    ctx.fillStyle = disabled ? "rgba(210, 218, 224, 0.36)" : hover ? "rgba(220, 255, 232, 0.98)" : "rgba(212, 246, 255, 0.82)";
-    ctx.shadowBlur = 18;
-    ctx.fillText(hover ? "RELEASE TO PLAY" : "DRAG CARD TO TRACK", 0, 0);
-    ctx.restore();
-
+    const width = Math.min(560, app.w - 760);
+    const x = app.w / 2 - width / 2;
+    const y = app.h - 430;
+    app.zones.play = { x, y, w: width, h: 104 };
+    panel(x, y, width, 104, "rgba(13,20,34,0.82)", dropDisabled("play") ? "rgba(120,128,140,0.30)" : "#ffd94f", true);
+    text("拖曳打出卡牌", x + width / 2, y - 18 + Math.sin(time * 0.005) * 4, 18, "#ffdd82", "700", "center");
     if (app.mode === "tutorial-play") {
-      const arrowY = band.yNear - 34 + Math.sin(time * 0.008) * 4;
-      text("▲   ▲   ▲", app.w / 2, arrowY, 32, "rgba(255, 217, 79, 0.82)", "900", "center");
+      const arrowY = y + 26 + Math.sin(time * 0.008) * 4;
+      text("▲   ▲   ▲", x + width / 2, arrowY, 32, "rgba(255,179,187,0.78)", "900", "center");
     }
-    if (app.played.length) {
-      const chipY = band.yNear - 78;
-      const chipBounds = roadLaneBoundsAt(chipY);
-      const chipW = Math.min(360, Math.max(220, chipBounds.right - chipBounds.left - 120));
-      drawMiniCards(app.played, app.w / 2 - chipW / 2, chipY - 24, chipW, 52);
-    }
+    drawMiniCards(app.played, x, y + 34, width, 58);
 
+    // 打牌回饋浮動提示：名字 + 速度 + 效果，從打出區上方往上飄、約 1.1 秒淡出
     const toast = app.cardPlayToast;
     if (toast) {
       const DUR = 1100;
       const age = (typeof time === "number" ? time : performance.now()) - toast.t0;
       if (age >= 0 && age < DUR) {
         const p = age / DUR;
-        const alpha = p < 0.15 ? p / 0.15 : (1 - (p - 0.15) / 0.85);
-        const rise = 18 + p * 46;
-        const toastY = band.yFar - 34 - rise;
+        const alpha = p < 0.15 ? p / 0.15 : (1 - (p - 0.15) / 0.85);  // 快進、慢出
+        const rise = 18 + p * 46;                                      // 往上飄
+        const baseY = y - 44 - rise;
+        const ctx = app.ctx;
         ctx.save();
         ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
         const speedCol = toast.buffed ? "rgba(140,255,180,0.98)" : "rgba(255,220,90,0.98)";
-        const head = toast.speedStr ? `${toast.name} ${toast.speedStr}${toast.buffed ? " +" : ""}` : toast.name;
-        text(head, app.w / 2, toastY, 22, toast.speedStr ? speedCol : "rgba(210,220,235,0.95)", "1000", "center", true);
+        // 名字 + 速度（同一行）
+        const head = toast.speedStr ? `${toast.name}　${toast.speedStr}${toast.buffed ? " ▲" : ""}` : toast.name;
+        text(head, x + width / 2, baseY, 22, toast.speedStr ? speedCol : "rgba(210,220,235,0.95)", "1000", "center", true);
+        // 效果說明（第二行小字）
         if (toast.effectStr) {
-          text(toast.effectStr, app.w / 2, toastY + 24, 14, "rgba(200,220,255,0.9)", "800", "center", true);
+          text(toast.effectStr, x + width / 2, baseY + 24, 14, "rgba(200,220,255,0.9)", "800", "center", true);
         }
         ctx.restore();
       } else if (age >= DUR) {
@@ -2358,6 +2237,7 @@ const CanvasQteTest = (() => {
       }
     }
   }
+
   function drawStabilityDrop(time) {
     if (!stabilityDropVisible()) return;
     const t = typeof time === "number" ? time : performance.now();
@@ -2617,7 +2497,21 @@ const CanvasQteTest = (() => {
     ctx.save();
     ctx.translate(shakeX, shakeY);
     ctx.clearRect(0, 0, w, h);
-    drawDesertStageBackdrop(time);
+    if (app.bossCgReady || bossCgImage.complete) {
+      const iw = bossCgImage.naturalWidth || 16;
+      const ih = bossCgImage.naturalHeight || 9;
+      const scale = Math.max(w / iw, h / ih);
+      const dw = iw * scale;
+      const dh = ih * scale;
+      ctx.drawImage(bossCgImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    } else {
+      const bg = ctx.createLinearGradient(0, 0, 0, h);
+      bg.addColorStop(0, "#07131a");
+      bg.addColorStop(0.42, "#5f3b20");
+      bg.addColorStop(1, "#140c08");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+    }
 
     ctx.fillStyle = "rgba(5, 10, 16, 0.34)";
     ctx.fillRect(0, 0, w, h);
@@ -2672,7 +2566,6 @@ const CanvasQteTest = (() => {
     drawBossHealthBar(bossX, bossY + bossH * 0.74, bossW * 1.06, 16);
     drawCar(carLaneX("white", time, h * 0.80, 126), h * 0.80, 126, 58, "#e8f0ff");
     drawBossSandstorm(time);
-    drawFloatingSand(time, 1.1);
     ctx.restore();
     if (hitShake) drawBossHitScreenFlash(hitShake.t);
   }
@@ -3133,7 +3026,7 @@ const CanvasQteTest = (() => {
     if (isStable) {
       wrapText("將 1 張牌拖曳到車體穩定區。放入這裡的牌不會發動效果，但會讓 QTE 更穩定。", box.x + padX, box.y + 136, bodyMaxW, 18, "#f4f8ff", 4);
     } else {
-      text("將任意 4 張加速牌拖曳到賽道上打出。", box.x + padX, box.y + 148, 19, "#f4f8ff", "900");
+      text("將任意 4 張加速牌拖曳到打出區。", box.x + padX, box.y + 148, 19, "#f4f8ff", "900");
     }
     const demoY = box.y + box.h * 0.54;
     const cardS = 100;
@@ -3153,28 +3046,8 @@ const CanvasQteTest = (() => {
       const arrowCx = rowLeft + cardS + gapAfterCard + arrowBand / 2;
       text("→", arrowCx, demoY + 6, 34, "rgba(214,222,235,0.88)", "900", "center");
     }
-    if (isStable) {
-      strokeRect(targetX, demoY - 50, targetW, targetH, "rgba(190,198,210,0.82)", 4, [9, 7]);
-      text("車體穩定區", targetX + targetW / 2, demoY + 8, 22, "#eef4ff", "900", "center");
-    } else {
-      const ctx = app.ctx;
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(targetX + targetW * 0.36, demoY - 50);
-      ctx.lineTo(targetX + targetW * 0.64, demoY - 50);
-      ctx.lineTo(targetX + targetW * 0.92, demoY + 50);
-      ctx.lineTo(targetX + targetW * 0.08, demoY + 50);
-      ctx.closePath();
-      ctx.fillStyle = "rgba(0, 217, 255, 0.12)";
-      ctx.fill();
-      ctx.setLineDash([9, 7]);
-      ctx.strokeStyle = "rgba(0, 217, 255, 0.82)";
-      ctx.lineWidth = 4;
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-      text("賽道", targetX + targetW / 2, demoY + 8, 22, "#eef4ff", "900", "center");
-    }
+    strokeRect(targetX, demoY - 50, targetW, targetH, "rgba(190,198,210,0.82)", 4, [9, 7]);
+    text(isStable ? "車體穩定區" : "打出區", targetX + targetW / 2, demoY + 8, 22, "#eef4ff", "900", "center");
     button("tutorial-ok", "確定", box.x + box.w - 180, box.y + box.h - 68, 160, 48);
   }
 
@@ -3233,7 +3106,7 @@ const CanvasQteTest = (() => {
     const bodyLines = [
       "這是一場結合卡牌與操作的賽車比賽。",
       null,
-      "你將先把加速牌拖到賽道上累積速度，",
+      "你將先打出加速牌累積速度，",
       "接著在超車階段抓準節奏完成超車。",
       null,
       "超車成功後，還需要穩住車身，",
@@ -3708,7 +3581,7 @@ const CanvasQteTest = (() => {
       app.zones.rewardSlots.push({ x: cx0, y: cardY, w: cardW, h: cardH });
 
       ctx.save();
-      // 稀有卡發光 / 選中動畫（第一關特有，保留）
+      // 稀有卡發光 / 選中動畫（Stage 1特有，保留）
       if (isRare && !(pick && pickSlot === s)) {
         ctx.shadowColor = `rgba(255, 210, 80, ${0.35 + pulse * 0.35})`;
         ctx.shadowBlur = 22 + pulse * 12;

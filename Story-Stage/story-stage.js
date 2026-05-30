@@ -1,4 +1,4 @@
-const canvas = document.querySelector("#storyCanvas");
+﻿const canvas = document.querySelector("#storyCanvas");
 const ctx = canvas.getContext("2d");
 const loadingOverlay = document.querySelector("#loadingOverlay");
 
@@ -69,7 +69,7 @@ const storyRoute = {
 const hasStoryRouteStart = isValidStoryChapterId(storyRoute.startChapter);
 const hasStoryRouteEnd = isValidStoryChapterId(storyRoute.endChapter);
 const DEFAULT_CHAPTER_EXIT_URLS = {
-  play_test_2: "../%E7%AC%AC%E4%B8%80%E9%97%9C/%E9%81%B8%E6%93%87%E8%BB%8A%E6%89%8B.html?campaign=1",
+  play_test_2: "../Stage%201/%E9%81%B8%E6%93%87%E8%BB%8A%E6%89%8B.html?campaign=1",
   play_test_3: "../StageNeonCity/index.html?campaign=2"
 };
 

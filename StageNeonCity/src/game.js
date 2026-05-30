@@ -1,4 +1,4 @@
-// ─── 遊戲引擎 ─────────────────────────────────────────────────────────────
+﻿// ─── 遊戲引擎 ─────────────────────────────────────────────────────────────
 // 所有遊戲邏輯與繪製。
 //
 // 此檔案包含：
@@ -4758,7 +4758,7 @@ function handleButton(id) {
   }
   // 重新來過
   if (id === "replay") { reset(); return; }
-  // 通關勝利畫面：返回關卡選擇（比照第一關）
+  // 通關勝利畫面：返回關卡選擇（比照Stage 1）
   if (id === "back-to-levels") { window.location.href = "../index.html?levels=1"; return; }
 }
 
@@ -4892,7 +4892,7 @@ function drawInner(time) {
   if (m === "stage2-corner-pick-lane")  { drawStage2CornerLanePick(time); drawExpressionDock(time); return; }
   if (m === "stage2-discard-pick")      { drawStage2DiscardPick(time); drawExpressionDock(time); return; }
 
-  // HUD 常駐（超車 QTE 時收掉車部件 HUD 保持畫面乾淨；狀態 HUD 比照第一關保留）
+  // HUD 常駐（超車 QTE 時收掉車部件 HUD 保持畫面乾淨；狀態 HUD 比照Stage 1保留）
   drawHud(time);
   if (!isRhythmMode()) drawCarPartsHud(time);
   // 主關卡常駐：右上角下一賽段預告 + 賽況面板
@@ -6287,7 +6287,7 @@ function drawDragHighlight(time, h, horizon) {
 
 // ─── HUD ───────────────────────────────────────────────────────────────────
 function statusHudRect() {
-  // 名次 / 速度 / 對手 / 穩定（穩定列為與第一關面板項目一致而新增）
+  // 名次 / 速度 / 對手 / 穩定（穩定列為與Stage 1面板項目一致而新增）
   return { x: app.w - 300, y: app.h - 236 - 24, w: 276, h: 236 };
 }
 
@@ -6367,7 +6367,7 @@ function drawHud(time) {
     text(predictStr, s.x+s.w-20, s.y+178, 11, arrowColor, "800", "right");
   }
 
-  // ── 穩定性 ── (y 200-) 與第一關面板項目一致；數值取自空力區充能
+  // ── 穩定性 ── (y 200-) 與Stage 1面板項目一致；數值取自空力區充能
   hr(s.y+198);
   const stab = app.stabilityCharges || 0;
   text("穩定性", s.x+20, s.y+222, 13, "rgba(120,220,160,0.7)", "700");
@@ -10348,7 +10348,7 @@ function drawRhythm(time) {
     app.zones.circles.push({ i, x, y, r: outerR, duration: dur });
 
     if (!finalized) {
-      // 進行中（比照第一關）：內部半透明圓盤由大縮小 + 細黃外圈（外圈 = 點擊判定範圍）
+      // 進行中（比照Stage 1）：內部半透明圓盤由大縮小 + 細黃外圈（外圈 = 點擊判定範圍）
       ctx.save();
       const innerR = outerR * (1 - progress);
       if (innerR > 0.8) {

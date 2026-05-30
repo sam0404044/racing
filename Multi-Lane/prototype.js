@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Final Driver — Prototype v0.5
  * 核心架構：多道 + 動力 + 兩類牌 + 對手速度門檻 + 教學關卡
  * 沿用 Sam 版本的 QTE / 視覺 / 音樂系統
@@ -255,7 +255,7 @@ const CanvasQteTest = (() => {
     cardsPlayedThisRound: 0,
     opponentActionsThisStage: [],
 
-    // 第一關步驟教學
+    // Stage 1步驟教學
     // 0=卡牌介紹(全黑)  1=介紹動力(HUD亮)  2=介紹速度(HUD亮)
     // 3=介紹賽道  4=三道亮+引導打牌
     // 5=對手警告  6=等待換道  7=換道後加速
@@ -1885,7 +1885,7 @@ const CanvasQteTest = (() => {
       app.mode = "playing";
       return;
     }
-    // 第一關步驟教學按鈕（tutorial-step-next 通用推進）
+    // Stage 1步驟教學按鈕（tutorial-step-next 通用推進）
     if (id === "tutorial-step-next" && (app.mode === "tutorial-stage1" || app.mode === "playing")) {
       app.tutorialStep += 1;
       return;
@@ -2027,7 +2027,7 @@ const CanvasQteTest = (() => {
       app.opponentActionFx = null;
     }
 
-    // 第一關步驟推進
+    // Stage 1步驟推進
     if (app.mode === "tutorial-stage1") {
       const s = app.tutorialStep;
       // step 4：打了第一張牌 → step 5 對手警告
@@ -2534,7 +2534,7 @@ const CanvasQteTest = (() => {
     const handY = app.h - 190;
     const baseY = handY - laneH - 30;
 
-    // 第一關教學：哪些道可以接受拖牌
+    // Stage 1教學：哪些道可以接受拖牌
     const isTutorial1 = app.mode === "tutorial-stage1";
     const isStage3Tutorial = app.stageIndex === 2 && app.mode === "playing";
     const isStage4Tutorial = app.stageIndex === 3 && app.mode === "playing";
@@ -2692,7 +2692,7 @@ const CanvasQteTest = (() => {
       || isStage3OvertakeStep
       || isStage4FreeStep;
 
-    // 教學 step 9：第一關超車按鈕直接顯示
+    // 教學 step 9：Stage 1超車按鈕直接顯示
     const showOvertakeTutorial = isTutorial1 && step === 9;
 
     if (isFreePlayPhase || showOvertakeTutorial) {
@@ -3071,7 +3071,7 @@ const CanvasQteTest = (() => {
   }
 
 
-  // ─── 第一關步驟教學 Overlay ────────────────────────────────────────────────
+  // ─── Stage 1步驟教學 Overlay ────────────────────────────────────────────────
   function drawTutorialStage1Overlay(time) {
     const step = app.tutorialStep;
     const ctx = app.ctx;
