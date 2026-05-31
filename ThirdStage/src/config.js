@@ -3,7 +3,10 @@
 // 純資料，無副作用、無 import 其他模組。
 
 // ─── QTE 常數 ─────────────────────────────────────────────────────────────
-export const RHYTHM_DURATIONS      = [1150, 1150, 1150, 1150, 1800];
+export const RHYTHM_DURATIONS      = [1380, 1380, 1380, 1380, 2160];
+// 超車 QTE 圓圈起點的基礎間隔（ms）。越大圈攤越開、同時在場的圈越少、越好按。
+// 只受道路難度縮放（easy ×1.25 / hard ×0.75），不隨速度檔位變 → 不影響攀升曲線。
+export const RHYTHM_BASE_INTERVAL  = 760;
 export const RHYTHM_BEAT_ERROR_PERFECT  = 0.05;
 export const RHYTHM_BEAT_ERROR_GOOD     = 0.12;
 export const RHYTHM_FORMAL_EASY_PERFECT = 0.42;
@@ -13,11 +16,11 @@ export const RHYTHM_OUTER_R   = 48;
 export const RHYTHM_UI_AVOID_PAD = 24;
 
 // ─── 關卡定義 ─────────────────────────────────────────────────────────────
-// 目前只有「機制驗證場」一關。未來加新關卡就往這個陣列加。
+// 目前只有「維修站高架」一關。未來加新關卡就往這個陣列加。
 export const STAGES = [
   {
     id: "stage-5",
-    title: "機制驗證場",
+    title: "維修站高架",
     isStage5: true,
     lanes: 3,
     playerLane: 1,
@@ -192,13 +195,14 @@ export const STAGE5_NORMAL_CIRCUITS_POOL = [0,1,2,3,4,5,6];
 export const STAGE5_COMMAND_CARDS = {
   turbo:         { type:"turbo",         cardClass:"action", name:"渦輪增壓", speedValue:30, note:"", color:"red" },
   tailwind:      { type:"tailwind",      cardClass:"action", name:"加速",     speedValue:20, note:"", color:"basic" },
-  drag:          { type:"drag",          cardClass:"action", name:"風阻減免", speedValue:15, note:"", color:"basic" },
+  drag:          { type:"drag",          cardClass:"action", name:"風阻減免", speedValue:15, note:"若使用此牌換道而吃到對手尾流、尾流加成 +20", canChangeLane:true, slipstreamBonusOnLaneChange:20, color:"basic" },
   laneRhythm:    { type:"laneRhythm",    cardClass:"action", name:"換道節奏", speedValue:15, tireCost:1, note:"打加速後換道且消耗 1 胎", canChangeLane:true, color:"red" },
   nitro:         { type:"nitro",         cardClass:"action", name:"氮氣噴射", speedValue:60, tireCost:1, note:"消耗 1 胎", color:"red" },
   reignite:      { type:"reignite",      cardClass:"action", name:"重燃引擎", speedValue:25, note:"下回合手牌 +1", drawNextHand:1, color:"green" },
   drift:         { type:"drift",         cardClass:"action", name:"甩尾過彎", speedValue:0,  note:"僅彎道：必觸 QTE，依結果調整賽道加成（成功 +60 / Good +30 / Miss -10）", driftQte:true, requireBend:true, color:"blue" },
   chill:         { type:"chill",         cardClass:"action", name:"冷靜應對", speedValue:10, note:"本動 QTE 容錯 +50%", qteForgive:0.5, color:"yellow" },
   smoothOp:      { type:"smoothOp",      cardClass:"action", name:"賽車節奏", speedValue:20, note:"前一動作也是指令牌 → +40", smoothOperator:true, color:"black" },
+  fuelMaster:    { type:"fuelMaster",    cardClass:"action", name:"Push! Push!", speedValue:10, note:"本回合所有加速牌 +10 速度", effect:"cardBonusThisRound", value:10, color:"red" },
   mistake:       { type:"mistake",       cardClass:"action", name:"失誤",     speedValue:0,  note:"無效果", color:"basic" },
 };
 
@@ -221,7 +225,6 @@ export const STAGE5_TEAM_CARDS = {
   patch:            { type:"patch",            cardClass:"team", name:"補丁",         note:"撞坑時不扣胎、不降速(一次)",                   effect:"savePothole",         value:1,                          trigger:"equip", persistence:"oneShot",    persistenceLabel:"觸發後棄",  color:"team" },
   tirePreservation: { type:"tirePreservation", cardClass:"team", name:"保胎策略",     note:"所有指令牌 -10 速度；無視每回合第 1 次輪胎消耗",effect:"tirePreserve",        value:1,                          trigger:"equip", persistence:"permanent",  persistenceLabel:"永久",      color:"team" },
   // === 打出類（trigger: play）— 進牌庫、需要打出才生效 ===
-  fuelMaster:       { type:"fuelMaster",       cardClass:"team", name:"燃料管理大師", note:"本回合內、所有指令牌 +5 速度",                   effect:"cardBonusThisRound",  value:5,                          trigger:"play",  persistence:"thisRound",  persistenceLabel:"本回合",    color:"team" },
-  rhythmCoach:      { type:"rhythmCoach",      cardClass:"team", name:"節奏教練",     note:"本回合內、連續同名指令牌：第 2 張 +10、第 3 張 +20", effect:"comboBonusThisRound", value:10,                         trigger:"play",  persistence:"thisRound",  persistenceLabel:"本回合",    color:"team" },
+  rhythmCoach:      { type:"rhythmCoach",      cardClass:"team", name:"節奏教練",     note:"本回合內、連續結算指令牌：第 2 張 +10、第 3 張 +20", effect:"comboBonusThisRound", value:10,                         trigger:"play",  persistence:"thisRound",  persistenceLabel:"本回合",    color:"team" },
 };
 export const STAGE5_ALL_CARDS = { ...STAGE5_COMMAND_CARDS, ...STAGE5_TEAM_CARDS };

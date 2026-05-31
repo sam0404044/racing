@@ -11,6 +11,7 @@
 
 import {
   RHYTHM_DURATIONS,
+  RHYTHM_BASE_INTERVAL,
   RHYTHM_BEAT_ERROR_PERFECT,
   RHYTHM_BEAT_ERROR_GOOD,
   RHYTHM_FORMAL_EASY_PERFECT,
@@ -579,9 +580,11 @@ function getCardEffectiveSpeed(card) {
   const s5 = app.stage5;
   if (!s5 || !s5.teamCardsActive) return { value: base, modified: false, delta: 0 };
   let delta = 0;
+  // fuelMaster（行動牌 Push! Push!）：啟用後、之後的指令牌吃加成；自己不吃
+  if (s5.fuelMasterBonusThisRound && card.effect !== "cardBonusThisRound") {
+    delta += s5.fuelMasterBonusThisRound;
+  }
   for (const c of s5.teamCardsActive) {
-    // fuelMaster：所有指令牌 +5
-    if (c.effect === "cardBonusThisRound") delta += (c.value || 0);
     // tirePreservation：所有指令牌 -10
     if (c.effect === "tirePreserve") delta -= 10;
   }
@@ -855,8 +858,8 @@ function checkPotholeDamage() {
   const auraLane = auraActive ? app.opponentLane : -1;
 
   const playerHit  = pits.includes(app.playerLane);
-  // 清道夫光環：玩家完全免疫坑洞（不需要在光環道）
-  const playerSafeAura = playerHit && auraActive;
+  // 清道夫光環：只保護「清道夫所在那一道」→ 玩家須站在光環道(=對手所在道)才免疫坑洞
+  const playerSafeAura = playerHit && auraActive && (app.playerLane === auraLane);
   // 補丁車隊牌：玩家踩坑時、消耗一張「patch」抵消
   let playerSafePatch = false;
   if (playerHit && !playerSafeAura) {
@@ -987,8 +990,16 @@ function consumeSlipstreamDelta() {
     return 0;
   }
   s5.slipstreamUsed = true;
-  app.opponentActionFx = { label: "尾流！速度 +30", until: performance.now() + 1800, positive: true };
-  return 30;
+  // 風阻減免：若本回合用過 drag 換道、尾流加成 +bonus（套一次後清旗標）
+  const bonus = s5.dragSlipstreamBonus || 0;
+  const total = 30 + bonus;
+  if (bonus > 0) {
+    s5.dragSlipstreamBonus = 0;
+    app.opponentActionFx = { label: `尾流！速度 +${total}（風阻減免 +${bonus}）`, until: performance.now() + 1800, positive: true };
+  } else {
+    app.opponentActionFx = { label: "尾流！速度 +30", until: performance.now() + 1800, positive: true };
+  }
+  return total;
 }
 // 尾流視覺檢查（不改速度，只用於 UI 顯示同道提示）
 function checkSlipstream() {
@@ -1103,6 +1114,9 @@ function initStage5State() {
     rewardSlotHover: -1,
     penaltyNextHand: 0,
     slipstreamUsed: false,
+    dragSlipstreamBonus: 0,        // A4：drag 換道時暫存的尾流加成（套一次後清）
+    cardComboStreak: 0,            // B5：本回合連續結算指令牌張數（rhythmCoach 連擊）
+    fuelMasterBonusThisRound: 0,   // B6：Push! Push! 啟用後、本回合指令牌加成
     opponentFocusMap: {},   // { "A": 1, "B": 2, ... } 各對手剩餘專注度
     seenIntro: false,
     lastMistakeCount: 0,
@@ -1304,9 +1318,17 @@ function playCardToLane(cardIdx, targetLane) {
       s5.lastActionWasCard = false;
       s5.lastCardType = null;
       s5.lastCardSameStreak = 0;
+      s5.cardComboStreak = 0;
+      // 風阻減免：用此牌換道時、本回合後續吃尾流時 +bonus
+      if (card.slipstreamBonusOnLaneChange) {
+        s5.dragSlipstreamBonus = card.slipstreamBonusOnLaneChange;
+      }
       // 記錄玩家動作後是否跟對手同道（用於步驟 3 嘲諷檢測）
       const wasSameLane = (app.playerLane === app.opponentLane);
       // 標記待結算動作 → 對手過場結束後執行步驟 3+4
+      // 坑/油的重抽統一在 advanceCircuitOnCard（結算後）處理：
+      //   換道一樣會走 finishPlayerAction → advanceCircuitOnCard，所以這裡不重抽。
+      //   若在此處（動作前半）重抽，會讓「拖牌看到的坑位 ≠ 結算用的坑位」而陰玩家。
       app.pendingAction = { kind: "lane", card, wasSameLane };
     } else {
       app.playerSpeed = Math.max(0, app.playerSpeed - 1);
@@ -1354,32 +1376,26 @@ function playCardToLane(cardIdx, targetLane) {
     if (cardSpd) {
       pushSpeedDeltaPop("player", cardSpd, card.name || "加速");
     }
-    // fuelMaster：本回合內所有指令牌 +5
-    const hasFuelMaster = s5.teamCardsActive.some(c => c.effect === "cardBonusThisRound");
-    if (hasFuelMaster) {
-      cardSpd += 5;
-      pushSpeedDeltaPop("player", 5, "燃料管理大師");
+    // fuelMaster（行動牌 Push! Push!）：打出當下設旗標；之後打出的指令牌 +bonus、自己不吃
+    if (card.effect === "cardBonusThisRound") {
+      s5.fuelMasterBonusThisRound = card.value || 10;
+    } else if (s5.fuelMasterBonusThisRound) {
+      cardSpd += s5.fuelMasterBonusThisRound;
+      pushSpeedDeltaPop("player", s5.fuelMasterBonusThisRound, "Push! Push!");
     }
-    // rhythmCoach：連續同名指令牌 +10 / +20
+    // rhythmCoach：連續結算指令牌 +10 / +20（不限同名）
     const hasRhythmCoach = s5.teamCardsActive.some(c => c.effect === "comboBonusThisRound");
+    // 本回合連續結算指令牌的張數（含當前這張）；不論同名（lastActionWasCard 反映上一動作）
+    const comboStreak = (s5.lastActionWasCard ? (s5.cardComboStreak || 1) + 1 : 1);
+    s5.cardComboStreak = comboStreak;
     if (hasRhythmCoach) {
-      // 計算「本回合連續同名打的張數」（含當前這張）
-      const lastSameNameStreak = (s5.lastCardType === card.type)
-        ? (s5.lastCardSameStreak || 1) + 1
-        : 1;
-      s5.lastCardType = card.type;
-      s5.lastCardSameStreak = lastSameNameStreak;
-      if (lastSameNameStreak === 2) {
+      if (comboStreak === 2) {
         cardSpd += 10;
         pushSpeedDeltaPop("player", 10, "連擊");
-      } else if (lastSameNameStreak >= 3) {
+      } else if (comboStreak >= 3) {
         cardSpd += 20;
         pushSpeedDeltaPop("player", 20, "連擊×3");
       }
-    } else {
-      // 沒裝 rhythmCoach 也要記錄、玩家可能後續再裝
-      s5.lastCardType = card.type;
-      s5.lastCardSameStreak = (s5.lastCardType === card.type) ? (s5.lastCardSameStreak || 1) + 1 : 1;
     }
     // tirePreserve：所有指令牌 -10 速度
     const hasTirePreserveActive = s5.teamCardsActive.some(c => c.effect === "tirePreserve");
@@ -2078,6 +2094,9 @@ function stage5StartNewRound() {
   app.cardsPlayedThisRound = 0;
   app.actionsThisRound = 0;
   s5.slipstreamUsed = false;
+  s5.dragSlipstreamBonus = 0;
+  s5.fuelMasterBonusThisRound = 0;
+  s5.cardComboStreak = 0;
   // v0.9：清掉 thisRound 車隊牌、reset 每回合一次性狀態
   s5.teamCardsActive = s5.teamCardsActive.filter(c => c.persistence !== "thisRound");
   s5.tirePreserveUsedThisRound = false;
@@ -2319,23 +2338,15 @@ function resetRhythmState() {
   app.qteScoreMax = null;
   app.qteScorePass = null;
   app.qteScatterPos = generateRowScatterPositions();
-  // 按鍵分配（QWER，避免連續重複）
-  const keys = ['q','w','e','r'];
-  const assigned = [];
-  for (let i = 0; i < circleCount; i++) {
-    let pick;
-    do { pick = keys[Math.floor(Math.random() * keys.length)]; }
-    while (assigned.length > 0 && pick === assigned[assigned.length - 1]);
-    assigned.push(pick);
-  }
-  app.qteKeys = assigned;
+  // 超車 QTE 改為純滑鼠點擊（不再分配 QWER 按鍵）
+  app.qteKeys = [];
   app.qteCircleCount = circleCount;  // 儲存供繪製和結算用
 }
 
 function rhythmStarts(start, circleCount) {
   circleCount = circleCount || 5;
-  // 基礎間隔 620ms，依圓圈數生成
-  const baseInterval = 620;
+  // 基礎間隔：依圓圈數生成（值由 config.js RHYTHM_BASE_INTERVAL 控制）
+  const baseInterval = RHYTHM_BASE_INTERVAL;
   const diff = currentLaneQteDiffResolved();
   let scale = 1;
   if (diff === "easy") scale = 1.25;
@@ -2669,7 +2680,7 @@ function setupInput() {
     app.drag = null;
   });
 
-  // QWER 按鍵 QTE
+  // 鍵盤輸入：僅彎道 QTE（WASD）；超車 QTE 已改純滑鼠點擊
   document.addEventListener("keydown", e => {
     // 彎道 QTE 鍵盤輸入（WASD）
     if (app.mode === "bend-qte") {
@@ -2681,26 +2692,7 @@ function setupInput() {
       handleBendQteInput(dir);
       return;
     }
-    if (!isRhythmMode()) return;
-    const key = e.key.toLowerCase();
-    if (!['q','w','e','r'].includes(key)) return;
-    const now = performance.now();
-    const circleCount = app.qteCircleCount || 5;
-    for (let i = 0; i < circleCount; i++) {
-      if (app.qteFinalized[i]) continue;
-      const start = app.qteCircleStarts[i] ?? app.qteStart;
-      if (now < start) continue;
-      const dur = getRhythmDuration(i);
-      const judgeT = start + dur;
-      if (now > judgeT) continue;
-      const expectedKey = app.qteKeys[i];
-      if (key === expectedKey) {
-        if (!app.qteTapPending[i]) app.qteTapPending[i] = { t: now };
-      } else {
-        if (!app.qteTapPending[i]) app.qteTapPending[i] = { t: now, wrong: true };
-      }
-      break;
-    }
+    // 超車 QTE 已改純滑鼠點擊（見 hitCircle）；鍵盤不再參與
   });
 }
 
@@ -2825,6 +2817,8 @@ function handleButton(id) {
   }
   // 重新來過
   if (id === "replay") { reset(); return; }
+  // 通關/結束畫面：返回關卡選擇（比照主關卡 Stage 1/2）
+  if (id === "back-to-levels") { window.location.href = "../index.html?levels=1"; return; }
 }
 
 // ─── Update ────────────────────────────────────────────────────────────────
@@ -2994,6 +2988,42 @@ function drawInner(time) {
   // 拖曳中的牌
   if (app.drag) {
     drawCard(app.drag.card, app.drag.x, app.drag.y, app.drag.w, app.drag.h, true);
+    // 換道時(拖到非當前道):在卡片上覆蓋「棄牌 / 卡牌效果不觸發」提示
+    if (isStage5() && app.mode === "playing") {
+      const _dCx = app.drag.x + app.drag.w/2;
+      const _dCy = app.drag.y + app.drag.h/2;
+      const _isTeam = app.drag.card?.cardClass === "team";
+      const _handTop = app.h - 190 - 60;
+      const _handBottom = app.h - 190 + 164 + 30;
+      const _onCancel = _dCy >= _handTop && _dCy <= _handBottom;
+      const _stabZ = app.zones?.stabilityZone;
+      const _onStab = !_isTeam && _stabZ && inRect({ x: _dCx, y: _dCy }, _stabZ);
+      if (!_isTeam && !_onCancel && !_onStab) {
+        const _hL = laneAtPoint({ x: _dCx, y: _dCy });
+        if (_hL >= 0 && _hL !== app.playerLane) {
+          const ctx2 = app.ctx;
+          const _pulse = 0.78 + Math.sin(time * 0.005) * 0.22;
+          ctx2.save();
+          ctx2.fillStyle = "rgba(6,14,28,0.86)";
+          ctx2.beginPath();
+          ctx2.roundRect(app.drag.x, app.drag.y, app.drag.w, app.drag.h, 10);
+          ctx2.fill();
+          ctx2.strokeStyle = `rgba(255,210,90,${0.85 * _pulse})`;
+          ctx2.lineWidth = 2; ctx2.stroke();
+          ctx2.globalAlpha = _pulse;
+          ctx2.textAlign = "center"; ctx2.textBaseline = "middle";
+          ctx2.shadowColor = "rgba(255, 180, 60, 0.7)"; ctx2.shadowBlur = 14;
+          ctx2.fillStyle = "rgba(255, 210, 90, 0.98)";
+          ctx2.font = `900 38px system-ui, "Microsoft JhengHei", sans-serif`;
+          ctx2.fillText("棄牌", _dCx, _dCy - 22);
+          ctx2.shadowColor = "rgba(255, 220, 180, 0.5)"; ctx2.shadowBlur = 8;
+          ctx2.fillStyle = "rgba(240, 240, 240, 0.95)";
+          ctx2.font = `800 16px system-ui, "Microsoft JhengHei", sans-serif`;
+          ctx2.fillText("卡牌效果不觸發", _dCx, _dCy + 22);
+          ctx2.restore();
+        }
+      }
+    }
     // 拖到非當前道：在牌正上方顯示「換道（棄此牌）」
     if (isStage5() && app.mode === "playing") {
       const dragCx = app.drag.x + app.drag.w/2;
@@ -3881,8 +3911,8 @@ function drawDragHighlight(time, h, horizon) {
 
 // ─── HUD ───────────────────────────────────────────────────────────────────
 function statusHudRect() {
-  // 輪胎搬到左下「車子部件」面板後、本面板高度從 250 縮成 200
-  return { x: app.w - 300, y: app.h - 200 - 24, w: 276, h: 200 };
+  // 名次 / 速度 / 對手 / 穩定（穩定列與第一關面板項目一致；輪胎已搬到左下車體面板）
+  return { x: app.w - 300, y: app.h - 236 - 24, w: 276, h: 236 };
 }
 
 function drawHud(time) {
@@ -3960,6 +3990,16 @@ function drawHud(time) {
                                    : `下動 → ${nextOppSpd}（${deltaStr}）`;
     text(predictStr, s.x+s.w-20, s.y+178, 11, arrowColor, "800", "right");
   }
+  // ── 穩定性 ── (y 200-) 數值取自空力區充能
+  const _hrStab = yy => {
+    const ctxh = app.ctx;
+    ctxh.save(); ctxh.strokeStyle = "rgba(105,164,224,0.18)"; ctxh.lineWidth = 1;
+    ctxh.beginPath(); ctxh.moveTo(s.x+16, yy); ctxh.lineTo(s.x+s.w-16, yy); ctxh.stroke(); ctxh.restore();
+  };
+  _hrStab(s.y+198);
+  const _stab = app.stabilityCharges || 0;
+  text("穩定性", s.x+20, s.y+222, 13, "rgba(120,220,160,0.7)", "700");
+  text(`${_stab}`, s.x+s.w-20, s.y+222, 15, "rgba(150,240,180,0.95)", "900", "right");
 }
 
 // ─── 車子部件 HUD（左下、SC1 復古未來主義線框風）──────────────────────
@@ -4092,7 +4132,11 @@ function chassisHitAreas(x, y, w, h) {
 // 偵測滑鼠當下停留在哪個部件
 function chassisHoverPart(x, y, w, h) {
   if (!app.mouse) return null;
-  const areas = chassisHitAreas(x, y, w, h);
+  // 命中區優先用共用模組（與 CH 畫的車體對齊）；未載入時回退內嵌版
+  const CH = window.FinalDriverChassisHud;
+  const areas = (CH && CH.chassisHitAreas)
+    ? CH.chassisHitAreas(x, y, w, h)
+    : chassisHitAreas(x, y, w, h);
   for (let i = areas.length - 1; i >= 0; i--) {
     if (inRect(app.mouse, areas[i])) return areas[i].part;
   }
@@ -4219,10 +4263,71 @@ function tireHealthColor(time) {
 function drawCarPartsHud(time) {
   if (!isStage5()) return;
   const ctx = app.ctx;
-  const R = carPartsHudRect();
+  const CH = window.FinalDriverChassisHud;
+
+  // 真實輪胎健康色（第三關專屬：隨胎量綠→黃→橘→紅）；shared 模組的 tireHealthColor 永遠綠、不用它
   const hc = tireHealthColor(time);
 
-  // ── 拖曳互動狀態（無上限，永遠可接收）──
+  // shared 模組未載入時：用內嵌 fallback（drawTerranPanel + 內嵌 schematic）保底
+  if (!CH || !CH.drawChrome) {
+    drawCarPartsHudFallback(time, hc);
+    return;
+  }
+
+  // ── 拖曳互動狀態（team 牌不能丟進來；無上限、永遠可接收）
+  const dragCard = (app.drag && app.drag.card?.cardClass !== "team") ? app.drag : null;
+  const isDragging = !!dragCard;
+  const dragMessage = isDragging ? "棄手牌至此，穩定車身(-1階QTE難度)" : null;
+  const dangerMessage = (!isDragging && hc.danger) ? "⚠ 輪胎危急 · CRITICAL" : null;
+
+  // ── 共用面板外殼（SC1 切角面板 + 標題 + 充能 + drop fx + drop zone + 訊息）
+  const viewport = { left: 0, bottom: app.h, width: app.w, height: app.h };
+  const chrome = CH.drawChrome(ctx, viewport, {
+    time,
+    charges: app.stabilityCharges,
+    drag: dragCard,
+    dropFx: app.stabilityDropFx,
+    disabled: false,
+    message: dragMessage || dangerMessage,
+  });
+
+  const R = chrome.rect;
+  const carX = chrome.carRect.x;
+  const carY = chrome.carRect.y;
+  const carW = chrome.carRect.w;
+  const carH = chrome.carRect.h;
+
+  // ── (i) 補畫輪胎讀數：共用標題列只有「CHASSIS … 空力 X」，這裡疊上「輪胎 X/Y」（隨 hc 變色）
+  //     位置：標題「CHASSIS」右側、空力讀數左方
+  textRaw(`輪胎 ${app.tires}/${app.tiresMax}`,
+    R.x + R.w - 86, R.y + 21, 11, hc.main, "900", "right", true);
+
+  // ── 部件 hover 偵測（拖曳中不顯示 tooltip）。命中區用 CH.chassisHitAreas 與共用車體對齊
+  let hoverPart = null;
+  if (!isDragging && app.mouse && inRect(app.mouse, R)) {
+    hoverPart = chassisHoverPart(carX, carY, carW, carH);
+  }
+  const aeroActive = chrome.hover ? "aero" : null;
+  const drawHover = hoverPart || aeroActive;
+  app.chassisHover = hoverPart;
+
+  // ── 共用：俯視 schematic（傳第三關真實 hc → 輪胎變色）+ 掃描線
+  CH.drawCarSchematic(ctx, carX, carY, carW, carH, hc, time, drawHover, app.stabilityCharges);
+  CH.drawScanLine(ctx, carX, carY, carW, carH, time, hc);
+
+  // ── 第三關專屬：部件 tooltip
+  if (hoverPart && !isDragging) {
+    drawChassisTooltip(R, hoverPart);
+  }
+
+  // 註冊 stability drop zone（沿用共用模組算好的）
+  app.zones.stabilityZone = chrome.dropZone;
+}
+
+// shared 模組未載入時的保底：沿用舊內嵌畫法（drawTerranPanel + 內嵌 schematic / scanline）
+function drawCarPartsHudFallback(time, hc) {
+  const ctx = app.ctx;
+  const R = carPartsHudRect();
   const isDragging = !!app.drag && app.drag.card?.cardClass !== "team";
   const canAccept = isDragging;
   const inHover = canAccept && app.zones.stabilityZone && inRect(
@@ -4231,80 +4336,43 @@ function drawCarPartsHud(time) {
   );
   const dropFx = app.stabilityDropFx;
   const dropPulse = dropFx ? Math.max(0, Math.min(1, (dropFx.until - performance.now()) / 520)) : 0;
-
-  // ── 邊框色：永遠綠色（不受輪胎影響）；拖曳可接收時亮 pulse、inHover 最亮
   let borderAccent = "#5dff7a";
   let borderGlow = "rgba(93, 255, 122, 0.4)";
-  if (inHover) {
-    borderAccent = "#bfffd0";
-    borderGlow = "rgba(180, 255, 200, 0.85)";
-  } else if (canAccept) {
+  if (inHover) { borderAccent = "#bfffd0"; borderGlow = "rgba(180, 255, 200, 0.85)"; }
+  else if (canAccept) {
     const p = 0.55 + 0.45 * Math.sin(time * 0.006);
     borderAccent = `rgba(140, 255, 170, ${p})`;
     borderGlow = `rgba(140, 255, 170, ${0.4 * p + 0.2})`;
   }
-
-  // ── 外框
   drawTerranPanel(R.x, R.y, R.w, R.h, borderAccent, borderGlow);
-
-  // drop fx：閃光蓋層
   if (dropPulse > 0) {
     ctx.save();
     ctx.fillStyle = `rgba(150, 255, 180, ${0.16 * dropPulse})`;
     ctx.fillRect(R.x + 4, R.y + 4, R.w - 8, R.h - 8);
     ctx.restore();
   }
-
-  // ── 標題列文字（標題永遠綠；輪胎讀數隨 hc 變色；空力綠）
-  text("車體狀態 · CHASSIS",
-    R.x + 14, R.y + 20, 12, "rgba(93, 255, 122, 0.75)", "800");
-  textRaw(`輪胎 ${app.tires}/${app.tiresMax}`,
-    R.x + R.w - 86, R.y + 19, 11, hc.main, "900", "right", true);
-  textRaw(`空力 ${app.stabilityCharges}`,
-    R.x + R.w - 14, R.y + 19, 11, "#9fff9f", "900", "right", true);
-
-  // ── 主體：俯視掃描圖
-  const carX = R.x + 10;
-  const carY = R.y + 32;
-  const carW = R.w - 20;
-  const carH = R.h - 42;
-
-  // 計算 hover（拖曳中不顯示 tooltip，避免干擾）
+  text("車體狀態 · CHASSIS", R.x + 14, R.y + 20, 12, "rgba(93, 255, 122, 0.75)", "800");
+  textRaw(`輪胎 ${app.tires}/${app.tiresMax}`, R.x + R.w - 86, R.y + 19, 11, hc.main, "900", "right", true);
+  textRaw(`空力 ${app.stabilityCharges}`, R.x + R.w - 14, R.y + 19, 11, "#9fff9f", "900", "right", true);
+  const carX = R.x + 10, carY = R.y + 32, carW = R.w - 20, carH = R.h - 42;
   let hoverPart = null;
   if (!isDragging && app.mouse && inRect(app.mouse, R)) {
     hoverPart = chassisHoverPart(carX, carY, carW, carH);
   }
-  // 拖曳時 inHover 視為 aero 部件 active（aero 全部亮起）
   const aeroActive = inHover ? "aero" : null;
   const drawHover = hoverPart || aeroActive;
   app.chassisHover = hoverPart;
-
   drawCarSchematic(carX, carY, carW, carH, hc, time, drawHover);
-
-  // ── 掃描線（垂直方向掃過）
   drawScanLine(carX, carY, carW, carH, time, hc);
-
-  // ── 拖牌中的中央提示
   if (isDragging) {
     const msgColor = inHover ? "rgba(220, 255, 230, 1)" : "rgba(150, 255, 180, 0.95)";
-    text("棄手牌至此，穩定車身(-1階QTE難度)",
-      R.x + R.w / 2, R.y + R.h - 12, 12, msgColor, "900", "center");
+    text("棄手牌至此，穩定車身(-1階QTE難度)", R.x + R.w / 2, R.y + R.h - 12, 12, msgColor, "900", "center");
   } else if (hc.danger) {
-    // 危急時面板下方文字警示（只在這裡警示、不影響其他部位顏色）
     const a = 0.65 + 0.3 * hc.pulse;
-    text("⚠ 輪胎危急 · CRITICAL",
-      R.x + R.w / 2, R.y + R.h - 12, 12, `rgba(255, 110, 110, ${a})`, "900", "center");
+    text("⚠ 輪胎危急 · CRITICAL", R.x + R.w / 2, R.y + R.h - 12, 12, `rgba(255, 110, 110, ${a})`, "900", "center");
   }
-
-  // ── tooltip（hover 中且非拖曳）
-  if (hoverPart && !isDragging) {
-    drawChassisTooltip(R, hoverPart);
-  }
-
-  // 註冊 stability drop zone：整個面板（標題列以下）都可接受
-  app.zones.stabilityZone = {
-    x: R.x + 6, y: R.y + 30, w: R.w - 12, h: R.h - 36
-  };
+  if (hoverPart && !isDragging) drawChassisTooltip(R, hoverPart);
+  app.zones.stabilityZone = { x: R.x + 6, y: R.y + 30, w: R.w - 12, h: R.h - 36 };
 }
 
 // 把 hex / "#rrggbb" 加上 alpha；或把 rgba(...) 改 alpha
@@ -5384,26 +5452,66 @@ function drawOpponentInfoPanel(redX, opponentY, redW, redH, time) {
   }
 }
 
+// 大數據預測：對手下動會切到哪一道（moveTo/moveSmart）；非大數據時不呼叫
+function predictOpponentMoveLane() {
+  if (!app.opponentBehaviors || !app.opponentBehaviorLastTriggered) return null;
+  const actN = app.actionsThisRound ?? 0;
+  for (const b of app.opponentBehaviors) {
+    if (b.action !== "moveSmart" && b.action !== "moveTo") continue;
+    const lastAt = app.opponentBehaviorLastTriggered[b.id] ?? -Infinity;
+    if (actN - lastAt < (b.cooldown ?? 0)) continue;
+    // 快取（同 actN + 同 behavior）→ 避免隨機 tie-break 每 frame 跳
+    const cache = app.stage5?._opponentLanePrediction;
+    if (cache && cache.actN === actN && cache.behaviorId === b.id) {
+      return cache.lane;
+    }
+    let lane;
+    if (b.action === "moveTo") {
+      lane = (b.target === "playerLane") ? app.playerLane : b.target;
+    } else {
+      lane = pickSmartLaneForOpponent(b.strategy, b.bypassAura);
+    }
+    if (app.stage5) {
+      app.stage5._opponentLanePrediction = { actN, behaviorId: b.id, lane };
+    }
+    return lane;
+  }
+  return null;
+}
+
 // 對手意圖 icon tooltip
 function drawOpponentIconTooltip(rect, plateX, plateY) {
   const ctx = app.ctx;
+  const hasBigData = app.stage5?.teamCardsActive?.some(c => c.effect === "showOpponent");
   let title = "";
   let desc = "";
   if (rect.icon === "⛔") {
     title = "阻擋";
-    desc = "對手會移動到你當前的道";
+    if (hasBigData) {
+      desc = `對手會切到道 ${app.playerLane + 1}（你的道）`;
+    } else {
+      desc = "對手會移動到你當前的道";
+    }
   } else if (rect.icon === "💨") {
     title = "遠離";
-    desc = "對手會避開你當前的道";
+    if (hasBigData) {
+      const lane = predictOpponentMoveLane();
+      desc = (lane != null)
+        ? `對手會切到道 ${lane + 1}、避開你`
+        : "對手會避開你當前的道";
+    } else {
+      desc = "對手會避開你當前的道";
+    }
   } else if (rect.icon === "❓") {
     title = "未知";
     desc = "對手選自己最快路線、或隨機切道，無法預測";
   } else if (rect.icon === "❗") {
     title = "賽道干擾";
-    desc = "賽道有坑洞或油污，對手原意圖可能被打亂、結果不確定";
-  } else if (rect.icon === "⚡") {
+    desc = "對手原意圖可能被賽道機制打亂、結果不確定";
+  } else if (rect.icon === "⚡" || rect.icon === "🔍") {
+    // 與主程式一致：第三關無 describeSpecialActionByIcon（boss 專屬），統一用通用 fallback
     title = "特殊行動";
-    desc = "對手會加速、豁免光環、或取 abs 加成";
+    desc = "對手準備特殊行動……";
   } else {
     return;
   }
@@ -6149,7 +6257,7 @@ function drawStartModal() {
   drawModalPanel(box);
   const cx = box.x+box.w/2;
   text("最後車手", cx, box.y+62*UI_SCALE, 36, "#dfeeff", "900", "center");
-  text("Final Driver — 機制驗證場", cx, box.y+88*UI_SCALE, 12, "rgba(150,180,220,0.55)", "700", "center");
+  text("Final Driver — 維修站高架", cx, box.y+88*UI_SCALE, 12, "rgba(150,180,220,0.55)", "700", "center");
   const ctx = app.ctx;
   ctx.save(); ctx.strokeStyle="rgba(120,170,220,0.3)"; ctx.lineWidth=1; ctx.setLineDash([5,5]);
   ctx.beginPath(); ctx.moveTo(box.x+40*UI_SCALE,box.y+102*UI_SCALE); ctx.lineTo(box.x+box.w-40*UI_SCALE,box.y+102*UI_SCALE); ctx.stroke();
@@ -6236,8 +6344,9 @@ function drawAllClear() {
   const ctx = app.ctx;
   ctx.fillStyle = "rgba(0,0,0,0.72)"; ctx.fillRect(0,0,app.w,app.h);
   text("通關！", app.w/2, app.h*0.38, 56, "#ffd94f", "1000", "center");
-  text("Final Driver — 機制驗證場", app.w/2, app.h*0.52, 20, "rgba(200,220,255,0.8)", "700", "center");
+  text("Final Driver — 維修站高架", app.w/2, app.h*0.52, 20, "rgba(200,220,255,0.8)", "700", "center");
   button("replay", "再玩一次", app.w/2-110, app.h*0.62, 220, 52, false, "start");
+  button("back-to-levels", "返回關卡選擇", app.w/2-110, app.h*0.62 + 64, 220, 48, false, "primary");
 }
 
 // ─── 第五關繪製 ────────────────────────────────────────────────────────────
@@ -6324,7 +6433,13 @@ function drawLaneBonusLabels(time) {
         color = "rgba(255,150,150,0.9)";
         glow = "rgba(255,120,120,0.5)";
       }
-      // add=0 且 mult=1（沒有實質加成）→ 不印 0、留給 speedLimit / forceCornerQte 自己處理
+      // add=0 且 mult=1（直線段、無實質加成）：顯示中性「+0」，讓玩家明確知道這道沒加成
+      // （強制 QTE / 光環抑制等仍由下方邏輯覆蓋 mainText）
+      if (!mainText) {
+        mainText = "+0";
+        color = "rgba(200,210,225,0.78)";
+        glow = "rgba(180,195,215,0.32)";
+      }
       if (b.forceCornerQte) {
         if (!mainText) mainText = "⚡";
         subText = "強制 QTE";
@@ -6761,7 +6876,7 @@ function drawStage5SidePanel(time) {
   const panelH = 16 + 34 + 22 + rankBlockH + 16 + teamCardsH + 80;
   roundPanel(x, y, w, panelH, 12, "rgba(10,18,28,0.88)", "rgba(120,170,220,0.35)", 1.5);
   curY = y + 16;
-  text("機制驗證場", x + 14, curY + 14, 17, "rgba(255,220,120,0.85)", "900");
+  text("維修站高架", x + 14, curY + 14, 17, "rgba(255,220,120,0.85)", "900");
   // 回合計時：顯示「回合 X / MAX」，最後 3 回合時用警示色
   const maxR = s5.maxRounds || 20;
   const curR = Math.min(maxR, Math.max(1, s5.roundsPlayed || 1));
@@ -7030,7 +7145,7 @@ function drawStage5IntroModal(time) {
   const boxX = app.w/2 - boxW/2;
   const boxY = app.h/2 - boxH/2;
   roundPanel(boxX, boxY, boxW, boxH, 14, "rgba(6,14,28,0.97)", "rgba(255,200,80,0.5)", 2);
-  text("機制驗證場", boxX + boxW/2, boxY + 40, 22, "#ffd980", "1000", "center");
+  text("維修站高架", boxX + boxW/2, boxY + 40, 22, "#ffd980", "1000", "center");
   text("第 4 名出發 — 超過全部 3 名對手即通關", boxX + boxW/2, boxY + 80, 13, "#e8f0ff", "700", "center");
   button("stage5-intro-ok", "出發", boxX + boxW/2 - 80, boxY + boxH - 50, 160, 38, false, "start");
 }
@@ -7280,6 +7395,7 @@ function drawStage5TireOutModal() {
   text("輪胎報銷", cx, cy - 40, 48, "#ff6060", "1000", "center");
   text("所有輪胎都用完了", cx, cy + 20, 18, "rgba(255,180,180,0.85)", "700", "center");
   button("replay", "再試一次", cx - 110, cy + 70, 220, 50, false, "primary");
+  button("back-to-levels", "返回關卡選擇", cx - 110, cy + 130, 220, 48, false, "primary");
 }
 
 // 終點線結束畫面（跑滿 maxRounds 回合觸發）
@@ -7311,6 +7427,7 @@ function drawStage5FinishLineModal() {
                :              "比賽結束，再來一場？";
   text(flavor, cx, cy + 96, 14, "rgba(220,230,255,0.85)", "800", "center");
   button("replay", "再試一次", cx - 110, cy + 130, 220, 50, false, isWin ? "start" : "primary");
+  button("back-to-levels", "返回關卡選擇", cx - 110, cy + 190, 220, 48, false, "primary");
 }
 
 // 三選一獎勵
@@ -7721,15 +7838,9 @@ function drawRhythm(time) {
   const pos = app.qteScatterPos;
   app.zones.circles = [];
 
-  // 底部按鍵提示列
-  const keyLabels = ['Q','W','E','R'];
+  // 底部操作提示（取代原本的 QWER 鍵盤列）：超車 QTE 已改純滑鼠點擊
   const kbY = app.h - 42;
-  text("按鍵：", app.w/2 - 160, kbY, 14, "rgba(180,180,180,0.7)", "700", "center");
-  keyLabels.forEach((k, i) => {
-    const kx = app.w/2 - 60 + i * 44;
-    roundPanel(kx-16, kbY-18, 32, 28, 6, "rgba(20,30,50,0.9)", "rgba(255,217,79,0.55)", 1.5);
-    text(k, kx, kbY, 16, "rgba(255,217,79,0.9)", "900", "center");
-  });
+  text("在圓圈縮到最小的瞬間點擊！", app.w/2, kbY, 14, "rgba(180,180,180,0.7)", "700", "center");
 
   const circleCount = app.qteCircleCount || 5;
   for (let i = 0; i < circleCount; i++) {
@@ -7751,33 +7862,37 @@ function drawRhythm(time) {
     }
     app.zones.circles.push({ i, x, y, r: outerR, duration: dur });
     const ctx = app.ctx;
-    const keyLabel = (app.qteKeys[i] ?? '?').toUpperCase();
-    ctx.save();
 
-    // 外圈
-    ctx.beginPath(); ctx.arc(x, y, outerR, 0, Math.PI*2);
-    ctx.strokeStyle="rgba(255,217,79,0.9)"; ctx.lineWidth=3; ctx.stroke();
-
-    // 收縮內圈
     if (!finalized) {
+      // 進行中：內部半透明圓盤由大縮小 + 細黃外圈（外圈 = 點擊判定範圍）
+      ctx.save();
       const innerR = outerR * (1 - progress);
-      ctx.beginPath(); ctx.arc(x, y, Math.max(2, innerR), 0, Math.PI*2);
-      ctx.strokeStyle="rgba(255,150,80,0.7)"; ctx.lineWidth=2; ctx.stroke();
-      // 圓圈中央顯示按鍵字母
-      text(keyLabel, x, y+8, 22, "rgba(255,217,79,0.95)", "900", "center");
-      // 下方小鍵盤圖示
-      roundPanel(x-14, y+outerR+6, 28, 22, 5, "rgba(20,30,50,0.9)", "rgba(255,217,79,0.5)", 1.5);
-      text(keyLabel, x, y+outerR+20, 13, "rgba(255,217,79,0.9)", "900", "center");
-    }
-
-    // 判定結果
-    if (finalized && dismissAt && time <= dismissAt) {
+      if (innerR > 0.8) {
+        ctx.beginPath(); ctx.arc(x, y, innerR, 0, Math.PI*2);
+        ctx.fillStyle = "rgba(255,210,95,0.38)"; ctx.fill();
+        ctx.strokeStyle = "rgba(255,190,70,0.42)"; ctx.lineWidth = 1; ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(x, y, outerR, 0, Math.PI*2);
+      ctx.strokeStyle = "rgba(255,236,170,0.92)"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.restore();
+    } else if (dismissAt && time <= dismissAt) {
+      // 判定結果：整顆外圈填半透明色（perfect 淺綠 / good 淺黃 / miss 淺紅）
       const result = app.qteResults[i];
-      const col = result==="perfect"?"#ffd94f":result==="good"?"#80ef70":"#ff6b7a";
-      const label = result==="perfect"?"Perfect!":result==="good"?"Good":"Miss";
-      text(label, x, y+6, 16, col, "900", "center");
+      let fill, stroke, txtCol, label;
+      if (result === "perfect") {
+        fill = "rgba(130,235,150,0.32)"; stroke = "rgba(160,245,180,0.95)"; txtCol = "#a6efb6"; label = "Perfect";
+      } else if (result === "good") {
+        fill = "rgba(255,228,120,0.30)"; stroke = "rgba(255,235,150,0.95)"; txtCol = "#ffe89a"; label = "Good";
+      } else {
+        fill = "rgba(255,120,130,0.30)"; stroke = "rgba(255,160,170,0.95)"; txtCol = "#ff9aa6"; label = "Miss";
+      }
+      ctx.save();
+      ctx.beginPath(); ctx.arc(x, y, outerR, 0, Math.PI*2);
+      ctx.fillStyle = fill; ctx.fill();
+      ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.restore();
+      text(label, x, y + outerR + 22, 16, txtCol, "900", "center");
     }
-    ctx.restore();
   }
 }
 
