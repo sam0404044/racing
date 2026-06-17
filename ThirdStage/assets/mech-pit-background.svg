@@ -27,6 +27,32 @@
       <stop offset="0.52" stop-color="#d64b3f"/>
       <stop offset="1" stop-color="#8c241c"/>
     </linearGradient>
+    <linearGradient id="toolCartRed" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e15c4b"/>
+      <stop offset="0.28" stop-color="#aa2704"/>
+      <stop offset="0.72" stop-color="#651710"/>
+      <stop offset="1" stop-color="#2b0c0a"/>
+    </linearGradient>
+    <linearGradient id="toolCartSide" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#42100d"/>
+      <stop offset="0.64" stop-color="#8f2419"/>
+      <stop offset="1" stop-color="#181c20"/>
+    </linearGradient>
+    <linearGradient id="cyanTube" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#00d9ff" stop-opacity="0"/>
+      <stop offset="0.45" stop-color="#00d9ff" stop-opacity="0.72"/>
+      <stop offset="1" stop-color="#39ff88" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="floorSteel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a5158"/>
+      <stop offset="0.5" stop-color="#272c31"/>
+      <stop offset="1" stop-color="#15191d"/>
+    </linearGradient>
+    <radialGradient id="lampGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff6d2" stop-opacity="0.9"/>
+      <stop offset="0.34" stop-color="#ff8f2d" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ff5a00" stop-opacity="0"/>
+    </radialGradient>
     <radialGradient id="exitGlow" cx="50%" cy="38%" r="45%">
       <stop offset="0" stop-color="#fff1c8" stop-opacity="0.78"/>
       <stop offset="0.45" stop-color="#ff9d62" stop-opacity="0.28"/>
@@ -38,6 +64,26 @@
     <filter id="haze">
       <feGaussianBlur stdDeviation="7"/>
     </filter>
+    <filter id="cyanBlur" x="-40%" y="-80%" width="180%" height="260%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="metalTexture" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="2" seed="14" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.08"/>
+      </feComponentTransfer>
+      <feBlend mode="multiply" in2="SourceGraphic"/>
+    </filter>
+    <pattern id="deckPlate" width="54" height="28" patternUnits="userSpaceOnUse">
+      <rect width="54" height="28" fill="#24282c"/>
+      <path d="M0 27.5H54M53.5 0V28" stroke="#596168" stroke-width="1" opacity="0.55"/>
+      <path d="M7 7h13M34 7h13M7 21h13M34 21h13" stroke="#8a9299" stroke-width="2" opacity="0.32"/>
+    </pattern>
+    <pattern id="microGrid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#00d9ff" stroke-width="1" opacity="0.13"/>
+      <path d="M0 16H32M16 0V32" stroke="#39ff88" stroke-width="0.7" opacity="0.07"/>
+    </pattern>
     <pattern id="checkers" width="40" height="40" patternUnits="userSpaceOnUse">
       <rect width="20" height="20" fill="#f4f0e8" opacity="0.7"/>
       <rect x="20" y="20" width="20" height="20" fill="#f4f0e8" opacity="0.7"/>
@@ -64,9 +110,54 @@
   <path d="M540 0H1380L1288 238H632Z" fill="#b9b7b0"/>
   <path d="M575 20H1345L1274 196H646Z" fill="#565d63" opacity="0.35"/>
   <path d="M602 196H1318L1295 249H625Z" fill="#23282d" opacity="0.8"/>
+  <path d="M0 0H610L456 410H0ZM1920 0H1310L1464 410H1920ZM540 0H1380L1288 238H632Z" filter="url(#metalTexture)" opacity="0.5"/>
   <path d="M0 408H864" stroke="#d04536" stroke-width="10" opacity="0.75"/>
   <path d="M1056 408H1920" stroke="#d04536" stroke-width="10" opacity="0.75"/>
   <path d="M0 423H864M1056 423H1920" stroke="#f4f0e8" stroke-width="4" opacity="0.45"/>
+
+  <!-- Catwalks, service decks and perspective ribs add depth to the repair skyway. -->
+  <g opacity="0.82">
+    <path d="M0 276L462 250L456 300L0 332Z" fill="url(#deckPlate)" stroke="#11161a" stroke-width="5"/>
+    <path d="M1920 276L1458 250L1464 300L1920 332Z" fill="url(#deckPlate)" stroke="#11161a" stroke-width="5"/>
+    <path d="M26 250L450 228M14 302L458 274M1894 250L1470 228M1906 302L1462 274" stroke="#dfe4e8" stroke-width="3" opacity="0.22"/>
+    <path d="M70 247V320M168 241V314M272 236V307M378 230V300M1850 247V320M1752 241V314M1648 236V307M1542 230V300" stroke="#14181c" stroke-width="8" opacity="0.72"/>
+    <path d="M0 215L482 196M1920 215L1438 196" stroke="#00d9ff" stroke-width="3" opacity="0.36"/>
+    <path d="M0 222L482 203M1920 222L1438 203" stroke="#39ff88" stroke-width="2" opacity="0.18"/>
+  </g>
+
+  <g opacity="0.7">
+    <path d="M613 244H1307L1256 294H664Z" fill="#161b20" stroke="#5e666d" stroke-width="4"/>
+    <path d="M686 260H1234" stroke="#00d9ff" stroke-width="3" opacity="0.48"/>
+    <path d="M720 280H1200" stroke="#ff5a00" stroke-width="3" opacity="0.3"/>
+    <path d="M664 294L518 410M1256 294L1402 410" stroke="#2d343b" stroke-width="12" opacity="0.85"/>
+    <path d="M664 294L518 410M1256 294L1402 410" stroke="#9ba4aa" stroke-width="3" opacity="0.25"/>
+  </g>
+
+  <!-- Illuminated service pipes. -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M80 72C278 94 406 80 586 118C710 144 782 132 900 116" stroke="#171b1f" stroke-width="20" opacity="0.5"/>
+    <path d="M1020 116C1160 133 1268 145 1404 118C1580 83 1716 96 1848 70" stroke="#171b1f" stroke-width="20" opacity="0.5"/>
+    <path d="M80 72C278 94 406 80 586 118C710 144 782 132 900 116" stroke="#8a9299" stroke-width="7" opacity="0.44"/>
+    <path d="M1020 116C1160 133 1268 145 1404 118C1580 83 1716 96 1848 70" stroke="#8a9299" stroke-width="7" opacity="0.44"/>
+    <path d="M220 128H560M1360 128H1700" stroke="url(#cyanTube)" stroke-width="5" filter="url(#cyanBlur)" opacity="0.78"/>
+    <path d="M220 128H560M1360 128H1700" stroke="#00d9ff" stroke-width="2" opacity="0.82"/>
+  </g>
+
+  <!-- Overhead truss grid and maintenance lamps. -->
+  <g opacity="0.72">
+    <path d="M516 0L620 238M690 0L730 238M862 0L875 238M1058 0L1045 238M1230 0L1190 238M1404 0L1300 238" stroke="#24282c" stroke-width="10"/>
+    <path d="M516 0L620 238M690 0L730 238M862 0L875 238M1058 0L1045 238M1230 0L1190 238M1404 0L1300 238" stroke="#b3bbc1" stroke-width="2" opacity="0.28"/>
+    <path d="M590 54H1330M616 116H1304M642 176H1278" stroke="#1b2025" stroke-width="8" opacity="0.78"/>
+    <path d="M590 54H1330M616 116H1304M642 176H1278" stroke="#eef2f4" stroke-width="2" opacity="0.22"/>
+    <g>
+      <ellipse cx="710" cy="188" rx="88" ry="30" fill="url(#lampGlow)" opacity="0.75"/>
+      <ellipse cx="960" cy="188" rx="118" ry="34" fill="url(#lampGlow)" opacity="0.5"/>
+      <ellipse cx="1210" cy="188" rx="88" ry="30" fill="url(#lampGlow)" opacity="0.75"/>
+      <rect x="675" y="175" width="70" height="10" rx="5" fill="#fff1c8" opacity="0.74"/>
+      <rect x="920" y="174" width="80" height="11" rx="5" fill="#fff1c8" opacity="0.64"/>
+      <rect x="1175" y="175" width="70" height="10" rx="5" fill="#fff1c8" opacity="0.74"/>
+    </g>
+  </g>
 
   <!-- Overhead gantry. -->
   <g filter="url(#softShadow)">
@@ -79,6 +170,24 @@
     <rect x="815" y="184" width="290" height="40" rx="6" fill="#343a40"/>
     <text x="960" y="211" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#e8ecef">EXIT</text>
     <path d="M842 204h-24m0 0 10-9m-10 9 10 9M1078 204h24m0 0-10-9m10 9-10 9" stroke="#ff6a1a" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Telemetry glass panels floating on the side walls. -->
+  <g font-family="Consolas, 'Courier New', monospace" opacity="0.82">
+    <g transform="translate(70 116) skewY(-7)">
+      <rect x="0" y="0" width="202" height="80" rx="6" fill="#071014" opacity="0.72" stroke="#00d9ff" stroke-width="2"/>
+      <rect x="0" y="0" width="202" height="80" rx="6" fill="url(#microGrid)" opacity="0.9"/>
+      <text x="18" y="27" fill="#00d9ff" font-size="18" font-weight="700">PIT-LANE 03</text>
+      <text x="18" y="53" fill="#39ff88" font-size="14">HYDRAULIC READY</text>
+      <path d="M144 52h42M144 62h28" stroke="#ff5a00" stroke-width="3" opacity="0.8"/>
+    </g>
+    <g transform="translate(1648 116) skewY(7)">
+      <rect x="0" y="0" width="202" height="80" rx="6" fill="#071014" opacity="0.72" stroke="#00d9ff" stroke-width="2"/>
+      <rect x="0" y="0" width="202" height="80" rx="6" fill="url(#microGrid)" opacity="0.9"/>
+      <text x="18" y="27" fill="#00d9ff" font-size="18" font-weight="700">SKYWAY LOCK</text>
+      <text x="18" y="53" fill="#39ff88" font-size="14">ROUTE OPEN</text>
+      <path d="M142 52h44M142 62h32" stroke="#ff5a00" stroke-width="3" opacity="0.8"/>
+    </g>
   </g>
 
   <!-- Structural columns behind the road end. -->
@@ -108,7 +217,7 @@
   </g>
 
   <!-- Robotic arm symbol: base, joints and segmented metal arms. -->
-  <g id="arm-left-near" filter="url(#softShadow)" transform="translate(188 318) rotate(-7)">
+  <g id="arm-left-near" filter="url(#softShadow)" transform="translate(168 326) rotate(-14) scale(1.05)">
     <ellipse cx="0" cy="68" rx="78" ry="18" fill="#171b1f" opacity="0.35"/>
     <rect x="-54" y="30" width="108" height="52" rx="10" fill="#32383e"/>
     <rect x="-40" y="-20" width="80" height="64" rx="12" fill="url(#metal)" stroke="#535b62" stroke-width="4"/>
@@ -127,7 +236,7 @@
     </g>
   </g>
 
-  <g id="arm-right-near" filter="url(#softShadow)" transform="translate(1720 318) scale(-1 1) rotate(-7)">
+  <g id="arm-right-near" filter="url(#softShadow)" transform="translate(1742 306) scale(-0.82 0.82) rotate(18)">
     <ellipse cx="0" cy="68" rx="78" ry="18" fill="#171b1f" opacity="0.35"/>
     <rect x="-54" y="30" width="108" height="52" rx="10" fill="#32383e"/>
     <rect x="-40" y="-20" width="80" height="64" rx="12" fill="url(#metal)" stroke="#535b62" stroke-width="4"/>
@@ -146,7 +255,7 @@
     </g>
   </g>
 
-  <g id="arm-left-far" opacity="0.68" transform="translate(650 390) scale(0.55) rotate(10)">
+  <g id="arm-left-far" opacity="0.68" transform="translate(625 386) scale(0.5) rotate(-18)">
     <rect x="-48" y="-10" width="96" height="56" rx="10" fill="#5f666b"/>
     <circle cx="0" cy="-28" r="26" fill="#c9c8c1" stroke="#60666d" stroke-width="5"/>
     <circle cx="0" cy="-28" r="12" fill="#a22a22"/>
@@ -159,7 +268,7 @@
       </g>
     </g>
   </g>
-  <g id="arm-right-far" opacity="0.68" transform="translate(1270 390) scale(-0.55 0.55) rotate(10)">
+  <g id="arm-right-far" opacity="0.48" transform="translate(1298 376) scale(-0.42 0.42) rotate(32)">
     <rect x="-48" y="-10" width="96" height="56" rx="10" fill="#5f666b"/>
     <circle cx="0" cy="-28" r="26" fill="#c9c8c1" stroke="#60666d" stroke-width="5"/>
     <circle cx="0" cy="-28" r="12" fill="#a22a22"/>
@@ -176,24 +285,97 @@
   <!-- Tool carts, tires and tanks sit behind the road end on the side platforms. -->
   <g opacity="0.78">
     <g transform="translate(440 332)">
-      <rect x="-58" y="0" width="116" height="62" rx="6" fill="#bd3028" stroke="#60211e" stroke-width="4"/>
-      <path d="M-48 18H48M-48 38H48" stroke="#e9e4db" stroke-width="5" opacity="0.65"/>
-      <circle cx="-36" cy="70" r="12" fill="#252a2f"/>
-      <circle cx="36" cy="70" r="12" fill="#252a2f"/>
+      <ellipse cx="0" cy="76" rx="78" ry="15" fill="#05070c" opacity="0.42"/>
+      <path d="M-76 10L-55-10H62L80 8L70 63H-66Z" fill="url(#toolCartSide)" stroke="#32100d" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M-58-4H55L69 10L60 56H-66L-72 14Z" fill="url(#toolCartRed)" stroke="#7c1d16" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M-65 17H63M-58 35H58" stroke="#f1a188" stroke-width="5" opacity="0.52" stroke-linecap="round"/>
+      <path d="M-55 22H52M-50 40H44" stroke="#45100d" stroke-width="2" opacity="0.65"/>
+      <path d="M-72 14L-84 10M66 9L88 2" stroke="#1c2024" stroke-width="7" stroke-linecap="round"/>
+      <path d="M-84 10C-94 8-99 15-97 24" stroke="#8a9299" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M-30 -7H38" stroke="#ffd4bf" stroke-width="4" opacity="0.45" stroke-linecap="round"/>
+      <rect x="-42" y="13" width="84" height="8" rx="3" fill="#e8ecef" opacity="0.22"/>
+      <rect x="-45" y="32" width="72" height="7" rx="3" fill="#e8ecef" opacity="0.18"/>
+      <rect x="30" y="31" width="22" height="10" rx="2" fill="#24282c" opacity="0.58"/>
+      <g fill="#14181c" stroke="#60686e" stroke-width="4">
+        <circle cx="-43" cy="70" r="13"/>
+        <circle cx="46" cy="70" r="13"/>
+      </g>
+      <g fill="#3b4147" opacity="0.8">
+        <circle cx="-43" cy="70" r="5"/>
+        <circle cx="46" cy="70" r="5"/>
+      </g>
+      <path d="M-48 61H52" stroke="#1a1f24" stroke-width="8" stroke-linecap="round"/>
+      <path d="M-4 9v47" stroke="#2a0b09" stroke-width="3" opacity="0.48"/>
+      <circle cx="57" cy="17" r="4" fill="#00d9ff" opacity="0.55"/>
     </g>
-    <g transform="translate(1485 332)">
-      <rect x="-58" y="0" width="116" height="62" rx="6" fill="#bd3028" stroke="#60211e" stroke-width="4"/>
-      <path d="M-48 18H48M-48 38H48" stroke="#e9e4db" stroke-width="5" opacity="0.65"/>
-      <circle cx="-36" cy="70" r="12" fill="#252a2f"/>
-      <circle cx="36" cy="70" r="12" fill="#252a2f"/>
+    <g transform="translate(1508 346)">
+      <ellipse cx="0" cy="58" rx="92" ry="16" fill="#05070c" opacity="0.44"/>
+      <path d="M-88 8L-66-12H44L74 7L68 52H-78Z" fill="#24282c" stroke="#11161a" stroke-width="5" stroke-linejoin="round"/>
+      <path d="M-69-3H43L62 10L56 42H-76L-82 15Z" fill="#3b4147" stroke="#6b747b" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M-58 7H43M-60 24H51" stroke="#00d9ff" stroke-width="3" opacity="0.34" stroke-linecap="round"/>
+      <path d="M-80 44H64" stroke="#ff5a00" stroke-width="5" opacity="0.45" stroke-linecap="round"/>
+      <rect x="-46" y="-22" width="58" height="20" rx="4" fill="#11161a" stroke="#596168" stroke-width="3"/>
+      <rect x="-39" y="-17" width="44" height="6" rx="2" fill="#39ff88" opacity="0.42"/>
+      <g transform="translate(70 22) rotate(-12)">
+        <ellipse cx="0" cy="28" rx="34" ry="10" fill="#05070c" opacity="0.45"/>
+        <ellipse cx="0" cy="8" rx="31" ry="10" fill="#1b1f23" stroke="#6b747b" stroke-width="4"/>
+        <rect x="-31" y="8" width="62" height="20" fill="#161a1e" stroke="#3b4147" stroke-width="3"/>
+        <ellipse cx="0" cy="28" rx="31" ry="10" fill="#11161a" stroke="#6b747b" stroke-width="4"/>
+        <ellipse cx="0" cy="28" rx="15" ry="5" fill="#3b4147" opacity="0.75"/>
+      </g>
+      <g transform="translate(-92 22)">
+        <rect x="-16" y="-6" width="32" height="50" rx="8" fill="#8a9299" stroke="#24282c" stroke-width="4"/>
+        <path d="M-10 7H10M-10 24H10" stroke="#ff5a00" stroke-width="3" opacity="0.58"/>
+        <circle cx="0" cy="-9" r="6" fill="#00d9ff" opacity="0.5"/>
+      </g>
+      <g fill="#14181c" stroke="#60686e" stroke-width="4">
+        <circle cx="-52" cy="55" r="10"/>
+        <circle cx="28" cy="55" r="10"/>
+      </g>
+      <path d="M-58 46H36" stroke="#11161a" stroke-width="7" stroke-linecap="round"/>
     </g>
     <g fill="#1b1f23" stroke="#63696d" stroke-width="4">
-      <ellipse cx="525" cy="404" rx="44" ry="13"/>
-      <ellipse cx="525" cy="382" rx="42" ry="12"/>
-      <rect x="483" y="382" width="84" height="22"/>
-      <ellipse cx="1395" cy="404" rx="44" ry="13"/>
-      <ellipse cx="1395" cy="382" rx="42" ry="12"/>
-      <rect x="1353" y="382" width="84" height="22"/>
+      <ellipse cx="526" cy="405" rx="44" ry="13"/>
+      <ellipse cx="526" cy="382" rx="42" ry="12"/>
+      <rect x="484" y="382" width="84" height="23"/>
+      <ellipse cx="560" cy="398" rx="34" ry="10" opacity="0.72"/>
+      <ellipse cx="560" cy="379" rx="32" ry="9" opacity="0.72"/>
+      <rect x="528" y="379" width="64" height="19" opacity="0.72"/>
+      <ellipse cx="1406" cy="402" rx="34" ry="10" opacity="0.7"/>
+      <ellipse cx="1406" cy="382" rx="32" ry="9" opacity="0.7"/>
+      <rect x="1374" y="382" width="64" height="20" opacity="0.7"/>
+    </g>
+  </g>
+
+  <!-- Foreground silhouettes and warning glints, cropped above the playable road. -->
+  <g opacity="0.58">
+    <path d="M0 386C180 356 306 357 480 384L456 428H0Z" fill="#0f1317"/>
+    <path d="M1920 386C1740 356 1614 357 1440 384L1464 428H1920Z" fill="#0f1317"/>
+    <path d="M78 380h250M1592 380h250" stroke="#ff5a00" stroke-width="4" opacity="0.62"/>
+    <path d="M112 396h142M1666 396h142" stroke="#00d9ff" stroke-width="3" opacity="0.36"/>
+  </g>
+
+  <!-- Side service floors remain visible around the playable road. -->
+  <g opacity="0.88">
+    <path d="M0 410H620L145 1080H0Z" fill="#30363b"/>
+    <path d="M1920 410H1300L1775 1080H1920Z" fill="#30363b"/>
+    <path d="M0 410H620L145 1080H0ZM1920 410H1300L1775 1080H1920Z" fill="url(#microGrid)" opacity="0.38"/>
+    <path d="M64 438H550M38 500H506M16 582H448M0 690H372M0 842H270" stroke="#697279" stroke-width="3" opacity="0.28"/>
+    <path d="M1856 438H1370M1882 500H1414M1904 582H1472M1920 690H1548M1920 842H1650" stroke="#697279" stroke-width="3" opacity="0.28"/>
+    <path d="M615 410L148 1080M1305 410L1772 1080" stroke="#0d1115" stroke-width="18" opacity="0.45"/>
+    <path d="M615 410L148 1080M1305 410L1772 1080" stroke="#ff5a00" stroke-width="4" opacity="0.42"/>
+    <path d="M548 420L112 1080M1372 420L1808 1080" stroke="#00d9ff" stroke-width="2" opacity="0.18"/>
+    <g fill="#11161a" opacity="0.5">
+      <rect x="38" y="476" width="180" height="28" rx="4"/>
+      <rect x="1660" y="476" width="220" height="28" rx="4"/>
+      <rect x="76" y="620" width="240" height="36" rx="4"/>
+      <rect x="1604" y="620" width="240" height="36" rx="4"/>
+    </g>
+    <g stroke-width="10" opacity="0.55">
+      <path d="M32 430l52 0M104 430l52 0M176 430l52 0M248 430l52 0" stroke="#ff5a00"/>
+      <path d="M1620 430l52 0M1692 430l52 0M1764 430l52 0M1836 430l52 0" stroke="#ff5a00"/>
+      <path d="M32 430l26 0M104 430l26 0M176 430l26 0M248 430l26 0" stroke="#24282c"/>
+      <path d="M1620 430l26 0M1692 430l26 0M1764 430l26 0M1836 430l26 0" stroke="#24282c"/>
     </g>
   </g>
 

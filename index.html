@@ -509,6 +509,7 @@
     const closeLevelSelect = document.querySelector("#closeLevelSelect");
     const levelSelect = document.querySelector("#levelSelect");
     const exitGame = document.querySelector("#exitGame");
+    const TEMP_UNLOCK_STAGE_3_FOR_TESTING = true;
 
     document.addEventListener("contextmenu", (event) => {
       event.preventDefault();
@@ -523,7 +524,8 @@
       const progress = window.FinalDriverProgress;
       document.querySelectorAll(".level-card[data-level]").forEach((card) => {
         const level = Number(card.dataset.level || "1");
-        const unlocked = !progress || progress.isLevelUnlocked(level);
+        const unlockedByProgress = !progress || progress.isLevelUnlocked(level);
+        const unlocked = unlockedByProgress || (TEMP_UNLOCK_STAGE_3_FOR_TESTING && level === 3);
         if (!card.dataset.href && card.getAttribute("href")) {
           card.dataset.href = card.getAttribute("href");
         }

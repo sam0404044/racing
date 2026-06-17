@@ -36,8 +36,25 @@ import { app } from './state.js';
 const DESIGN_W = 1920;
 const DESIGN_H = 1080;
 const MECH_PIT_BG_SRC = "assets/mech-pit-background.svg";
+const STAGE5_TASK4_STORY_URL = "../Story-Stage/story-stage.html?start=play_test_4&end=play_test_4&return=../index.html%3Flevels%3D1";
 const mechPitStageImage = new Image();
 mechPitStageImage.src = MECH_PIT_BG_SRC;
+const STAGE5_BOSS_INTRO_LAYER_SRCS = [
+  "../assets/BOSS-3/boss3-intro-banner.jpg",
+  "../assets/BOSS-3/boss3-intro-red-banner.png",
+  "../assets/BOSS-3/boss3-intro-data-sweep.png",
+  "../assets/BOSS-3/boss3-intro-title-code.png",
+  "../assets/BOSS-3/boss3-intro-quote-panel.png",
+  "../assets/BOSS-3/boss3-intro-stats-bars.png",
+  "../assets/BOSS-3/boss3-intro-bottom-panel.png",
+  "../assets/BOSS-3/boss3-intro-emblem.png",
+  "../assets/BOSS-3/boss3-intro-portrait.png",
+];
+const stage5BossIntroLayers = STAGE5_BOSS_INTRO_LAYER_SRCS.map(src => {
+  const img = new Image();
+  img.src = src;
+  return img;
+});
 
 // ─── 全局 UI 倍率 ────────────────────────────────────────────────────────
 // 一次調整所有文字大小與 modal 框框尺寸
@@ -1033,7 +1050,7 @@ function pickNextOpponent() {
     s5.pinnedNextOpponentId = null;
     return id;
   }
-  const candidates = s5.ahead.filter(id => id !== "BOSS");
+  const candidates = s5.ahead;
   if (candidates.length === 0) return null;  // 全部超過 = 通關
   // v0.9：固定取「玩家前一個名次」的對手 = ahead 列表的最後一個
   //   ahead 的排列是「第 1 名、第 2 名、...、玩家前一名」
@@ -1091,7 +1108,7 @@ function applyChaserToApp(chaserId) {
 // 初始化主關卡狀態
 function initStage5State() {
   app.stage5 = {
-    ahead: ["A","B","C"],
+    ahead: ["BOSS","A","B","C"],
     passed: [],
     currentOpponentId: null,
     pinnedNextOpponentId: null,
@@ -1154,6 +1171,25 @@ function shuffleArrayInPlace(arr) {
 }
 
 // ─── 關卡初始化 ────────────────────────────────────────────────────────────
+function debugStartStage5AtBoss() {
+  playNormalBgm();
+  loadStage(0);
+  const s5 = app.stage5;
+  if (!s5) return;
+  s5.ahead = ["BOSS"];
+  s5.passed = ["C","B","A"];
+  s5.currentOpponentId = "BOSS";
+  s5.pinnedNextOpponentId = null;
+  s5.chaserId = null;
+  s5.roundsPlayed = 0;
+  s5.bossHitFx = null;
+  s5.opponentFocusMap.BOSS = STAGE5_OPPONENTS.BOSS?.focus ?? 3;
+  app.rank = 2;
+  app.rankTotal = 5;
+  app.mode = "stage5-boss-intro";
+  app.stage5.bossIntroStart = performance.now();
+}
+
 function loadStage(idx) {
   const stage = STAGES[idx];
   if (!stage) return;
@@ -1166,8 +1202,8 @@ function loadStage(idx) {
   app._speedPopGates = [];
   app.inputLocked = false;
   app._pendingBendQteTrigger = false;
-  app.rank = 4;
-  app.rankTotal = 4;
+  app.rank = 5;
+  app.rankTotal = 5;
   app.playerLane = 1;
   app.playerLaneVisual = 1;
   app.tires = 5;
@@ -1194,8 +1230,8 @@ function loadStage(idx) {
 function reset() {
   stopNormalBgm();
   app.mode = "start-ready";
-  app.rank = 4;
-  app.rankTotal = 4;
+  app.rank = 5;
+  app.rankTotal = 5;
   app.stageIndex = 0;
   app.playerSpeed = 0;
   app.tires = app.tiresMax;
@@ -2124,7 +2160,16 @@ function stage5OnOvertakeSuccess() {
   if (oppId) {
     // 扣對手專注度
     const curFocus = s5.opponentFocusMap[oppId] ?? 0;
-    if (curFocus > 0) {
+    if (oppId === "BOSS") {
+      const nextHp = Math.max(0, curFocus - 1);
+      s5.opponentFocusMap[oppId] = nextHp;
+      s5.bossHitFx = { startTime: performance.now(), until: performance.now() + 520 };
+      if (nextHp > 0) {
+        app.message = `突破 BOSS 裝甲！剩 ${nextHp} 格`;
+        app.mode = "stage5-overtake-result";
+        return;
+      }
+    } else if (curFocus > 0) {
       // 專注度還有 → 扣 1，尚未超過
       s5.opponentFocusMap[oppId] = curFocus - 1;
       app.message = `打破防守！（專注度剩 ${curFocus - 1}）`;
@@ -2194,15 +2239,19 @@ function shuffleStage5Ranks() {
   if (!s5) return;
   // 前方：最後一個（玩家前一名）固定不動、其他洗牌
   //   ahead 結構：[..., 玩家前一名]
-  if (s5.ahead.length >= 2) {
-    const fixedFront = s5.ahead[s5.ahead.length - 1];
-    const shufflePool = s5.ahead.slice(0, s5.ahead.length - 1);
+  const bossAhead = s5.ahead.includes("BOSS");
+  const normalAhead = s5.ahead.filter(id => id !== "BOSS");
+  if (normalAhead.length >= 2) {
+    const fixedFront = normalAhead[normalAhead.length - 1];
+    const shufflePool = normalAhead.slice(0, normalAhead.length - 1);
     // 洗中間（遠方的名次可以亂跳）
     for (let i = shufflePool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shufflePool[i], shufflePool[j]] = [shufflePool[j], shufflePool[i]];
     }
-    s5.ahead = [...shufflePool, fixedFront];
+    s5.ahead = [...(bossAhead ? ["BOSS"] : []), ...shufflePool, fixedFront];
+  } else if (bossAhead) {
+    s5.ahead = ["BOSS", ...normalAhead];
   }
   // 後方對手洗牌（後方名次混亂可接受）
   for (let i = s5.passed.length - 1; i > 0; i--) {
@@ -2252,7 +2301,8 @@ function stage5OnDefenseEnd(success) {
 }
 // 通關 = 整個遊戲勝利
 function stage5OnGameWin() {
-  app.mode = "all-clear";
+  window.FinalDriverProgress?.markLevelCleared?.(3);
+  window.location.href = STAGE5_TASK4_STORY_URL;
 }
 // 跑完設定的最大回合數 = 越過終點線、依當前名次結束
 function stage5OnFinishLineReached() {
@@ -2724,6 +2774,10 @@ function handleButton(id) {
     loadStage(0);
     return;
   }
+  if (id === "debug-start-boss") {
+    debugStartStage5AtBoss();
+    return;
+  }
   // 主選單：規則
   if (id === "open-rules") {
     app._rulesPrevMode = app.mode;
@@ -2946,6 +3000,7 @@ function drawInner(time) {
   if (m === "start-ready")              { drawStartModal(); drawExpressionDock(time); return; }
   if (m === "rules")                    { drawRulesModal(time); drawExpressionDock(time); return; }
   if (m === "stage-5-intro")            { drawStage5IntroModal(time); drawExpressionDock(time); return; }
+  if (m === "stage5-boss-intro")        { drawStage5BossIntro(time); drawExpressionDock(time); return; }
   if (m === "stage5-corner-pick-lane")  { drawStage5CornerLanePick(time); drawExpressionDock(time); return; }
 
   // HUD 常駐
@@ -3304,6 +3359,114 @@ function drawCar(x, y, w, h, color, opts={}) {
   ctx.restore();
 }
 
+function drawStage5BossCar(x, y, w, h, time) {
+  const ctx = app.ctx;
+  const s5 = app.stage5;
+  const fx = s5?.bossHitFx;
+  const hitT = fx ? Math.max(0, Math.min(1, 1 - (performance.now() - fx.startTime) / 520)) : 0;
+  const shake = hitT > 0 ? Math.sin(time * 0.09) * 4.5 * hitT : 0;
+  const tilt = Math.sin(time * 0.0014) * 0.018 + hitT * 0.035;
+
+  ctx.save();
+  ctx.translate(x + shake, y);
+  ctx.rotate(tilt);
+
+  ctx.fillStyle = "rgba(0,0,0,0.58)";
+  ctx.beginPath();
+  ctx.ellipse(0, h * 0.52, w * 0.60, h * 0.20, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const armor = ctx.createLinearGradient(-w * 0.54, -h * 0.42, w * 0.54, h * 0.36);
+  armor.addColorStop(0, "#24282c");
+  armor.addColorStop(0.34, "#616569");
+  armor.addColorStop(0.66, "#3b3131");
+  armor.addColorStop(1, "#181b1f");
+  ctx.fillStyle = armor;
+  ctx.beginPath();
+  ctx.roundRect(-w * 0.50, -h * 0.26, w, h * 0.56, 10);
+  ctx.fill();
+  ctx.strokeStyle = hitT > 0 ? "rgba(255,90,0,0.92)" : "rgba(0,217,255,0.44)";
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  ctx.fillStyle = "#aa2704";
+  ctx.beginPath();
+  ctx.roundRect(-w * 0.35, -h * 0.48, w * 0.70, h * 0.30, 8);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,210,120,0.34)";
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(0,217,255,0.66)";
+  ctx.fillRect(-w * 0.26, -h * 0.39, w * 0.52, h * 0.08);
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  ctx.fillRect(-w * 0.23, -h * 0.37, w * 0.46, h * 0.025);
+
+  ctx.fillStyle = "#15191d";
+  ctx.fillRect(-w * 0.58, h * 0.13, w * 0.17, h * 0.24);
+  ctx.fillRect(w * 0.41, h * 0.13, w * 0.17, h * 0.24);
+  ctx.fillStyle = "#0f1215";
+  ctx.beginPath();
+  ctx.arc(-w * 0.36, h * 0.31, h * 0.17, 0, Math.PI * 2);
+  ctx.arc(w * 0.36, h * 0.31, h * 0.17, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(138,146,153,0.72)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(57,255,136,0.60)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.44, -h * 0.18);
+  ctx.lineTo(-w * 0.16, h * 0.28);
+  ctx.moveTo(w * 0.44, -h * 0.18);
+  ctx.lineTo(w * 0.16, h * 0.28);
+  ctx.stroke();
+
+  ctx.fillStyle = hitT > 0 ? "rgba(255,90,0,0.86)" : "rgba(255,30,30,0.70)";
+  ctx.fillRect(-w * 0.43, -h * 0.02, w * 0.16, h * 0.10);
+  ctx.fillRect(w * 0.27, -h * 0.02, w * 0.16, h * 0.10);
+
+  if (hitT > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.strokeStyle = `rgba(255,90,0,${0.32 + hitT * 0.5})`;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + time * 0.02;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * w * 0.18, Math.sin(a) * h * 0.18);
+      ctx.lineTo(Math.cos(a) * w * (0.42 + hitT * 0.08), Math.sin(a) * h * (0.40 + hitT * 0.08));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function drawStage5BossHealthBar(cx, y, w, h) {
+  const ctx = app.ctx;
+  const opp = currentOpponent();
+  const maxHp = Math.max(1, opp?.focus ?? 3);
+  const curHp = Math.max(0, Math.min(maxHp, app.stage5?.opponentFocusMap?.BOSS ?? maxHp));
+  const x = cx - w / 2;
+  const gap = 5;
+  const segW = (w - gap * (maxHp - 1)) / maxHp;
+  text("血量", cx, y - 9, 13, "#ffd36f", "900", "center", true);
+  roundPanel(x - 8, y - 5, w + 16, h + 12, 9, "rgba(18, 20, 22, 0.76)", "rgba(255, 211, 116, 0.48)", 2);
+  for (let i = 0; i < maxHp; i++) {
+    const sx = x + i * (segW + gap);
+    const alive = i < curHp;
+    const fill = alive ? "rgba(170, 39, 4, 0.90)" : "rgba(55, 55, 58, 0.48)";
+    const stroke = alive ? "rgba(255, 178, 105, 0.88)" : "rgba(255, 214, 132, 0.22)";
+    roundPanel(sx, y, segW, h, 5, fill, stroke, 1.5);
+    if (alive) {
+      ctx.fillStyle = "rgba(255, 216, 128, 0.28)";
+      ctx.fillRect(sx + 4, y + 3, Math.max(0, segW - 8), 3);
+    }
+  }
+}
+
 function skylineHash01(n) { const x = Math.sin(n*12.9898)*43758.5453; return x-Math.floor(x); }
 
 function drawCitySkyline(ctx, w, h, horizon, time) {
@@ -3519,7 +3682,10 @@ function drawRace(time) {
   const opponentProgress = Math.min(1, app.playerSpeed / Math.max(1, app.opponentSpeed));
   // progress 0 → 對手在 0.62h（遠處）；progress 1 → 對手在 0.72h（快追到了）
   let opponentY = h * (0.62 + opponentProgress * 0.10);
-  let redW = 82, redH = 40;
+  const stage5Opponent = isStage5() ? currentOpponent() : null;
+  const isStage5Boss = !!(stage5Opponent?.isBoss || stage5Opponent?.id === "BOSS");
+  let redW = isStage5Boss ? 134 : 82;
+  let redH = isStage5Boss ? 58 : 40;
   let redX = laneCarX(app.opponentLaneVisual, app.laneCount, opponentY);
   // 超車 / 防守 QTE：對手車覆蓋為全賽道擺動（無視 lane）、像在搶位
   //   彎道 QTE 維持 lane 位置 + 小幅 sway（在後面玩家車那段一起處理）
@@ -3576,7 +3742,12 @@ function drawRace(time) {
       flashCtx.restore();
     }
   }
-  drawCar(redX, opponentY, redW, redH, "#e94d48");
+  if (isStage5Boss) {
+    drawStage5BossHealthBar(redX, opponentY - redH * 0.95, redW * 1.08, 15);
+    drawStage5BossCar(redX, opponentY, redW, redH, time);
+  } else {
+    drawCar(redX, opponentY, redW, redH, "#e94d48");
+  }
 
   // 對手整合資訊面板（名條 + 預告，合而為一，車子正上方）
   if (isStage5() && app.stage5) {
@@ -6253,7 +6424,7 @@ function drawModalPanel(box, accent) {
 }
 
 function drawStartModal() {
-  const box = getCenteredModalBox(460, 320);
+  const box = getCenteredModalBox(460, 380);
   drawModalPanel(box);
   const cx = box.x+box.w/2;
   text("最後車手", cx, box.y+62*UI_SCALE, 36, "#dfeeff", "900", "center");
@@ -6265,6 +6436,7 @@ function drawStartModal() {
   text("你是車隊領隊，透過打牌以指揮車手", cx, box.y+140*UI_SCALE, 16, "#e8f0ff", "700", "center");
   text("駕駛賽車超過前車。", cx, box.y+164*UI_SCALE, 16, "#e8f0ff", "700", "center");
   button("start-game", "開始遊戲", cx-110, box.y+218*UI_SCALE, 220, 48, false, "start");
+  button("debug-start-boss", "暫時：直通 BOSS", cx-110, box.y+276*UI_SCALE, 220, 42, false, "primary");
 }
 
 function drawPromptModal() {
@@ -6987,7 +7159,7 @@ function drawStage5TeamCardTooltip(time) {
 // 回傳實際用掉的高度（供呼叫端推進 curY）
 function drawRankLineup(x, y, w, s5) {
   const ctx = app.ctx;
-  const total = app.rankTotal || 4;
+  const total = app.rankTotal || 5;
   const playerRank = app.rank;
   const rowH = 22;
   const gap = 3;
@@ -7146,8 +7318,80 @@ function drawStage5IntroModal(time) {
   const boxY = app.h/2 - boxH/2;
   roundPanel(boxX, boxY, boxW, boxH, 14, "rgba(6,14,28,0.97)", "rgba(255,200,80,0.5)", 2);
   text("維修站高架", boxX + boxW/2, boxY + 40, 22, "#ffd980", "1000", "center");
-  text("第 4 名出發 — 超過全部 3 名對手即通關", boxX + boxW/2, boxY + 80, 13, "#e8f0ff", "700", "center");
+  text("第 5 名出發 — 擊破前方 3 名車手與 BOSS 即通關", boxX + boxW/2, boxY + 80, 13, "#e8f0ff", "700", "center");
   button("stage5-intro-ok", "出發", boxX + boxW/2 - 80, boxY + boxH - 50, 160, 38, false, "start");
+}
+
+function drawBossIntroImage(img, x, y, w, h, alpha=1, mode="contain") {
+  if (!img || !img.complete || !img.naturalWidth) return;
+  const ctx = app.ctx;
+  const scale = mode === "cover"
+    ? Math.max(w / img.naturalWidth, h / img.naturalHeight)
+    : Math.min(w / img.naturalWidth, h / img.naturalHeight);
+  const dw = img.naturalWidth * scale;
+  const dh = img.naturalHeight * scale;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  ctx.restore();
+}
+
+function drawStage5BossIntro(time) {
+  const ctx = app.ctx;
+  const s5 = app.stage5;
+  const start = s5?.bossIntroStart || performance.now();
+  const age = performance.now() - start;
+  const easeOut = t => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
+  const fade = (from, dur) => easeOut((age - from) / dur);
+  const w = app.w, h = app.h;
+
+  ctx.save();
+  ctx.fillStyle = "#050607";
+  ctx.fillRect(0, 0, w, h);
+
+  const banner = stage5BossIntroLayers[0];
+  const redBanner = stage5BossIntroLayers[1];
+  const sweep = stage5BossIntroLayers[2];
+  const titleCode = stage5BossIntroLayers[3];
+  const quote = stage5BossIntroLayers[4];
+  const stats = stage5BossIntroLayers[5];
+  const bottom = stage5BossIntroLayers[6];
+  const emblem = stage5BossIntroLayers[7];
+  const portrait = stage5BossIntroLayers[8];
+
+  drawBossIntroImage(banner, 0, 0, w, h, 0.22 + fade(0, 700) * 0.18, "cover");
+
+  ctx.globalCompositeOperation = "screen";
+  const scanX = -w * 0.25 + (age * 0.18 % (w * 1.5));
+  drawBossIntroImage(sweep, scanX - w * 0.50, h * 0.05, w * 0.72, h * 0.42, 0.08 + Math.sin(time * 0.006) * 0.025, "contain");
+  ctx.globalCompositeOperation = "source-over";
+
+  const titleIn = fade(250, 700);
+  drawBossIntroImage(redBanner, -70 + titleIn * 70, h * 0.05, w * 0.58, h * 0.34, titleIn * 0.45, "contain");
+  drawBossIntroImage(titleCode, 70 - (1 - titleIn) * 120, h * 0.08, w * 0.46, h * 0.22, titleIn * 0.95, "contain");
+
+  const portraitIn = fade(800, 850);
+  drawBossIntroImage(portrait, w * 0.61 + (1 - portraitIn) * 160, h * 0.10, w * 0.34, h * 0.70, portraitIn, "contain");
+  drawBossIntroImage(emblem, w * 0.77, h * 0.08 - (1 - portraitIn) * 60, w * 0.12, h * 0.12, portraitIn * 0.42, "contain");
+
+  const infoIn = fade(1350, 650);
+  drawBossIntroImage(quote, w * 0.07 - (1 - infoIn) * 80, h * 0.30, w * 0.42, h * 0.20, infoIn * 0.92, "contain");
+  drawBossIntroImage(stats, w * 0.07, h * 0.50 + (1 - infoIn) * 70, w * 0.43, h * 0.30, infoIn * 0.95, "contain");
+  drawBossIntroImage(bottom, w * 0.33, h * 0.82 + (1 - fade(1750, 650)) * 50, w * 0.36, h * 0.12, fade(1750, 650) * 0.65, "contain");
+
+  const ready = age > 3300;
+  if (ready) {
+    stage5StartNewRound();
+    ctx.restore();
+    return;
+  }
+  if (age > 2500) {
+    const pulse = 0.72 + Math.sin(time * 0.008) * 0.18;
+    text("IRON GANTRY", w * 0.50, h * 0.13, 22, `rgba(245,248,250,${pulse})`, "1000", "center", true);
+  } else {
+    text("BOSS INTRO", w/2, h - 92, 16, "rgba(0,217,255,0.72)", "900", "center", true);
+  }
+  ctx.restore();
 }
 
 function drawStage5OvertakeResultModal() {
@@ -7406,7 +7650,7 @@ function drawStage5FinishLineModal() {
   ctx.fillRect(0, 0, app.w, app.h);
   const cx = app.w/2, cy = app.h/2;
   const rank = app.rank || 1;
-  const rankTotal = app.rankTotal || 4;
+  const rankTotal = app.rankTotal || 5;
   const isWin = (rank === 1);
   // 標題
   const titleColor = isWin ? "#ffd94f" : "#9ecbff";
@@ -7602,7 +7846,7 @@ function drawRulesModal(time) {
     ["打牌", "拖牌到自己道：施加速度效果。拖到其他道：換道（棄此牌）。"],
     ["超車", "速度 ≥ 對手 → 直接超車；同道 → 強制 QTE 超車。"],
     ["防守 QTE", "Pass 時觸發，按住節奏圈圈拍中央。"],
-    ["排名變動", "成功超車 +1 名次；防守失敗 -1（最低第 4 名）。"],
+    ["排名變動", "成功超車 +1 名次；防守失敗 -1（最低第 5 名）。"],
     ["賽段循環", "每次推進切換下一賽段：直線 / 彎道 / 急彎 / 坑洞 / 油污 / 紅綠燈。"],
     ["三選一", "每次超車成功可從三張牌中選 1 張永久加入牌庫。"],
     ["卡牌類別", "指令牌：立即效果，打出消失。 / 車隊牌：留場持續生效。"],

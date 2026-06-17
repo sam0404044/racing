@@ -72,8 +72,8 @@ export const app = {
 
   // UI
   message: "",
-  rank: 4,
-  rankTotal: 4,
+  rank: 5,
+  rankTotal: 5,
   winOverlay: null,
   winReplayTimer: 0,
   normalBgmPending: false,

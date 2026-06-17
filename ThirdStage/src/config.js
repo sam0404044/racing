@@ -52,6 +52,14 @@ export const STAGES = [
 //   若需讓特定賽道也影響對手，於 lane bonus 加 forOpponent: { add, mult, speedLimit } 覆寫。
 //   設計意圖：賽道是玩家的工具，對手只受自己的動作（切道/boost/absBonus）影響。
 export const STAGE5_OPPONENTS = {
+  BOSS: {
+    id: "BOSS", name: "Iron Gantry", speed: 50, chaserSpeed: 0, focus: 3, isBoss: true,
+    behaviors: [
+      { id:"boss-weak",   cooldown: 1, weight: "weak",   action: "moveSmart", strategy: "bestForSelf", boostAfter: 10 },
+      { id:"boss-strong", cooldown: 2, weight: "strong", action: "moveSmart", strategy: "dynamicAvoidOrBlock", boostAfter: 20 },
+    ],
+    flavor: "Mech pit armored boss. Three armor cells must be broken by clean overtakes.",
+  },
   A: {
     id: "A", name: "禿鷹", speed: 60, chaserSpeed: 50, focus: 0,
     behaviors: [

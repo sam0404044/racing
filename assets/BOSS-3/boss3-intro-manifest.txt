@@ -1,0 +1,25 @@
+BOSS-3 intro asset set
+Name: IRON GANTRY
+Code: 03
+Style: third-stage mech pit, oil black, iron gray, rust red armor, cyan/green telemetry.
+Source: image-generated assets fitted to the intro layer sizes with PowerShell/.NET resizing.
+Files:
+- boss3-intro-banner.jpg
+- boss3-intro-banner-generated-source.png
+- boss3-intro-data-sweep.png
+- boss3-intro-data-sweep-generated-source.png
+- boss3-intro-emblem.png
+- boss3-intro-emblem-generated-source.png
+- boss3-intro-portrait.png
+- boss3-intro-portrait-generated-source.png
+- boss3-intro-quote-panel.png
+- boss3-intro-quote-panel-generated-source.png
+- boss3-intro-title-code.png
+- boss3-intro-title-code-generated-source.png
+- boss3-intro-stats-bars.png
+- boss3-intro-stats-bars-generated-source.png
+- boss3-intro-bottom-panel.png
+- boss3-intro-bottom-panel-generated-source.png
+- boss3-intro-red-banner.png
+- boss3-intro-red-banner-generated-source.png
+Note: all boss3-intro visual layers are generated art, fitted to the intro layer sizes.
