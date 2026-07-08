@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>最終指令 · 經營層原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mgmt-prototype.css">
+</head>
+<body>
+
+<div class="hud" id="hud">
+  <div class="brand">最終指令 <b>/</b> 經營管理PoC</div>
+  <div class="week" id="hudWeek">第 1 週</div>
+  <div class="stats">
+    <div class="stat morale"><span class="k">士氣</span><span class="v" id="moraleV">—</span>
+      <div class="bar"><i id="moraleBar" style="width:0%;background:linear-gradient(90deg,#a8791f,var(--gold))"></i></div></div>
+    <div class="stat kpi"><span class="k">KPI</span><span class="v" id="kpiV">—</span>
+      <div class="bar"><i id="kpiBar" style="width:0%;background:linear-gradient(90deg,var(--cyan-dim),var(--cyan))"></i></div></div>
+    <div class="stat cash"><span class="k">資金</span><span class="v" id="cashV">—</span></div>
+    <div class="stat crew"><span class="k">人力</span><span class="v" id="crewV">—</span></div>
+  </div>
+</div>
+
+<div class="season-cal" id="seasonCal"></div>
+
+<div class="layout" id="week1">
+  <!-- ── 左欄：劇情 + 抉擇 ── -->
+  <main class="story">
+    <div class="eyebrow">第 1 週 · 賽季前</div>
+    <h1 class="title">事件</h1>
+    <p class="lede">這週剛開始，你馬上注意到一段在網路上瘋傳的專訪片段。那是週末時對手於專訪時對於你的車隊發表的一些看法…</p>
+
+    <div class="panel cyan tilt-l">
+      <span class="ptag">事件</span>
+      <div class="interview">
+        <div class="portrait"><img src="assets/rival-portrait.png" alt="對手車隊領隊"></div>
+        <div class="bubble">
+          <div class="who">XX車隊 · 領隊</div>
+          <q>「他們？我不知道耶，他們能跑完全程就該偷笑了」</q>
+        </div>
+      </div>
+      <div class="sfx">!!?</div>
+    </div>
+
+    <div class="panel tilt-r">
+      <span class="ptag">車隊總部</span>
+      <p style="margin:2px 0 0; font-size:15.5px">車隊內部議論紛紛，連董事長都注意、並想要與你討論這件事情。</p>
+    </div>
+
+    <div id="decision">
+      <div class="choices-h">你的回應</div>
+      <div class="choices" id="choices"></div>
+    </div>
+
+    <div class="result" id="result">
+      <div class="rk">結算</div>
+      <div class="rt" id="resTitle">—</div>
+      <p id="resDesc"></p>
+      <div class="delta"><span class="lab">團隊士氣</span><span class="amt" id="resDelta"></span></div>
+      <div class="carry" id="resCarry"></div>
+      <button class="next" id="nextBtn">進入第 2 週 →</button>
+      <div class="stub">第 2 週 · 董事會 KPI 會議 — 施工中</div>
+    </div>
+  </main>
+
+</div>
+
+<div id="week2" class="w2" style="display:none"></div>
+
+<div id="week3" class="w2" style="display:none"></div>
+
+<!-- 左側常駐堆疊：車隊牌組（W1 起）＋ 本季目標（W2 定案後） -->
+<div class="dock-stack">
+  <div id="deckDock" class="dock" style="display:none">
+    <div class="dock-head">🃏 車隊牌組<span class="dock-toggle">▾</span></div>
+    <div class="dock-body"></div>
+  </div>
+  <div id="goalsDock" class="dock" style="display:none">
+    <div class="dock-head">🎯 本季目標<span class="dock-toggle">▾</span></div>
+    <div class="dock-body"></div>
+  </div>
+</div>
+
+<!-- 社群聊天室（W1 預設展開、之後縮小） -->
+<div id="socialDock" class="dock dock-right">
+  <div class="dock-head"><span class="dot"></span>社群 FEED<span class="dock-toggle">▾</span></div>
+  <div class="dock-body">
+    <div class="social-sub">#賽車 #爭議 #血流成河</div>
+    <div class="feed" id="feed"></div>
+  </div>
+</div>
+
+<script src="mgmt-prototype.js"></script>
+</body>
+</html>

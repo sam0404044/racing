@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="極速駕駛-最終指令：霓虹大獎賽週末（4 賽段聯賽 demo）">
+  <meta name="color-scheme" content="dark">
+  <title>霓虹大獎賽週末 / Final Driver</title>
+  <link rel="stylesheet" href="final-driver.css">
+  <link rel="stylesheet" href="neon-shell.css?v=neongp-39-revert">
+</head>
+<body class="qte-test-page">
+  <!-- 比賽引擎（Canvas）— 由 run.js 透過 startSessionRace 接管 -->
+  <section class="qte-test hidden" id="qteTestRoot" aria-label="極速駕駛 / Final Driver"></section>
+  <!-- 賽段之間的 shell 畫面（DOM）— 日後經營層掛載點 -->
+  <div id="shellRoot"></div>
+  <noscript>
+    <p class="qte-noscript-msg">請啟用 JavaScript，以開始霓虹大獎賽週末。</p>
+  </noscript>
+  <!-- 全域 library（window globals、引擎缺檔有防呆但建議保留）-->
+  <script src="canvas-viewport.js"></script>
+  <script src="chassis-hud.js?v=neongp-39-revert"></script>
+  <script src="progress.js"></script>
+  <!-- 週末編排器（ES module）：import game.js / config.js / quali.js -->
+  <script type="module" src="run.js?v=neongp-39-revert"></script>
+</body>
+</html>
