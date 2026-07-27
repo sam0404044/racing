@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>極速駕駛 v3 原型｜六角格・轉向版</title>
+<style>
+:root{--bg:#080418;--panel:#0d0a22;--line:#1e2444;--cyan:#5cf2ff;--mag:#ff3df5;--gold:#ffd166;--txt:#dfe3ff;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--txt);font-family:"Microsoft JhengHei",sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+header{padding:6px 14px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;}
+header h1{font-size:17px;color:var(--cyan);}
+#drvTag{font-size:13px;color:#8f96c9;}
+#beatLabel{font-size:15px;color:var(--gold);margin-left:auto;}
+main{flex:1;display:flex;min-height:0;}
+#boardWrap{flex:1;position:relative;overflow:hidden;}
+#board{display:block;}
+aside{width:400px;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;padding:10px;gap:8px;overflow-y:auto;}
+#stats{background:#0a0720;border:1px solid var(--line);border-radius:8px;padding:8px 10px;}
+.statGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px;}
+.tile{background:#12102c;border:1px solid var(--line);border-radius:8px;padding:5px 2px;text-align:center;}
+.tile .tv{font-size:22px;font-weight:bold;color:var(--txt);line-height:1.15;}
+.tile .tl{font-size:11px;color:#8f96c9;}
+.tile.gold .tv{color:var(--gold);}
+.tile.cyan .tv{color:var(--cyan);}
+.tile.warnT .tv{color:#ff9d9d;}
+.statRow{font-size:13px;color:#b8bde6;line-height:1.7;}
+.tireDots{color:var(--gold);letter-spacing:2px;}
+.gearRow{display:flex;align-items:center;gap:10px;}
+.gearBtn{width:44px;height:38px;background:#141133;color:var(--cyan);border:1px solid var(--line);border-radius:6px;font-size:15px;cursor:pointer;}
+#gearVal{font-size:28px;color:var(--gold);font-weight:bold;width:26px;text-align:center;}
+#gearHint{font-size:13px;color:#8f96c9;}
+#chain{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:130px;background:#0a0720;border:1px dashed var(--line);border-radius:8px;padding:8px;}
+.light{color:#3a3f66;font-size:20px;}
+.light.on{color:var(--cyan);text-shadow:0 0 6px var(--cyan);}
+.btnRow{display:flex;gap:8px;}
+button.act{flex:1;padding:12px 0;border-radius:8px;border:1px solid var(--cyan);background:#0f2233;color:var(--cyan);font-size:16px;cursor:pointer;font-family:inherit;}
+button.act:disabled{opacity:.35;cursor:default;}
+button.ghost{border-color:var(--line);background:#12102c;color:#8f96c9;}
+#logBox{flex:1;min-height:90px;font-size:13.5px;line-height:1.6;background:#0a0720;border:1px solid var(--line);border-radius:8px;padding:8px;overflow-y:auto;}
+#logBox .warn,#lineInfo .warn,#opps .warn{color:#ff9d9d;} #logBox .gold{color:var(--gold);} #logBox .blue{color:#9db8ff;}
+footer{border-top:1px solid var(--line);background:var(--panel);padding:8px 10px;}
+#hand{display:flex;gap:6px;overflow-x:auto;}
+.card{width:158px;min-width:158px;min-height:118px;border-radius:10px;padding:10px;cursor:pointer;border:2px solid;background:#12102c;font-size:14px;position:relative;}
+.card.sm{width:150px;min-width:150px;min-height:110px;}
+.card.empty{border:1.5px dashed var(--line);color:#4a4f7a;display:flex;align-items:center;justify-content:center;cursor:default;}
+.card.active{box-shadow:0 0 12px var(--cyan);}
+.cRed{border-color:#ff5c5c;} .cGreen{border-color:#69db7c;} .cYellow{border-color:#ffd166;}
+.cBlue{border-color:#748ffc;} .cBlack{border-color:#c0c3e0;background:#050310;} .cNone{border-color:#4a4f7a;color:#8f96c9;}
+.cName{font-weight:bold;margin-bottom:6px;font-size:16px;display:flex;align-items:center;gap:6px;}
+.badge{font-size:15px;font-weight:normal;border:1px solid var(--line);border-radius:6px;padding:1px 7px;background:#0a0720;color:#b8bde6;}
+.cBadgeRow{margin-top:5px;display:flex;gap:4px;}
+.cPips{display:flex;flex-wrap:wrap;gap:2px;}
+.pip{font-size:19px;padding:0 1px;}
+.pip.head{box-shadow:inset 3px 0 0 var(--cyan);border-radius:2px;}
+.pip.tail{box-shadow:inset -3px 0 0 var(--gold);border-radius:2px;}
+.dualHalf{display:flex;gap:2px;padding:3px 5px;border:1px dashed transparent;border-radius:6px;cursor:pointer;margin-bottom:2px;}
+.dualHalf.on{border-color:var(--cyan);background:rgba(92,242,255,.08);}
+.dualHalf.off{opacity:.4;}
+.costBtn{margin-top:4px;font-size:12px;border:1px solid #4a4f7a;border-radius:6px;padding:3px 6px;color:#8f96c9;cursor:pointer;text-align:center;}
+.costBtn.on{border-color:var(--gold);color:var(--gold);background:rgba(255,209,102,.08);}
+.pip.neg{border:2.5px solid #ff1a1a;border-radius:5px;background:rgba(255,26,26,.16);padding:0 2px;}
+.pip.star{color:#fff;text-shadow:0 0 6px #fff;font-size:22px;}
+.cNote{font-size:12px;color:#8f96c9;margin-top:4px;line-height:1.35;}
+.cNote.gold{color:var(--gold);}
+.overlay{position:fixed;inset:0;background:rgba(4,2,14,.82);display:none;align-items:center;justify-content:center;z-index:30;flex-direction:column;gap:16px;}
+#qteBar{width:360px;height:44px;background:#12102c;border:1px solid var(--cyan);border-radius:8px;position:relative;overflow:hidden;cursor:pointer;}
+#cursorTip{position:fixed;display:none;pointer-events:none;z-index:60;
+  background:rgba(8,4,24,0.92);border:1px solid var(--cyan);border-radius:6px;
+  padding:2px 8px;font-size:13px;font-weight:bold;color:var(--cyan);white-space:nowrap;}
+#cursorTip.zero{border-color:#ff6b6b;color:#ff8f8f;}
+#qteSegs{position:absolute;inset:0;display:flex;}
+#qteSegs .qseg{flex:1;display:flex;align-items:center;justify-content:center;font-weight:bold;color:#ffd166;border-right:1px dashed #3a3f6e;font-size:15px;}
+#qteSegs .qseg:last-child{border-right:none;}
+#qteZone{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);background:rgba(92,242,255,.22);}
+#qtePerf{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);background:rgba(255,209,102,.5);}
+#qteMark{position:absolute;top:0;bottom:0;width:3px;background:#fff;box-shadow:0 0 8px #fff;}
+#qteLabel{font-size:16px;color:var(--cyan);}
+#qteHint{font-size:12px;color:#8f96c9;}
+.menuBox{background:var(--panel);border:1px solid var(--cyan);border-radius:10px;padding:18px 22px;display:flex;flex-direction:column;gap:12px;min-width:260px;}
+.menuBox h3{color:var(--cyan);font-size:15px;}
+#banner{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--gold);color:var(--gold);font-size:22px;padding:18px 34px;border-radius:10px;display:none;z-index:40;}
+#rulesBody{max-width:560px;max-height:70vh;overflow-y:auto;font-size:12.5px;line-height:1.8;}
+#rulesBody b{color:var(--cyan);}
+</style>
+</head>
+<body>
+<header>
+  <h1>極速駕駛 v3 原型</h1><span id="drvTag"></span><span id="beatLabel"></span>
+  <button class="act ghost" id="btnRules" style="flex:0;padding:4px 12px;font-size:12px;">說明</button>
+</header>
+<main>
+  <div id="boardWrap"><canvas id="board"></canvas><div id="cursorTip"></div></div>
+  <aside>
+    <div id="stats"></div>
+    <div class="gearRow">
+      <button class="gearBtn" id="gearDn">▼</button><span id="gearVal">2</span><button class="gearBtn" id="gearUp">▲</button>
+      <span id="gearHint"></span>
+    </div>
+    <div id="chain"></div>
+    <div id="opps" style="font-size:13.5px;line-height:1.7;background:#0a0720;border:1px solid var(--line);border-radius:8px;padding:8px 10px;"></div>
+    <div id="lineInfo" style="display:none;font-size:13px;line-height:1.7;background:#0a0720;border:1px solid var(--line);border-radius:8px;padding:8px 10px;"></div>
+    <div class="btnRow">
+      <button class="act" id="btnSubmit">確定出牌 → 畫線</button>
+      <button class="act ghost" id="btnBack" style="display:none;">改鏈</button>
+      <button class="act ghost" id="btnClear">清除線</button>
+      <button class="act ghost" disabled title="v0.1 實裝">無線電</button>
+    </div>
+    <div id="logBox"></div>
+  </aside>
+</main>
+<footer><div id="hand"></div></footer>
+
+<div class="overlay" id="qte">
+  <div id="qteLabel"></div>
+  <div id="qteBar"><div id="qteZone"></div><div id="qtePerf"></div><div id="qteSegs" style="display:none"><div class="qseg">−1</div><div class="qseg">−2</div><div class="qseg">−3</div></div><div id="qteMark"></div></div>
+  <div id="qteHint">Space 或點擊：把指針停在亮區（金＝perfect）</div>
+</div>
+
+<div class="overlay" id="intent">
+  <div class="menuBox">
+    <h3 id="intentTitle"></h3>
+    <button class="act" id="btnOvertake">超越（線穿過去、執行時繞行）</button>
+    <button class="act ghost" id="btnFollow">跟車（線收在他身後、吃尾流）</button>
+  </div>
+</div>
+
+<div class="overlay" id="drvPick" style="display:flex;">
+  <div class="menuBox">
+    <h3>選擇車手（人格＝文法）</h3>
+    <button class="act" id="btnDrvRhythm">節奏型：尾接頭亮燈<br><small>心流＝貨幣：累積後花在專屬牌的消耗效果上</small></button>
+    <button class="act" id="btnDrvBurst">爆發型：相鄰同色亮燈<br><small>加成：全亮時 Flow +1</small></button>
+  </div>
+</div>
+
+<div class="overlay" id="rules">
+  <div class="menuBox" id="rulesBody">
+    <h3>基本規則（v0）</h3>
+    <p><b>目標</b>：先跑完 2 圈。輪胎歸零＝DNF。</p>
+    <p><b>回合（v3.5 速度量制）</b>：①換檔 ±1（檔位＝引擎性格：上限／倍率＝4/×1.5、6/×1.3、8/×1.1、10/×0.9）②<b>開放牌桌</b>：車手全部 12 張指令牌從頭攤開（總部日後可擴充）。每回合至多打 <b>3 張</b>（車手智慧＝指令槽）；<b>打過的牌要等牌桌上全部的牌都用過，才會一起歸隊</b>（強制輪轉、每張都有上場時刻）。牌印<b>檔位區間</b>（低檔＝扭力層⚡多、高檔＝操控層🎯多），檔位不合的牌打不出——<b>換檔＝切換牌桌上活著的那一層</b>③<b>速度量 SV＝min(檔位上限, ⌊(P＋引擎調整)×檔位倍率⌋)</b>——P＝牌面動力加總；行程＝SV＋免費移動⌊速度÷2⌋。④hover 畫線 → 點擊確定路線 → 點路徑格開部件選單（煞車）→ 按「出發！」。執行採固定時間軌跡動畫：全場同時沿各自軌跡滑行、判定與選單時定格。<b>紅轉速</b>：降檔時若速度量超過新檔上限，保持原速（紅字）、本回合不得加速。</p>
+    <p><b>符號</b>：序列（格子）＝駕駛語言：⚡＝動力（進 SV 公式）、🎯＝抓地（轉向自動投入）、♒＝細膩操作（降 QTE 難度）；青邊＝入口、金邊＝出口，節奏型亮燈＝前一張出口接得上下一張入口（不看正負）。<b>角標</b>＝純代價：🛞打出即扣胎，不參與接口。紅框＝負符號。</p>
+<p><b>牌桌（v4・十二張）</b>：紅＝激進數值＋代價（彈射起步／氮氣噴射／甩尾過彎）、綠＝節奏文法家族（起步節奏／換檔銜接／巡航）、黃＝警戒互動家族（預判／尾流獵手／車陣穿梭）、藍＝超車詭計（假動作／內線強襲）、黑＝節奏教練。每張印檔位區間，換檔＝切換牌桌上活著的那一層。</p>
+<p><b>心流＝超載（Overdrive）</b>：亮燈累積心流，打牌時可灌心流強化<b>那一張</b>——點牌上的「超載」鈕。加印型（綠組與假動作）可<b>選擇加在序列頭或尾</b>（再點一次切換加頭／加尾／取消）：加頭改變誰能接我、加尾改變我能接誰。效果型：彈射起步超載2＝無視檔位上限、氮氣超載2＝免胎耗、甩尾超載3＝本回合轉向判定全免、預判超載1＝繞行後多走 1 格、尾流獵手超載1＝距離 2 格也算咬到、車陣穿梭超載1＝跟車後尾流再+1、內線強襲超載2＝急拐完全不減速。<b>節奏教練</b>無超載：入鏈即需 4 心流（出發時扣除），效果固定＝相鄰兩張符號×2。</p>
+    <p><b>移動與彎道</b>：<b>速度（車的慣性）</b>：直行一格 +1、<b>60° 緩轉 ÷2、120° 急拐 ÷4</b>（下限 1）、煞車扣、失控歸 0、跨回合保留。<b>回合開始免費移動＝⌊速度÷2⌋</b>（加進行程、不吃檔位上限）；行程＝速度量＋免費移動，1 行程＝走 1 格（日後特殊地形才標通行費）。<b>轉向檢查</b>：<b>E＝速度 −抓地力</b>；抓地力＝<b>當前格摩擦力</b>（賽道統一 2；急拐 120° 貢獻 −1）＋<b>牌面🎯自動投入</b>；轉完速度依角度衰減（60° ÷2／120° ÷4）；成功率＝<b>1−E×25%</b>（超1＝75%、超2＝50%、超3＝25%、超4＝0）、QTE ±20% 後擲骰；失敗＝推頭直滑 E 格（衝出路面扣 1 胎、撞護牆再扣、爬回最近路格、吃 1 失誤）。<b>煞車＝部件動作</b>：確定路線後點路徑格設煞車點（一回合 1 個）；<b>車開到該格時</b>演煞車 QTE：指標快速跑一個來回、−1／−2／−3 位置每次隨機、停哪格減多少（跑完未按＝就地結算） <b>直線速度</b>（不影響本回合距離），每 2 點減速耗 1 胎。</p>
+    <p><b>QTE 難度</b>＝事件難度（彎 3）−鏈上♒。轉向進賭區時演彎道 QTE，修正機率 ±20%。</p>
+    <p><b>空間</b>：執行中撞上對手＝車頂❗＋定格選單：繞行（側邊有空格才給、照做轉向判定；有「預判」則免判定）／跟車（停在他車尾、保證咬到尾流；速度歸零，除非鏈上有「車陣穿梭」）。</p>
+    <p><b>失誤＝把牌弄壞</b>：失控（推頭衝出）時，牌桌上隨機一張<b>還沒用過的</b>牌變成<b>失誤牌</b>（無符號、無角標、斷文法，但不受檔位限制）。<b>把它打出去，它就恢復原本的效果</b>——排除失誤要花掉一個指令槽，這是唯一的修復方式。</p>
+    <p><b>對手</b>：照節奏卡逐拍走。P 糾纏（警戒常駐）；A 被超後暴怒 2 回合（每拍 +1、警戒轉紅）。</p>
+    <button class="act" id="btnRulesClose">關閉</button>
+  </div>
+</div>
+
+<div id="banner"></div>
+<script src="game.js"></script>
+</body>
+</html>
