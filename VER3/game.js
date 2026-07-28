@@ -124,14 +124,14 @@ const progOf=h=>{const c=TRACK.road.get(key(h.q,h.r));return c?c.prog:-1;};
 /* seq＝印刷符號序列（左＝入口、右＝出口），"-"前綴＝負符號（警示色） */
 const CARD_DEFS = {
   /* ── 紅：激進數值＋代價 ── */
-  eject:  {name:"彈射起步",   col:"red",   seq:["p","p","p","p"], badge:{t:1}, gears:[1,2], cost:2, fx:"nocap",
+  eject:  {name:"彈射起步",   col:"red",   seq:["p","p","p"], badge:{t:1}, gears:[1,2], cost:2, fx:"nocap",
            note:"超載2：本回合無視檔位上限"},
-  nitro:  {name:"氮氣噴射",   col:"red",   seq:["p","p","p","p"], badge:{t:1}, gears:[3,4], cost:2, fx:"nitrofree",
+  nitro:  {name:"氮氣噴射",   col:"red",   seq:["p","p","p"], badge:{t:1}, gears:[3,4], cost:2, fx:"nitrofree",
            note:"超載2：免胎耗"},
   drift:  {name:"甩尾過彎",   col:"red",   seq:["-p","g","g","g"], gears:[3,4], cost:3, fx:"freeturn",
            note:"超載3：本回合轉向判定全免"},
   /* ── 綠：節奏文法家族（心流引擎） ── */
-  startr: {name:"起步節奏",   col:"green", seq:["p","p","f"],     gears:[1,2], cost:1, od:{add:"p"},
+  startr: {name:"起步節奏",   col:"green", seq:["p","f"],     gears:[1,2], cost:1, od:{add:"p"},
            note:"超載1：加印⚡（可選頭或尾）"},
   shift2: {name:"換檔銜接",   col:"green", seq:["p","g"],         gears:[2,3], cost:1, od:{add:"g"},
            note:"超載1：加印🎯（可選頭或尾）"},
@@ -177,6 +177,7 @@ function odAddSym(c){
   return d.od.add||null;
 }
 function applyOD(c){ // 加印型超載：重建序列（頭或尾）
+  if(c.locked)return; // 失誤牌：序列已清空，禁止任何重建
   const add=odAddSym(c);
   if(!add)return;
   if(!c.baseSeq)c.baseSeq=(c.dual?c.dual[c.side]:CARD_DEFS[c.id].seq).slice();
@@ -186,6 +187,7 @@ function applyOD(c){ // 加印型超載：重建序列（頭或尾）
   c.sym=calcSym(c.seq);
   if(c.badge){for(const k in c.badge)c.sym[k]=(c.sym[k]||0)+c.badge[k];}
 }
+function turnSign(a,b){const d=(b-a+6)%6;return(d===1||d===2)?1:((d===4||d===5)?-1:0);}
 function chainHas(id){return S.chain.some(c=>c.id===id);}
 function armedHas(id){return S.chain.some(c=>c.id===id&&c.armed);}
 function flowSpend(){ // 本回合心流總支出＝超載費＋強制費
@@ -229,7 +231,7 @@ const S = {
   pos:{q:2,r:0}, heading:0,
   laps:0, prog:2, totalSteps:0,
   tires:CFG.tiresStart,
-  slipNext:0, flowPts:0, rfx:null, runLen:0, runDir:-1, movedThisRound:0, lastSV:0, brakePoints:[], overRevCharged:false,
+  slipNext:0, flowPts:0, rfx:null, runLen:0, runDir:-1, movedThisRound:0, lastSV:0, brakePoints:[], overRevCharged:false, lastTurnSign:0,
   feintOn:false, pushOn:false,
   followTarget:null,     // 跟車目標 opp id
   opponents:makeOpponents(),
@@ -266,7 +268,7 @@ function lightsOf(chain){
   const on=[];
   for(let i=0;i<chain.length-1;i++){
     const a=chain[i],b=chain[i+1];
-    if(a.id==="mistake"||b.id==="mistake"){on.push(false);continue;} // 失誤斷一切
+    if(a.id==="mistake"||b.id==="mistake"||a.locked||b.locked){on.push(false);continue;} // 失誤（含被弄壞的牌）斷一切
     if(S.driver==="burst"&&(a.star||b.star)){on.push(true);continue;} // 爆發型：✦亦萬用
     if(S.driver==="rhythm"){
       const ia=iface(a),ib=iface(b);
@@ -282,7 +284,8 @@ function gearText(c){return c.gears[0]===c.gears[1]?`${c.gears[0]}檔`:(c.gears[
 function makeMistake(c){ // 這張牌變成失誤牌：無符號、無角標、斷文法
   if(c.locked)return;
   c.locked=true;
-  c.savedSeq=c.seq.slice();c.savedBadge=c.badge;
+  c.savedSeq=(c.baseSeq||c.seq).slice();c.savedBadge=c.badge; // 存「未超載」的原貌
+  c.armed=false;c.odMode=null;c.baseSeq=null;
   c.seq=[];c.sym=calcSym([]);c.badge=null;
 }
 function healMistake(c){ // 打出後恢復原貌
@@ -295,6 +298,16 @@ function healMistake(c){ // 打出後恢復原貌
   c.sym=calcSym(c.seq);
   if(c.badge){for(const k in c.badge)c.sym[k]=(c.sym[k]||0)+c.badge[k];}
   applyOD(c);
+}
+function refreshTable(){
+  if(S.phase!=="plan"||S.planStage!=="chain")return;
+  const unused=S.table.filter(c=>!c.used).length;
+  if(unused>chainSize()){log(`重整旗鼓：未用的牌 ≤${chainSize()} 張時才可宣告（現在還有 ${unused} 張）`,"warn");return;}
+  S.chain=[];S.path=[];S.followTarget=null;
+  S.table.forEach(c=>{c.used=false;});
+  log("重整旗鼓：牌桌全數歸隊——代價是……","gold");
+  lockRandom(1);
+  renderAll();
 }
 function lockRandom(n){
   for(let i=0;i<n;i++){
@@ -477,7 +490,7 @@ function simulateLine(){
   let pool=0;
   st.eff.forEach(e=>{pool+=(e.sym.g||0);});
   const poolStart=Math.max(0,pool);
-  let travel=S.budget.travel,run=S.runLen;
+  let travel=S.budget.travel,run=S.runLen,simSign=S.lastTurnSign||0;
   const events=[],lines=[];
   let stopAt=-1;
   for(let pi=0;pi<S.path.length;pi++){
@@ -487,9 +500,16 @@ function simulateLine(){
     const uu=(d>=0)?turnUnits(heading,d):0;
     const approach=run;
     if(d>=0){
-      let dv=(uu>=2)?4:2;
-      if(uu>=2&&chainHas("apex"))dv=armedHas("apex")?1:2;
-      run=(rdir<0||d===rdir)?((rdir<0)?1:run+1):Math.max(1,Math.floor(run/dv));
+      if(rdir<0||d===rdir){run=(rdir<0)?1:run+1;simSign=0;}
+      else{
+        const sg=turnSign(rdir,d);
+        if(uu===1&&simSign!==0&&sg===-simSign){simSign=0;} // 回正：不減速
+        else{
+          let dv=(uu>=2)?4:2;
+          if(uu>=2&&chainHas("apex"))dv=armedHas("apex")?1:2;
+          run=Math.max(1,Math.floor(run/dv));simSign=sg;
+        }
+      }
     }
     if(CFG.cornerModel==="limit"&&isTurn){
       const sharp=uu>=2&&!chainHas("apex");
@@ -659,7 +679,7 @@ async function raceRun(){
           log(`跟車：貼進 ${occ.name} 車尾`,"blue");
           S.stallBehind=occ.id;S.path=[];
           if(chainHas("weave"))log("車陣穿梭：慣性保住（速度不歸零）","gold");
-          else{S.runLen=0;S.runDir=-1;log("急停貼車：速度歸零");}
+          else{S.runLen=0;S.runDir=-1;S.lastTurnSign=0;log("急停貼車：速度歸零");}
         }
       }else{
         const nd=dirBetween(S.pos,next);
@@ -718,12 +738,21 @@ function payGrip(cost,why){
 function moveTo(h){
   const nd=dirBetween(S.pos,h);
   if(nd>=0){
-    if(S.runDir<0||nd===S.runDir){S.runLen=(S.runDir<0)?1:S.runLen+1;}
-    else{
+    if(S.runDir<0||nd===S.runDir){
+      S.runLen=(S.runDir<0)?1:S.runLen+1;
+      S.lastTurnSign=0; // 直行：轉向記憶清除（回正只認「連續」轉向）
+    }else{
       const u=turnUnits(S.runDir,nd);
-      let dv=(u>=2)?4:2;
-      if(u>=2&&chainHas("apex"))dv=armedHas("apex")?1:2; // 內線強襲：急拐÷2、超載完全不減
-      S.runLen=Math.max(1,Math.floor(S.runLen/dv));
+      const sg=turnSign(S.runDir,nd);
+      if(u===1&&S.lastTurnSign!==0&&sg===-S.lastTurnSign){
+        S.lastTurnSign=0; // 回正：反打 60°＝變線收尾，不減速、重新起算
+        log("回正：變線不減速","blue");
+      }else{
+        let dv=(u>=2)?4:2;
+        if(u>=2&&chainHas("apex"))dv=armedHas("apex")?1:2; // 內線強襲：急拐÷2、超載完全不減
+        S.runLen=Math.max(1,Math.floor(S.runLen/dv));
+        S.lastTurnSign=sg;
+      }
     }
     S.runDir=nd;S.heading=nd;
     S.movedThisRound++;
@@ -797,7 +826,7 @@ async function slideOut(E,opts){
     if(S.phase==="over")return;
   }
   if(!isRoad(S.pos))log("車停在緩衝區：下回合自己開回賽道","warn");
-  S.runLen=0;S.runDir=-1;
+  S.runLen=0;S.runDir=-1;S.lastTurnSign=0;
   const nm=(opts.mist===undefined)?CFG.overshootMistake:opts.mist;
   log(`失控收場：速度歸零、剩餘路線作廢`,"warn");
   lockRandom(nm);
@@ -817,7 +846,7 @@ function endRound(){
   S.chain=[];S.beatG=0;S.feintOn=false;S.pushOn=false;S.followTarget=null;S.stallBehind=null;S.rfx=null;S.followMode=null;
   S.brakePoints=[];S.overRevCharged=false;
   S.table.forEach(c=>{c.armed=false;c.odMode=null;applyOD(c);});
-  if(S.movedThisRound===0&&(S.runLen>0||S.runDir>=0)){S.runLen=0;S.runDir=-1;log("整回合未移動：速度歸零");} // 動量跨回合延續
+  if(S.movedThisRound===0&&(S.runLen>0||S.runDir>=0)){S.runLen=0;S.runDir=-1;S.lastTurnSign=0;log("整回合未移動：速度歸零");} // 動量跨回合延續
   S.planStage="chain";S.budget=null;
   S.opponents.forEach(o=>{if(o.rage>0)o.rage--;});
   S.round++;S.phase="plan";S.submitted=null;
@@ -979,19 +1008,26 @@ function renderBoard(){
     ctx.fillText(bp.amount?`煞−${bp.amount}`:"煞!",p.x,p.y+HEX*0.74);
   }
   {
-    let prev=S.pos,rd=S.runDir;
+    let prev=S.pos,rd=S.runDir,pSign=S.lastTurnSign||0;
     S.path.forEach((h,i)=>{
       const d=dirBetween(prev,h);
       const isTurn=d>=0&&rd>=0&&d!==rd;
       const uu=(d>=0&&rd>=0)?turnUnits(rd,d):0;
-      drawHex(ctx,h,isTurn?"rgba(255,157,84,0.18)":"rgba(92,242,255,0.16)",isTurn?"#ff9d54":"#5cf2ff",2);
+      let back=false;
+      if(isTurn){
+        const sg=turnSign(rd,d);
+        if(uu===1&&pSign!==0&&sg===-pSign){back=true;pSign=0;}
+        else pSign=sg;
+      }else if(d>=0){pSign=0;}
+      const col=back?"#7ce6a0":(isTurn?"#ff9d54":"#5cf2ff");
+      drawHex(ctx,h,back?"rgba(124,230,160,0.16)":(isTurn?"rgba(255,157,84,0.18)":"rgba(92,242,255,0.16)"),col,2);
       const p=hexPix(h);
       // 行進方向箭頭
       if(d>=0){
         const dd=DIRS[d];
         const vx=SQ3*(dd[0]+dd[1]/2),vy=1.5*dd[1];
         const L=Math.hypot(vx,vy)||1,ux=vx/L,uy=vy/L,R=HEX*0.42;
-        ctx.strokeStyle=isTurn?"#ff9d54":"#5cf2ff";ctx.lineWidth=2;
+        ctx.strokeStyle=col;ctx.lineWidth=2;
         ctx.beginPath();ctx.moveTo(p.x-ux*R*0.5,p.y-uy*R*0.5);ctx.lineTo(p.x+ux*R,p.y+uy*R);ctx.stroke();
         ctx.beginPath();
         ctx.moveTo(p.x+ux*R,p.y+uy*R);
@@ -1000,8 +1036,8 @@ function renderBoard(){
         ctx.closePath();ctx.fill();
       }
       ctx.font=`${Math.max(9,HEX*0.3)|0}px monospace`;ctx.textAlign="center";
-      ctx.fillStyle=isTurn?"#ff9d54":"#5cf2ff";
-      ctx.fillText(isTurn?`${i+1}・轉${uu>=2?"120":"60"}°`:String(i+1),p.x,p.y-HEX*0.42);
+      ctx.fillStyle=col;
+      ctx.fillText(back?`${i+1}・回正`:(isTurn?`${i+1}・轉${uu>=2?"120":"60"}°`:String(i+1)),p.x,p.y-HEX*0.42);
       if(d>=0)rd=d;
       prev=h;
     });
@@ -1187,7 +1223,9 @@ function renderChain(){
       el.appendChild(lt);
     }
   });
-  const d=document.createElement("div");d.className="card sm empty";d.textContent="＋";el.appendChild(d);
+  if(S.phase==="plan"&&S.planStage==="chain"&&S.chain.length<chainSize()){
+    const d=document.createElement("div");d.className="card sm empty";d.textContent="＋";el.appendChild(d);
+  }
 }
 function markChainActive(b){
   document.querySelectorAll("#chain .card").forEach((el,i)=>el.classList.toggle("active",i===b));
@@ -1214,6 +1252,12 @@ function renderStats(){
   const gg=CFG.gears[S.gear-1];
   const left=S.table.filter(c=>!c.used).length;
   document.getElementById("gearHint").textContent=`上限 ${gg.max}・倍率 ×${gg.mult}・指令槽 ${chainSize()}・未用 ${left}/${S.table.length}`;
+  const rb=document.getElementById("btnRefresh");
+  if(rb){
+    const okR=S.phase==="plan"&&S.planStage==="chain"&&left<=chainSize();
+    rb.disabled=!okR;
+    rb.title=okR?"全桌歸隊；隨機一張未用的牌變失誤牌":`未用 ≤${chainSize()} 張才可宣告`;
+  }
 }
 function renderLog(){
   const el=document.getElementById("logBox");
@@ -1414,6 +1458,7 @@ function bindUI(){
   });
   document.getElementById("btnSubmit").onclick=()=>{S.planStage==="chain"?lockChain():(S.planStage==="line"?confirmRoute():launch());};
   document.getElementById("btnBack").onclick=backToChain;
+  {const rbEl=document.getElementById("btnRefresh");if(rbEl)rbEl.onclick=refreshTable;} // 舊版 HTML 無此鈕時不炸
   document.getElementById("btnClear").onclick=()=>{if(S.phase!=="plan"||S.planStage==="chain")return;S.path=[];S.brakePoints=[];S.followTarget=null;S.planStage="line";renderAll();};
   document.getElementById("gearUp").onclick=()=>{if(S.phase!=="plan"||S.planStage!=="chain")return;
     if(!(S.gear<4&&S.gear<S.lastGear+1))return;
@@ -1451,7 +1496,7 @@ if(typeof window!=="undefined"){
     const _end=endRound;
     endRound=function(){S.lastGear=S.gear;_end();};
     bindUI();fitBoard();renderBoard();
-    window.addEventListener("resize",()=>{fitBoard();renderBoard();if(S.driver)renderAll();});
+    window.addEventListener("resize",()=>{CAM.z=1;CAM.x=0;CAM.y=0;fitBoard();renderBoard();if(S.driver)renderAll();}); // 視窗改變＝重置攝影機（避免平移縮放殘留舊座標系）
   });
 }
 /* node 自檢 */

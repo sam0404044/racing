@@ -8,14 +8,16 @@
 :root{--bg:#080418;--panel:#0d0a22;--line:#1e2444;--cyan:#5cf2ff;--mag:#ff3df5;--gold:#ffd166;--txt:#dfe3ff;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--txt);font-family:"Microsoft JhengHei",sans-serif;display:flex;flex-direction:column;height:100vh;overflow:hidden;}
-header{padding:6px 14px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;}
+header{padding:6px 14px;border-bottom:1px solid var(--line);display:flex;gap:14px;row-gap:2px;align-items:center;flex-wrap:wrap;}
 header h1{font-size:17px;color:var(--cyan);}
 #drvTag{font-size:13px;color:#8f96c9;}
 #beatLabel{font-size:15px;color:var(--gold);margin-left:auto;}
 main{flex:1;display:flex;min-height:0;}
-#boardWrap{flex:1;position:relative;overflow:hidden;}
+#boardWrap{flex:1;min-width:0;position:relative;overflow:hidden;}
 #board{display:block;}
-aside{width:400px;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;padding:10px;gap:8px;overflow-y:auto;}
+aside{width:clamp(300px,26vw,420px);flex-shrink:0;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;padding:10px;gap:8px;overflow-y:auto;}
+aside>*{flex-shrink:0;}
+#logBox{flex:1 1 auto;}
 #stats{background:#0a0720;border:1px solid var(--line);border-radius:8px;padding:8px 10px;}
 .statGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px;}
 .tile{background:#12102c;border:1px solid var(--line);border-radius:8px;padding:5px 2px;text-align:center;}
@@ -41,8 +43,11 @@ button.ghost{border-color:var(--line);background:#12102c;color:#8f96c9;}
 #logBox .warn,#lineInfo .warn,#opps .warn{color:#ff9d9d;} #logBox .gold{color:var(--gold);} #logBox .blue{color:#9db8ff;}
 footer{border-top:1px solid var(--line);background:var(--panel);padding:8px 10px;}
 #hand{display:flex;gap:6px;overflow-x:auto;}
-.card{width:158px;min-width:158px;min-height:118px;border-radius:10px;padding:10px;cursor:pointer;border:2px solid;background:#12102c;font-size:14px;position:relative;}
-.card.sm{width:150px;min-width:150px;min-height:110px;}
+.card{width:clamp(132px,11.5vw,158px);min-width:132px;min-height:118px;border-radius:10px;padding:10px;cursor:pointer;border:2px solid;background:#12102c;font-size:14px;position:relative;}
+.card.sm{width:clamp(108px,9vw,128px);min-width:108px;min-height:96px;padding:7px;font-size:12.5px;}
+.card.sm .cName{font-size:13.5px;margin-bottom:4px;}
+.card.sm .pip{font-size:16px;}
+.card.sm .cNote{display:none;}
 .card.empty{border:1.5px dashed var(--line);color:#4a4f7a;display:flex;align-items:center;justify-content:center;cursor:default;}
 .card.active{box-shadow:0 0 12px var(--cyan);}
 .cRed{border-color:#ff5c5c;} .cGreen{border-color:#69db7c;} .cYellow{border-color:#ffd166;}
@@ -109,7 +114,10 @@ footer{border-top:1px solid var(--line);background:var(--panel);padding:8px 10px
     <div id="logBox"></div>
   </aside>
 </main>
-<footer><div id="hand"></div></footer>
+<footer style="display:flex;gap:8px;align-items:stretch;">
+  <button class="act ghost" id="btnRefresh" style="flex:0 0 auto;width:86px;font-size:13px;line-height:1.5;">重整旗鼓</button>
+  <div id="hand" style="flex:1;min-width:0;"></div>
+</footer>
 
 <div class="overlay" id="qte">
   <div id="qteLabel"></div>
@@ -137,11 +145,11 @@ footer{border-top:1px solid var(--line);background:var(--panel);padding:8px 10px
   <div class="menuBox" id="rulesBody">
     <h3>基本規則（v0）</h3>
     <p><b>目標</b>：先跑完 2 圈。輪胎歸零＝DNF。</p>
-    <p><b>回合（v3.5 速度量制）</b>：①換檔 ±1（檔位＝引擎性格：上限／倍率＝4/×1.5、6/×1.3、8/×1.1、10/×0.9）②<b>開放牌桌</b>：車手全部 12 張指令牌從頭攤開（總部日後可擴充）。每回合至多打 <b>3 張</b>（車手智慧＝指令槽）；<b>打過的牌要等牌桌上全部的牌都用過，才會一起歸隊</b>（強制輪轉、每張都有上場時刻）。牌印<b>檔位區間</b>（低檔＝扭力層⚡多、高檔＝操控層🎯多），檔位不合的牌打不出——<b>換檔＝切換牌桌上活著的那一層</b>③<b>速度量 SV＝min(檔位上限, ⌊(P＋引擎調整)×檔位倍率⌋)</b>——P＝牌面動力加總；行程＝SV＋免費移動⌊速度÷2⌋。④hover 畫線 → 點擊確定路線 → 點路徑格開部件選單（煞車）→ 按「出發！」。執行採固定時間軌跡動畫：全場同時沿各自軌跡滑行、判定與選單時定格。<b>紅轉速</b>：降檔時若速度量超過新檔上限，保持原速（紅字）、本回合不得加速。</p>
+    <p><b>回合（v3.5 速度量制）</b>：①換檔 ±1（檔位＝引擎性格：上限／倍率＝4/×1.5、6/×1.3、8/×1.1、10/×0.9）②<b>開放牌桌</b>：車手全部 12 張指令牌從頭攤開（總部日後可擴充）。每回合至多打 <b>3 張</b>（車手智慧＝指令槽）；<b>打過的牌要等牌桌上全部的牌都用過，才會一起歸隊</b>（強制輪轉、每張都有上場時刻）。<b>重整旗鼓</b>：未用的牌 ≤3 張時，可宣告全桌立刻歸隊——代價是隨機一張牌變成失誤牌（尾段卡牌的安全閥）。牌印<b>檔位區間</b>（低檔＝扭力層⚡多、高檔＝操控層🎯多），檔位不合的牌打不出——<b>換檔＝切換牌桌上活著的那一層</b>③<b>速度量 SV＝min(檔位上限, ⌊(P＋引擎調整)×檔位倍率⌋)</b>——P＝牌面動力加總；行程＝SV＋免費移動⌊速度÷2⌋。④hover 畫線 → 點擊確定路線 → 點路徑格開部件選單（煞車）→ 按「出發！」。執行採固定時間軌跡動畫：全場同時沿各自軌跡滑行、判定與選單時定格。<b>紅轉速</b>：降檔時若速度量超過新檔上限，保持原速（紅字）、本回合不得加速。</p>
     <p><b>符號</b>：序列（格子）＝駕駛語言：⚡＝動力（進 SV 公式）、🎯＝抓地（轉向自動投入）、♒＝細膩操作（降 QTE 難度）；青邊＝入口、金邊＝出口，節奏型亮燈＝前一張出口接得上下一張入口（不看正負）。<b>角標</b>＝純代價：🛞打出即扣胎，不參與接口。紅框＝負符號。</p>
 <p><b>牌桌（v4・十二張）</b>：紅＝激進數值＋代價（彈射起步／氮氣噴射／甩尾過彎）、綠＝節奏文法家族（起步節奏／換檔銜接／巡航）、黃＝警戒互動家族（預判／尾流獵手／車陣穿梭）、藍＝超車詭計（假動作／內線強襲）、黑＝節奏教練。每張印檔位區間，換檔＝切換牌桌上活著的那一層。</p>
 <p><b>心流＝超載（Overdrive）</b>：亮燈累積心流，打牌時可灌心流強化<b>那一張</b>——點牌上的「超載」鈕。加印型（綠組與假動作）可<b>選擇加在序列頭或尾</b>（再點一次切換加頭／加尾／取消）：加頭改變誰能接我、加尾改變我能接誰。效果型：彈射起步超載2＝無視檔位上限、氮氣超載2＝免胎耗、甩尾超載3＝本回合轉向判定全免、預判超載1＝繞行後多走 1 格、尾流獵手超載1＝距離 2 格也算咬到、車陣穿梭超載1＝跟車後尾流再+1、內線強襲超載2＝急拐完全不減速。<b>節奏教練</b>無超載：入鏈即需 4 心流（出發時扣除），效果固定＝相鄰兩張符號×2。</p>
-    <p><b>移動與彎道</b>：<b>速度（車的慣性）</b>：直行一格 +1、<b>60° 緩轉 ÷2、120° 急拐 ÷4</b>（下限 1）、煞車扣、失控歸 0、跨回合保留。<b>回合開始免費移動＝⌊速度÷2⌋</b>（加進行程、不吃檔位上限）；行程＝速度量＋免費移動，1 行程＝走 1 格（日後特殊地形才標通行費）。<b>轉向檢查</b>：<b>E＝速度 −抓地力</b>；抓地力＝<b>當前格摩擦力</b>（賽道統一 2；急拐 120° 貢獻 −1）＋<b>牌面🎯自動投入</b>；轉完速度依角度衰減（60° ÷2／120° ÷4）；成功率＝<b>1−E×25%</b>（超1＝75%、超2＝50%、超3＝25%、超4＝0）、QTE ±20% 後擲骰；失敗＝推頭直滑 E 格（衝出路面扣 1 胎、撞護牆再扣、爬回最近路格、吃 1 失誤）。<b>煞車＝部件動作</b>：確定路線後點路徑格設煞車點（一回合 1 個）；<b>車開到該格時</b>演煞車 QTE：指標快速跑一個來回、−1／−2／−3 位置每次隨機、停哪格減多少（跑完未按＝就地結算） <b>直線速度</b>（不影響本回合距離），每 2 點減速耗 1 胎。</p>
+    <p><b>移動與彎道</b>：<b>速度（車的慣性）</b>：直行一格 +1、<b>60° 緩轉 ÷2、120° 急拐 ÷4</b>（下限 1）；<b>回正</b>：連續轉向且反打 60°（如右拐後立刻左拐回原方向）＝變線收尾，<b>不減速</b>、記憶歸零（隔了直行不算連續；120° 反打不享優惠；回正那一步照樣做轉向判定）、煞車扣、失控歸 0、跨回合保留。<b>回合開始免費移動＝⌊速度÷2⌋</b>（加進行程、不吃檔位上限）；行程＝速度量＋免費移動，1 行程＝走 1 格（日後特殊地形才標通行費）。<b>轉向檢查</b>：<b>E＝速度 −抓地力</b>；抓地力＝<b>當前格摩擦力</b>（賽道統一 2；急拐 120° 貢獻 −1）＋<b>牌面🎯自動投入</b>；轉完速度依角度衰減（60° ÷2／120° ÷4）；成功率＝<b>1−E×25%</b>（超1＝75%、超2＝50%、超3＝25%、超4＝0）、QTE ±20% 後擲骰；失敗＝推頭直滑 E 格（衝出路面扣 1 胎、撞護牆再扣、爬回最近路格、吃 1 失誤）。<b>煞車＝部件動作</b>：確定路線後點路徑格設煞車點（一回合 1 個）；<b>車開到該格時</b>演煞車 QTE：指標快速跑一個來回、−1／−2／−3 位置每次隨機、停哪格減多少（跑完未按＝就地結算） <b>直線速度</b>（不影響本回合距離），每 2 點減速耗 1 胎。</p>
     <p><b>QTE 難度</b>＝事件難度（彎 3）−鏈上♒。轉向進賭區時演彎道 QTE，修正機率 ±20%。</p>
     <p><b>空間</b>：執行中撞上對手＝車頂❗＋定格選單：繞行（側邊有空格才給、照做轉向判定；有「預判」則免判定）／跟車（停在他車尾、保證咬到尾流；速度歸零，除非鏈上有「車陣穿梭」）。</p>
     <p><b>失誤＝把牌弄壞</b>：失控（推頭衝出）時，牌桌上隨機一張<b>還沒用過的</b>牌變成<b>失誤牌</b>（無符號、無角標、斷文法，但不受檔位限制）。<b>把它打出去，它就恢復原本的效果</b>——排除失誤要花掉一個指令槽，這是唯一的修復方式。</p>
